@@ -8,6 +8,7 @@ import json
 import os
 from Parameter import *
 from utils import *
+from GameMode import *
 
 class BaseUnit:
     def __init__(self, unit_id, unit_team, unit_type, body_image_path, turret_image_path, 
@@ -346,7 +347,8 @@ class BaseUnit:
             surface.blit(rotated_turret, turret_rect)
         
         # 绘制生命条
-        self._draw_health_bar(surface, screen_x, screen_y)
+        if DRAW_HEALTH_BAR or DEBUG_MODE:
+            self._draw_health_bar(surface, screen_x, screen_y)
     
     def _draw_health_bar(self, surface, x, y):
         """

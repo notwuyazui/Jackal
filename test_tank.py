@@ -4,6 +4,7 @@ import sys
 import os
 from Unit.Tank.Tank import *
 from Map.Map import *
+from GameMode import *
 
 def draw_debug_info(surface, tank, camera_offset, mouse_pos):
     debug_font = pygame.font.Font(None, 20)
@@ -12,25 +13,25 @@ def draw_debug_info(surface, tank, camera_offset, mouse_pos):
     screen_x = tank.position[0] - camera_offset[0]
     screen_y = tank.position[1] - camera_offset[1]
 
-    
     # 鼠标目标线
     world_mouse_x = mouse_pos[0] + camera_offset[0]
     world_mouse_y = mouse_pos[1] + camera_offset[1]
     screen_mouse_x = world_mouse_x - camera_offset[0]
     screen_mouse_y = world_mouse_y - camera_offset[1]
-    pygame.draw.line(surface, (255, 0, 255), (screen_x, screen_y), (screen_mouse_x, screen_mouse_y), 1)
-    pygame.draw.circle(surface, (255, 0, 255), (int(screen_mouse_x), int(screen_mouse_y)), 3)
+    if DRAW_MOUSE_TARGET_LINE or DEBUG_MODE:
+        pygame.draw.line(surface, (255, 0, 255), (screen_x, screen_y), (screen_mouse_x, screen_mouse_y), 1)
+        pygame.draw.circle(surface, (255, 0, 255), (int(screen_mouse_x), int(screen_mouse_y)), 3)
     
-    debug_text = [
-        f"position: ({tank.position[0]:.1f}, {tank.position[1]:.1f})",
-        f"speed: {tank.speed:.1f}",
-        f"acc: {tank.acceleration:.1f}",
-        f"target_angle: {tank.angular_speed:.1f}",
-    ]
-    
-    for i, text in enumerate(debug_text):
-        text_surface = debug_font.render(text, True, (255, 255, 255))
-        surface.blit(text_surface, (screen_x + 40, screen_y - 40 + i * 20))
+    if DRAW_STATUS_MESSAGE or DEBUG_MODE:
+        debug_text = [
+            f"position: ({tank.position[0]:.1f}, {tank.position[1]:.1f})",
+            f"speed: {tank.speed:.1f}",
+            f"acc: {tank.acceleration:.1f}",
+            f"target_angle: {tank.angular_speed:.1f}",
+        ]
+        for i, text in enumerate(debug_text):
+            text_surface = debug_font.render(text, True, (255, 255, 255))
+            surface.blit(text_surface, (screen_x + 40, screen_y - 40 + i * 20))
 
 if __name__ == "__main__":
     pygame.init()
@@ -82,7 +83,7 @@ if __name__ == "__main__":
     turning_left = False
     turning_right = False
     
-    debug_mode = True
+    debug_mode = DEBUG_MODE
     
     running = True
     while running:
@@ -153,8 +154,7 @@ if __name__ == "__main__":
         if hasattr(tank, 'draw'):
             tank.draw(screen, camera_offset)
         
-        if debug_mode:
-            draw_debug_info(screen, tank, camera_offset, mouse_pos)
+        draw_debug_info(screen, tank, camera_offset, mouse_pos)
 
         pygame.display.flip()
     
