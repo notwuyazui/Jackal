@@ -35,15 +35,16 @@ class BaseUnit:
         self.max_angular_speed_rate = max_angular_speed_rate
         self.turret_angular_speed_rate = turret_angular_speed_rate
         self.max_health_rate = max_health_rate
-        self.max_speed = UNIT_SPEED * self.max_speed_rate                                       # 最大速度  
-        self.max_acceleration = UNIT_ACC * self.max_acceleration_rate                             # 最大加速度
-        self.min_acceleration = UNIT_ACC * self.min_acceleration_rate                             # 最小加速度
-        self.max_angular_speed = UNIT_ANGULAR_SPEED * self.max_angular_speed_rate               # 最大角速度
-        self.turret_angular_speed = UNIT_TURRET_ANGULAR_SPEED * self.turret_angular_speed_rate  # 炮塔转动角速度
-        self.max_health = UNIT_HEALTH * self.max_health_rate                                    # 最大生命值
         self.armor_type = armor_type                                                            # 护甲类型
         self.ammunition_types = ammunition_types                                                # 单位拥有弹种
         self.ammo_switch_time =  ammo_switch_time                                               # 单位切换弹种时间
+        
+        self.max_speed = UNIT_SPEED * self.max_speed_rate                                       # 最大速度  
+        self.max_acceleration = UNIT_ACC * self.max_acceleration_rate                           # 最大加速度
+        self.min_acceleration = UNIT_ACC * self.min_acceleration_rate                           # 最小加速度
+        self.max_angular_speed = UNIT_ANGULAR_SPEED * self.max_angular_speed_rate               # 最大角速度
+        self.turret_angular_speed = UNIT_TURRET_ANGULAR_SPEED * self.turret_angular_speed_rate  # 炮塔转动角速度
+        self.max_health = UNIT_HEALTH * self.max_health_rate                                    # 最大生命值
         
         # 实时属性
         self.position = (0.0, 0.0)
