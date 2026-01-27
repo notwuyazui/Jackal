@@ -9,7 +9,7 @@ from Parameter import *
 
 class Tank(BaseUnit):
     
-    def __init__(self, unit_id, unit_team):
+    def __init__(self, unit_id: int, unit_team: Team):
         
         self.unit_type = 'tank'
         self.body_image_path = 'Unit/Tank/tank.png'
@@ -40,6 +40,7 @@ class Tank(BaseUnit):
                          ammo_switch_time=self.ammo_switch_time)
 
 def create_tank(unit_id, unit_team, position=(0, 0)):
+    # 示例：tank = create_tank(1, Team.PLAYER, position=(400, 300))
     tank = Tank(unit_id, unit_team)
     tank.position = position
     return tank            

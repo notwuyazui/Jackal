@@ -69,9 +69,8 @@ if __name__ == "__main__":
     ]
     
     game_map = GameMap(map_data, tile_size=64)
-    print("地图创建成功")
     
-    tank = create_tank("test_tank", "red", position=(400, 300))
+    tank = create_tank(1, Team.PLAYER, position=(400, 300))
     
     # 相机偏移
     camera_offset = [0, 0]
@@ -106,6 +105,8 @@ if __name__ == "__main__":
                     turning_right = True
                 elif event.key == pygame.K_F1:
                     debug_mode = not debug_mode
+                elif keys[pygame.K_p]:
+                    tank.save()
             
             elif event.type == pygame.KEYUP:
                 if event.key == pygame.K_w:

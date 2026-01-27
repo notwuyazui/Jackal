@@ -5,6 +5,8 @@
 
 import pygame
 import os
+from Parameter import *
+from utils import *
 
 class GameMap:
     
@@ -16,8 +18,8 @@ class GameMap:
         self.width = len(map_data[0]) if map_data else 0
         
         # 加载地形图片
-        self.flat_image = self._load_image("Map/flat.png", "平地图")
-        self.barrier_image = self._load_image("Map/barrier.png", "障碍物图")
+        self.flat_image = self._load_image("Map/flat.png")          # 平地
+        self.barrier_image = self._load_image("Map/barrier.png")    # 障碍物
         
         self.map_surface = pygame.Surface((self.width * tile_size, self.height * tile_size))
         
@@ -26,15 +28,9 @@ class GameMap:
         # 生成地图
         self._generate_map()
     
-    def _load_image(self, image_path, image_name):
-        try:
-            image = pygame.image.load(image_path)
-            # 调整到指定大小
-            return pygame.transform.scale(image, (self.tile_size, self.tile_size))
-        except pygame.error as e:
-            print(f"无法加载{image_name}: {image_path}")
-            print(f"错误信息: {e}")
-            exit(1)
+    def _load_image(self, image_path):
+        image = load_image(image_path)
+        return pygame.transform.scale(image, (self.tile_size, self.tile_size))      # 调整到指定大小
     
     def _generate_map(self):
         """生成地图表面和障碍物列表"""
@@ -136,8 +132,10 @@ class GameMap:
         # 检查是否与任何障碍物碰撞
         return not self.check_collision(rect)
     
-    def save_to_file(self, file_path):
+    def save_to_file(self, file_name):
+        # 保存地图到文件, file_name为文件名，包含后缀，不包括路径
         try:
+            file_path = os.path.join(DEFAULT_MAP_PATH, file_name)
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
             
             with open(file_path, 'w', encoding='utf-8') as f:
@@ -150,6 +148,11 @@ class GameMap:
         except Exception as e:
             print(f"保存地图失败: {e}")
             return False
+    
+    def save(self):
+        # 提供一种直接的保存方法
+        save_path = get_next_filename(DEFAULT_MAP_PATH, 'default_map', '.txt')
+        return self.save_to_file(save_path)
     
     @classmethod
     def load_from_file(cls, file_path, tile_size=64):

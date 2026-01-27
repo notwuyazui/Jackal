@@ -5,7 +5,8 @@ import pygame
 import json
 import os
 import math
-from Parameter import BULLET_SPEED, BULLET_DAMAGE
+from Parameter import *
+from utils import *
 
 class BaseBullet:
     def __init__(self, projectile_id, bullet_image_path, shooter_id=0, position=(0.0, 0.0), velocity_direction=(1.0, 0.0), size=(0.0, 0.0), bounding_box=None, lifetime=3.0, speed_rate=1.0, damage_rate=1.0, penetration=[1.0, 1.0, 1.0] , is_explosive=False, explosion_radius=0.0, explosion_image_path=None):
@@ -13,7 +14,7 @@ class BaseBullet:
         self.id = projectile_id
         self.shooter_id = shooter_id
         self.image_path = bullet_image_path
-        self.image = self.load_image(bullet_image_path) if bullet_image_path else None  
+        self.image = load_image(bullet_image_path) if bullet_image_path else None  
         self.size = size if not size==(0.0, 0.0) else self.image.get_size()
         
         # 攻击距离，速度，伤害等属性
@@ -54,13 +55,6 @@ class BaseBullet:
         vx = direction[0] / dir_length * self.speed
         vy = direction[1] / dir_length * self.speed
         return (vx, vy)
-    
-    def load_image(self, image_path):
-        try:
-            return pygame.image.load(image_path)
-        except:
-            print(f"Warning: Cannot load body image: {image_path}")
-            return None
         
     def to_json(self, file_path="Bullet/json/bullet_default.json"):
         """

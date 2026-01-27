@@ -35,7 +35,7 @@ while running:
                 running = False
             elif event.key == pygame.K_s:
                 # 保存地图
-                game_map.save_to_file("maps/saved_map.txt")
+                game_map.save()
             elif event.key == pygame.K_d:
                 # 切换调试显示
                 game_map.debug_draw = not getattr(game_map, 'debug_draw', False)

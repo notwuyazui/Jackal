@@ -4,15 +4,18 @@
 
 import pygame
 import math
+import json
+import os
 from Parameter import *
+from utils import *
 
 class BaseUnit:
     def __init__(self, unit_id, unit_team, unit_type, body_image_path, turret_image_path, 
                  max_speed_rate=1.0, 
-                 max_acceleration_rate=UNIT_ACC_INF, 
-                 min_acceleration_rate=-UNIT_ACC_INF, 
-                 max_angular_speed_rate=UNIT_ANGULAR_SPEED_INF, 
-                 turret_angular_speed_rate=UNIT_TURRET_ANGULAR_SPEED_INF, 
+                 max_acceleration_rate=INF, 
+                 min_acceleration_rate=-INF, 
+                 max_angular_speed_rate=INF, 
+                 turret_angular_speed_rate=INF, 
                  max_health_rate=1.0, 
                  armor_type=ArmorType.NONE, 
                  ammunition_types=[], 
@@ -24,8 +27,8 @@ class BaseUnit:
         self.unit_type = unit_type
         self.body_image_path = body_image_path
         self.turret_image_path = turret_image_path
-        self.body_image = self.load_image(self.body_image_path) if self.body_image_path else None
-        self.turret_image = self.load_image(self.turret_image_path) if self.turret_image_path else None
+        self.body_image = load_image(self.body_image_path) if self.body_image_path else None
+        self.turret_image = load_image(self.turret_image_path) if self.turret_image_path else None
         self.size = self.body_image.get_size()
         
         # 基本属性
@@ -78,13 +81,6 @@ class BaseUnit:
             self.speed * math.cos(angle_rad),
             self.speed * math.sin(angle_rad)
         )
-    
-    def load_image(self, image_path):
-        try:
-            return pygame.image.load(image_path)
-        except:
-            print(f"Warning: Cannot load image: {image_path}")
-            return None
 
     def update(self, delta_time):
         if not self.is_alive:
@@ -382,3 +378,24 @@ class BaseUnit:
             print(f"坦克 {self.id} 被摧毁")
         
         return damage_amount
+
+    def save_to_file(self, file_name="default_unit.json"):
+        # 保存单位信息到文件, file_name包含后缀，但不包含路径
+        # 当前BaseUnit类中的属性没有确定下来，该方法为TODO
+        save_dir = DEFAULT_UNIT_PATH
+        filepath = os.path.join(save_dir, file_name)
+        
+        pass
+        
+    def save(self):
+        # 提供一种直接的保存方法
+        save_path = get_next_filename(DEFAULT_UNIT_PATH, 'default_unit', '.json')
+        return self.save_to_file(save_path)
+    
+    @classmethod
+    def load_from_file(cls, file_name="default_unit.json"):
+        # 从JSON文件加载兵种单位信息并创建实例
+        # 当前BaseUnit类中的属性没有确定下来，该方法为TODO
+        filepath = os.path.join(DEFAULT_UNIT_PATH, file_name)
+        
+        pass
