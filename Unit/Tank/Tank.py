@@ -11,36 +11,34 @@ class Tank(BaseUnit):
     
     def __init__(self, unit_id, unit_team):
         
+        self.unit_type = 'tank'
         self.body_image_path = 'Unit/Tank/tank.png'
         self.turret_image_path = 'Unit/Tank/turret.png'
-        
-        super().__init__(unit_id, unit_team, self.body_image_path, self.turret_image_path)
-        
-        self.unit_type = 'tank'
-        
         self.max_speed_rate = 1.0
-        self.max_acceleration_rate = UNIT_ACC_INF
+        self.max_acceleration_rate = 1.0
+        self.min_acceleration_rate = -1.0
         self.max_angular_speed_rate = UNIT_ANGULAR_SPEED_INF
         self.turret_angular_speed_rate = UNIT_TURRET_ANGULAR_SPEED_INF
         self.max_health_rate = 1.0
+        self.armor_type = ArmorType.NONE                                                        # 护甲类型
+        self.ammunition_types = ['bullet']                                                      # 单位拥有弹种
+        self.ammo_switch_time =  UNIT_AMMO_SWITCH_TIME                                          # 单位切换弹种时间
         
-        self.max_speed = UNIT_SPEED * self.max_speed_rate
-        self.max_accerattion = UNIT_ACC * self.max_accerattion_rate
-        self.min_accerattion = -self.max_accerattion
-        self.max_angular_speed = UNIT_ANGULAR_SPEED * self.max_angular_speed_rate
-        self.turret_angular_speed = UNIT_TURRET_ANGULAR_SPEED * self.turret_angular_speed_rate
-        self.max_health = UNIT_HEALTH * self.max_health_rate
         
-        self.armor_type = ArmorType.NONE
-        self.ammunition_types = ['bullet']
-        self.ammo_switch_time = UNIT_AMMO_SWITCH_TIME
-        
-        self.health = self.max_health
-        
-        if self.ammunition_types:
-            self.current_ammunition = self.ammunition_types[0]
-        
-        self._update_bounding_box()
+        super().__init__(unit_id, unit_team, 
+                         unit_type=self.unit_type,
+                         body_image_path=self.body_image_path, 
+                         turret_image_path=self.turret_image_path, 
+                         max_speed_rate=self.max_speed_rate, 
+                         max_acceleration_rate=self.max_acceleration_rate, 
+                         min_acceleration_rate=self.min_acceleration_rate, 
+                         max_angular_speed_rate=self.max_angular_speed_rate, 
+                         turret_angular_speed_rate=self.turret_angular_speed_rate, 
+                         max_health_rate=self.max_health_rate, 
+                         armor_type=self.armor_type, 
+                         ammunition_types=self.ammunition_types, 
+                         ammo_switch_time=self.ammo_switch_time)
+
         
     def fire(self, bullet_class):
         if self.is_switching_ammo:
@@ -110,11 +108,11 @@ class Tank(BaseUnit):
         设置坦克前进或后退
         """
         if forward and not backward:
-            self.accerattion = self.max_accerattion
+            self.acceleration = self.max_acceleration
         elif backward and not forward:
-            self.accerattion = self.min_accerattion
+            self.acceleration = self.min_acceleration
         else:
-            self.accerattion = 0
+            self.acceleration = 0
     
     def set_turning(self, left=False, right=False):
         """

@@ -24,7 +24,7 @@ def draw_debug_info(surface, tank, camera_offset, mouse_pos):
     debug_text = [
         f"position: ({tank.position[0]:.1f}, {tank.position[1]:.1f})",
         f"speed: {tank.speed:.1f}",
-        f"acc: {tank.accerattion:.1f}",
+        f"acc: {tank.acceleration:.1f}",
         f"target_angle: {tank.angular_speed:.1f}",
     ]
     

@@ -12,7 +12,7 @@ UNIT_ANGULAR_SPEED_INF = 10000
 UNIT_TURRET_ANGULAR_SPEED_INF = 10000
 
 UNIT_SPEED = 50.0                    # 单位的基础速度
-UNIT_ACC = 10.0                      # 单位的基础加速度
+UNIT_ACC = 100.0                      # 单位的基础加速度
 UNIT_HEALTH = 100                   # 单位的基础血量
 UNIT_ANGULAR_SPEED = 0.01            # 单位的基础旋转速度
 UNIT_TURRET_ANGULAR_SPEED = 0.01     # 单位炮塔的基础旋转速度

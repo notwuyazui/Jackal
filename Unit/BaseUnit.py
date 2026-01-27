@@ -7,44 +7,58 @@ import math
 from Parameter import *
 
 class BaseUnit:
-    def __init__(self, unit_id, unit_team, body_image_path, turret_image_path, size=(0.0, 0.0)):
+    def __init__(self, unit_id, unit_team, unit_type, body_image_path, turret_image_path, 
+                 max_speed_rate=1.0, 
+                 max_acceleration_rate=UNIT_ACC_INF, 
+                 min_acceleration_rate=-UNIT_ACC_INF, 
+                 max_angular_speed_rate=UNIT_ANGULAR_SPEED_INF, 
+                 turret_angular_speed_rate=UNIT_TURRET_ANGULAR_SPEED_INF, 
+                 max_health_rate=1.0, 
+                 armor_type=ArmorType.NONE, 
+                 ammunition_types=[], 
+                 ammo_switch_time=UNIT_AMMO_SWITCH_TIME):
+        
         # 基本信息
         self.id = unit_id
         self.team = unit_team
+        self.unit_type = unit_type
         self.body_image_path = body_image_path
         self.turret_image_path = turret_image_path
         self.body_image = self.load_image(self.body_image_path) if self.body_image_path else None
         self.turret_image = self.load_image(self.turret_image_path) if self.turret_image_path else None
-        self.size = size if not size==(0.0, 0.0) else self.body_image.get_size()
+        self.size = self.body_image.get_size()
         
         # 基本属性
-        self.max_speed_rate = 1.0
-        self.max_accerattion_rate = UNIT_ACC
-        self.max_angular_speed_rate = UNIT_ANGULAR_SPEED_INF
-        self.turret_angular_speed_rate = UNIT_TURRET_ANGULAR_SPEED_INF
-        self.max_health_rate = 1.0
+        self.max_speed_rate = max_speed_rate
+        self.max_acceleration_rate = max_acceleration_rate
+        self.min_acceleration_rate = min_acceleration_rate
+        self.max_angular_speed_rate = max_angular_speed_rate
+        self.turret_angular_speed_rate = turret_angular_speed_rate
+        self.max_health_rate = max_health_rate
         self.max_speed = UNIT_SPEED * self.max_speed_rate                                       # 最大速度  
-        self.max_accerattion = UNIT_ACC * self.max_accerattion_rate                       # 最大加速度
-        self.min_accerattion = -self.max_accerattion                                      # 最小加速度
+        self.max_acceleration = UNIT_ACC * self.max_acceleration_rate                             # 最大加速度
+        self.min_acceleration = UNIT_ACC * self.min_acceleration_rate                             # 最小加速度
         self.max_angular_speed = UNIT_ANGULAR_SPEED * self.max_angular_speed_rate               # 最大角速度
         self.turret_angular_speed = UNIT_TURRET_ANGULAR_SPEED * self.turret_angular_speed_rate  # 炮塔转动角速度
         self.max_health = UNIT_HEALTH * self.max_health_rate                                    # 最大生命值
-        self.armor_type = ArmorType.NONE                                                        # 护甲类型
-        self.ammunition_types = []                                                              # 单位拥有弹种
-        self.ammo_switch_time =  UNIT_AMMO_SWITCH_TIME                                          # 单位切换弹种时间
-        
+        self.armor_type = armor_type                                                            # 护甲类型
+        self.ammunition_types = ammunition_types                                                # 单位拥有弹种
+        self.ammo_switch_time =  ammo_switch_time                                               # 单位切换弹种时间
         
         # 实时属性
         self.position = (0.0, 0.0)
         self.speed = 0.0
         self.direction_angle = 0.0              # 单位朝向角度
         self.turret_direction_angle = 0.0       # 单位炮塔朝向角度
-        self.accerattion = 0.0
+        self.acceleration = 0.0
         self.angular_speed = 0.0
         self.health = self.max_health
         self.bounding_box = None                # 碰撞箱，pygame.Rect对象
         self.velocity = self.cal_velocity()     # 速度向量
         self.current_ammunition = ""            # 单位当前选中弹种
+        
+        if self.ammunition_types:
+            self.current_ammunition = self.ammunition_types[0]
         
         # 预留属性
         self.is_alive = True
@@ -100,7 +114,7 @@ class BaseUnit:
     def _update_speed(self, delta_time):
         """更新速度"""
         # 应用加速度
-        self.speed += self.accerattion * delta_time
+        self.speed += self.acceleration * delta_time
         
         # 限制速度范围
         if self.speed > self.max_speed:

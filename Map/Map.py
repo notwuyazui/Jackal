@@ -11,7 +11,7 @@ class GameMap:
     def __init__(self, map_data, tile_size=64):
         
         self.map_data = map_data
-        self.tile_size = tile_size
+        self.tile_size = tile_size      # 地图块大小
         self.height = len(map_data)
         self.width = len(map_data[0]) if map_data else 0
         
