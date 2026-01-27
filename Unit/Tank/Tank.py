@@ -17,8 +17,8 @@ class Tank(BaseUnit):
         self.max_speed_rate = 1.0
         self.max_acceleration_rate = 1.0
         self.min_acceleration_rate = -1.0
-        self.max_angular_speed_rate = UNIT_ANGULAR_SPEED_INF
-        self.turret_angular_speed_rate = UNIT_TURRET_ANGULAR_SPEED_INF
+        self.max_angular_speed_rate = 1.0
+        self.turret_angular_speed_rate = 1.0
         self.max_health_rate = 1.0
         self.armor_type = ArmorType.NONE                                                        # 护甲类型
         self.ammunition_types = ['bullet']                                                      # 单位拥有弹种
