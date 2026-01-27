@@ -50,3 +50,29 @@ def get_next_filename(folder_path, prefix, extension='.txt'):
     
     # 返回完整路径
     return f"{prefix}{next_num}{extension}"
+
+class MethodGroup:
+    """方法分组器"""
+    
+    def __init__(self, group_name):
+        self.group_name = group_name
+        self.methods = {}
+    
+    def __call__(self, func):
+        """用作装饰器"""
+        self.methods[func.__name__] = func
+        func._group = self.group_name
+        return func
+    
+    def get_method_names(self):
+        """获取组内所有方法名"""
+        return list(self.methods.keys())
+    
+    def execute_all(self, instance):
+        """执行组内所有方法"""
+        results = {}
+        for name, method in self.methods.items():
+            bound_method = getattr(instance, name, None)
+            if bound_method:
+                results[name] = bound_method()
+        return results

@@ -9,6 +9,7 @@ import os
 from Parameter import *
 from utils import *
 from GameMode import *
+from typing import List, Tuple
 
 class BaseUnit:
     def __init__(self, unit_id, unit_team, unit_type, body_image_path, turret_image_path, 
@@ -23,25 +24,25 @@ class BaseUnit:
                  ammo_switch_time=UNIT_AMMO_SWITCH_TIME):
         
         # 基本信息
-        self.id = unit_id
-        self.team = unit_team
-        self.unit_type = unit_type
-        self.body_image_path = body_image_path
-        self.turret_image_path = turret_image_path
+        self.id: int = unit_id
+        self.team: Team = unit_team
+        self.unit_type: str = unit_type
+        self.body_image_path: str = body_image_path
+        self.turret_image_path: str = turret_image_path
         self.body_image = load_image(self.body_image_path) if self.body_image_path else None
         self.turret_image = load_image(self.turret_image_path) if self.turret_image_path else None
         self.size = self.body_image.get_size()
         
         # 基本属性
-        self.max_speed_rate = max_speed_rate
-        self.max_acceleration_rate = max_acceleration_rate
-        self.min_acceleration_rate = min_acceleration_rate
-        self.max_angular_speed_rate = max_angular_speed_rate
-        self.turret_angular_speed_rate = turret_angular_speed_rate
-        self.max_health_rate = max_health_rate
-        self.armor_type = armor_type                                                            # 护甲类型
-        self.ammunition_types = ammunition_types                                                # 单位拥有弹种
-        self.ammo_switch_time =  ammo_switch_time                                               # 单位切换弹种时间
+        self.max_speed_rate: float = max_speed_rate
+        self.max_acceleration_rate: float = max_acceleration_rate
+        self.min_acceleration_rate: float = min_acceleration_rate
+        self.max_angular_speed_rate: float = max_angular_speed_rate
+        self.turret_angular_speed_rate: float = turret_angular_speed_rate
+        self.max_health_rate: float = max_health_rate
+        self.armor_type: ArmorType = armor_type                                                            # 护甲类型
+        self.ammunition_types: List[str] = ammunition_types                                                # 单位拥有弹种
+        self.ammo_switch_time: float =  ammo_switch_time                                               # 单位切换弹种时间
         
         self.max_speed = UNIT_SPEED * self.max_speed_rate                                       # 最大速度  
         self.max_acceleration = UNIT_ACC * self.max_acceleration_rate                           # 最大加速度
@@ -57,10 +58,10 @@ class BaseUnit:
         self.turret_direction_angle = 0.0       # 单位炮塔朝向角度
         self.acceleration = 0.0
         self.angular_speed = 0.0
-        self.health = self.max_health
-        self.bounding_box = None                # 碰撞箱，pygame.Rect对象
-        self.velocity = self.cal_velocity()     # 速度向量
-        self.current_ammunition = ""            # 单位当前选中弹种
+        self.health: float = self.max_health
+        self.bounding_box: pygame.Rect = None                # 碰撞箱，pygame.Rect对象
+        self.velocity: Tuple[float, float] = self.cal_velocity()     # 速度向量
+        self.current_ammunition: str = ""            # 单位当前选中弹种
         
         if self.ammunition_types:
             self.current_ammunition = self.ammunition_types[0]
@@ -83,7 +84,10 @@ class BaseUnit:
             self.speed * math.sin(angle_rad)
         )
 
-    def update(self, delta_time):
+    def update(self, delta_time, obstacles):
+        old_position = self.position
+        old_bounding_box = self.bounding_box.copy() if self.bounding_box else None
+        
         if not self.is_alive:
             return False
         
@@ -97,14 +101,24 @@ class BaseUnit:
         self._update_turret_direction(delta_time)    # 更新炮塔朝向
         self._update_position(delta_time)            # 更新位置
         self._update_bounding_box()                  # 更新碰撞箱
-        self.velocity = self.cal_velocity()         # 更新速度向量
+        self.velocity = self.cal_velocity()          # 更新速度向量
         
         if self.is_switching_ammo and self.reload_timer <= 0:
             self._complete_ammo_switch()
         
+        # 检查与障碍物的碰撞
+        if self.bounding_box:
+            for obstacle in obstacles:
+                if self.bounding_box.colliderect(obstacle):
+                    # 发生碰撞，恢复到之前的位置
+                    self.position = old_position
+                    self._update_bounding_box()
+                    self.speed = 0  # 停止移动
+                    return True
+        
         return True
     
-    def _update_ammo_switch(self, delta_time):
+    def _update_ammo_switch(self, delta_time) -> None:
         """更新弹药切换状态"""
         if self.is_switching_ammo and self.reload_timer > 0:
             self.reload_timer -= delta_time
@@ -112,7 +126,7 @@ class BaseUnit:
                 self.reload_timer = 0
                 self.is_switching_ammo = False
     
-    def _update_speed(self, delta_time):
+    def _update_speed(self, delta_time) -> None:
         """更新速度"""
         # 应用加速度
         self.speed += self.acceleration * delta_time
@@ -123,7 +137,7 @@ class BaseUnit:
         elif self.speed < -self.max_speed:
             self.speed = -self.max_speed
     
-    def _update_direction(self, delta_time):
+    def _update_direction(self, delta_time) -> None:
         """更新单位朝向角度"""
         if self.angular_speed != 0:
             self.direction_angle += self.angular_speed * delta_time
@@ -131,7 +145,7 @@ class BaseUnit:
             if abs(self.angular_speed) > self.max_angular_speed:
                 self.angular_speed = self.max_angular_speed if self.angular_speed > 0 else -self.max_angular_speed
     
-    def _update_turret_direction(self, delta_time):
+    def _update_turret_direction(self, delta_time) -> None:
         """更新炮塔朝向角度"""
         angle_diff = self.get_angle_difference(self.turret_direction_angle, self.turret_target_angle)
         
@@ -150,27 +164,27 @@ class BaseUnit:
             # 规范化角度到0-360度范围
             self.turret_direction_angle = self.normalize_angle(self.turret_direction_angle)
     
-    def _update_position(self, delta_time):
+    def _update_position(self, delta_time) -> None:
         """根据速度更新位置"""
         dx = self.velocity[0] * delta_time
         dy = self.velocity[1] * delta_time
         x, y = self.position
         self.position = (x + dx, y + dy)
     
-    def _update_bounding_box(self):
+    def _update_bounding_box(self) -> None:
         if self.size[0] > 0 and self.size[1] > 0:
             x, y = self.position
             width, height = self.size
             self.bounding_box = pygame.Rect(x - width / 2, y - height / 2, width, height)
             
-    def normalize_angle(self, angle):
+    def normalize_angle(self, angle) -> float:
         """将角度规范化到0-360度范围内"""
         angle %= 360
         if angle < 0:
             angle += 360
         return angle
     
-    def get_angle_difference(self, angle1, angle2):
+    def get_angle_difference(self, angle1, angle2) -> float:
         """
         计算两个角度之间的最小差值(考虑360度循环)
         """
@@ -210,7 +224,7 @@ class BaseUnit:
             print(f"创建子弹时出错: {e}")
             return None          
         
-    def _configure_bullet_for_ammo(self, bullet):
+    def _configure_bullet_for_ammo(self, bullet) -> None:
         """
         根据当前弹药类型配置子弹属性
         """
@@ -220,7 +234,7 @@ class BaseUnit:
             bullet.speed_rate = 1.0
             bullet.is_explosive = False
             
-    def switch_ammunition(self, ammo_type):
+    def switch_ammunition(self, ammo_type) -> bool:
         if ammo_type not in self.ammunition_types:
             print(f"坦克 {self.id} 没有 {ammo_type} 类型弹药")
             return False
@@ -235,13 +249,13 @@ class BaseUnit:
         
         return True     
     
-    def _complete_ammo_switch(self):
+    def _complete_ammo_switch(self) -> None:
         if hasattr(self, 'target_ammunition'):
             self.current_ammunition = self.target_ammunition
             delattr(self, 'target_ammunition')
         self.is_switching_ammo = False
         
-    def set_movement(self, forward=False, backward=False):
+    def set_movement(self, forward=False, backward=False) -> None:
         """
         设置坦克前进或后退
         """
@@ -252,7 +266,7 @@ class BaseUnit:
         else:
             self.acceleration = 0
     
-    def set_turning(self, left=False, right=False):
+    def set_turning(self, left=False, right=False) -> None:
         """
         设置坦克转向
         """
@@ -263,7 +277,7 @@ class BaseUnit:
         else:
             self.angular_speed = 0
     
-    def set_turret_target_to_mouse(self, mouse_pos, camera_offset):
+    def set_turret_target_to_mouse(self, mouse_pos, camera_offset) -> None:
         """
         设置炮塔目标指向鼠标位置
         """
@@ -285,31 +299,7 @@ class BaseUnit:
         
         self.turret_target_angle = target_angle
     
-    def update_with_collision(self, delta_time, obstacles):
-        """
-        更新坦克状态并处理碰撞
-        """
-        old_position = self.position
-        old_bounding_box = self.bounding_box.copy() if self.bounding_box else None
-        
-        is_alive = self.update(delta_time)
-        
-        if self.is_switching_ammo and self.reload_timer <= 0:
-            self._complete_ammo_switch()
-        
-        # 检查与障碍物的碰撞
-        if self.bounding_box:
-            for obstacle in obstacles:
-                if self.bounding_box.colliderect(obstacle):
-                    # 发生碰撞，恢复到之前的位置
-                    self.position = old_position
-                    self._update_bounding_box()
-                    self.speed = 0  # 停止移动
-                    return is_alive
-        
-        return is_alive
-    
-    def get_info(self):
+    def get_info(self) -> dict:
         return {
             "id": self.id,
             "team": self.team,
@@ -327,7 +317,7 @@ class BaseUnit:
             "reload_timer": self.reload_timer
         }
     
-    def draw(self, surface, camera_offset=(0, 0)):
+    def draw(self, surface, camera_offset=(0, 0)) -> None:
         if not self.is_alive:
             return
         
@@ -350,7 +340,7 @@ class BaseUnit:
         if DRAW_HEALTH_BAR or DEBUG_MODE:
             self._draw_health_bar(surface, screen_x, screen_y)
     
-    def _draw_health_bar(self, surface, x, y):
+    def _draw_health_bar(self, surface, x, y) -> None:
         """
         绘制生命条
         """
@@ -368,7 +358,7 @@ class BaseUnit:
         pygame.draw.rect(surface, (0, 255, 0), 
                         (bar_x, bar_y, current_width, bar_height))
     
-    def take_damage(self, damage_amount):
+    def take_damage(self, damage_amount) -> float:
         """
         坦克承受伤害
         """
@@ -381,7 +371,7 @@ class BaseUnit:
         
         return damage_amount
 
-    def save_to_file(self, file_name="default_unit.json"):
+    def save_to_file(self, file_name="default_unit.json") -> bool:
         # 保存单位信息到文件, file_name包含后缀，但不包含路径
         # 当前BaseUnit类中的属性没有确定下来，该方法为TODO
         save_dir = DEFAULT_UNIT_PATH
@@ -389,13 +379,13 @@ class BaseUnit:
         
         pass
         
-    def save(self):
+    def save(self) -> bool:
         # 提供一种直接的保存方法
         save_path = get_next_filename(DEFAULT_UNIT_PATH, 'default_unit', '.json')
         return self.save_to_file(save_path)
     
     @classmethod
-    def load_from_file(cls, file_name="default_unit.json"):
+    def load_from_file(cls, file_name="default_unit.json") -> 'BaseUnit':
         # 从JSON文件加载兵种单位信息并创建实例
         # 当前BaseUnit类中的属性没有确定下来，该方法为TODO
         filepath = os.path.join(DEFAULT_UNIT_PATH, file_name)

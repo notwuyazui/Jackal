@@ -36,7 +36,7 @@ def draw_debug_info(surface, tank, camera_offset, mouse_pos):
 if __name__ == "__main__":
     pygame.init()
     
-    screen_width, screen_height = 1000, 700
+    screen_width, screen_height = 960, 640
     screen = pygame.display.set_mode((screen_width, screen_height))
     clock = pygame.time.Clock()
     
@@ -54,22 +54,23 @@ if __name__ == "__main__":
         except:
             continue
     
-    map_data = [
-        "xxxxxxxxxxxxxxxxxxx",
-        "xoooooooooooooooxxx",
-        "xooxxxxxxxxxxoooxxx",
-        "xooxxxoooxxoooooxxx",
-        "xoooooooooooooooxxx",
-        "xooxxxxxxxxxxoooxxx",
-        "xooooxoooxxoooooxxx",
-        "xxxoooooooooooooxxx",
-        "xooxxxxxxxxxxoooxxx",
-        "xooxxxoooxxoooooxxx",
-        "xoooooooooooooooxxx",
-        "xxxxxxxxxxxxxxxxxxx"
-    ]
+    # map_data = [
+    #     "xxxxxxxxxxxxxxxxxxx",
+    #     "xoooooooooooooooxxx",
+    #     "xooxxxxxxxxxxoooxxx",
+    #     "xooxxxoooxxoooooxxx",
+    #     "xoooooooooooooooxxx",
+    #     "xooxxxxxxxxxxoooxxx",
+    #     "xooooxoooxxoooooxxx",
+    #     "xxxoooooooooooooxxx",
+    #     "xooxxxxxxxxxxoooxxx",
+    #     "xooxxxoooxxoooooxxx",
+    #     "xoooooooooooooooxxx",
+    #     "xxxxxxxxxxxxxxxxxxx"
+    # ]
     
-    game_map = GameMap(map_data, tile_size=64)
+    # game_map = GameMap(map_data, tile_size=64)
+    game_map = create_random_map()
     
     tank = create_tank(1, Team.PLAYER, position=(400, 300))
     
@@ -131,28 +132,19 @@ if __name__ == "__main__":
             camera_offset[1] += camera_speed
         
         # 坦克的状态更新
-        if hasattr(tank, 'set_movement'):
-            tank.set_movement(forward=moving_forward, backward=moving_backward)
-        
-        if hasattr(tank, 'set_turning'):
-            tank.set_turning(left=turning_left, right=turning_right)
+        tank.set_movement(forward=moving_forward, backward=moving_backward)
+        tank.set_turning(left=turning_left, right=turning_right)
         
         # 炮塔指向鼠标
         mouse_pos = pygame.mouse.get_pos()
-        if hasattr(tank, 'set_turret_target_to_mouse'):
-            tank.set_turret_target_to_mouse(mouse_pos, camera_offset)
+        tank.set_turret_target_to_mouse(mouse_pos, camera_offset)
         
-        if hasattr(tank, 'update_with_collision') and hasattr(game_map, 'obstacles'):
-            tank.update_with_collision(delta_time, game_map.obstacles)
-        elif hasattr(tank, 'update'):
-            tank.update(delta_time)
+        tank.update(delta_time, game_map.obstacles)
         
         screen.fill((50, 50, 70))
         
         game_map.draw(screen, camera_offset)
-        
-        if hasattr(tank, 'draw'):
-            tank.draw(screen, camera_offset)
+        tank.draw(screen, camera_offset)
         
         draw_debug_info(screen, tank, camera_offset, mouse_pos)
 
