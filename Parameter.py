@@ -16,7 +16,7 @@ UNIT_ANGULAR_SPEED = 100.0              # 单位的基础旋转速度
 UNIT_TURRET_ANGULAR_SPEED = 100.0       # 单位炮塔的基础旋转速度
 UNIT_AMMO_SWITCH_TIME = 0.5             # 单位切换弹药的时间
 
-BULLET_SPEED = 1000.0       # 子弹的基础速度
+BULLET_SPEED = 500.0        # 子弹的基础速度
 BULLET_DAMAGE = 10          # 子弹的基础伤害
 
 UNIT_DIAGONAL_SPEED = UNIT_SPEED / np.sqrt(2)       # 单位对角线速度

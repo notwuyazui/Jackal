@@ -201,7 +201,11 @@ class BaseUnit:
             # 当前弹药类型没有弹药
             return None
         
-        turret_angle_rad = math.radians(self.turret_direction_angle)
+        # 修正角度：炮塔朝向角度转换为数学上的标准角度
+        # PyGame中0度指向右侧，而我们的炮塔图像0度可能指向上方
+        # 所以需要将炮塔角度减去90度来匹配数学坐标系
+        turret_angle_rad = math.radians(self.turret_direction_angle - 90)
+        
         bullet_start_x = self.position[0] + math.cos(turret_angle_rad) * (self.size[0] / 2 + 5)
         bullet_start_y = self.position[1] + math.sin(turret_angle_rad) * (self.size[1] / 2 + 5)
         
@@ -209,8 +213,9 @@ class BaseUnit:
         
         try:
             bullet = bullet_class(
-                projectile_id=f"bullet_{self.id}_{id(self)}",  # 生成唯一ID
+                projectile_id=f"bullet_{self.id}_{pygame.time.get_ticks()}",  # 使用时间戳确保唯一性
                 shooter_id=self.id,
+                shooter_team=self.team,
                 position=(bullet_start_x, bullet_start_y),
                 velocity_direction=bullet_direction
             )
@@ -222,13 +227,23 @@ class BaseUnit:
             
         except Exception as e:
             print(f"创建子弹时出错: {e}")
-            return None          
+            return None 
         
     def _configure_bullet_for_ammo(self, bullet) -> None:
         """
         根据当前弹药类型配置子弹属性
         """
-        if self.current_ammunition == "bullet":
+        if self.current_ammunition == "normal_shell":
+            from Bullet.NormalShell.NormalShell import NormalShell
+            if isinstance(bullet, NormalShell):
+                # 可以在这里调整特定属性
+                pass
+        elif self.current_ammunition == "rocket_shell":
+            from Bullet.RocketShell.RocketShell import RocketShell
+            if isinstance(bullet, RocketShell):
+                # 可以在这里调整特定属性
+                pass
+        elif self.current_ammunition == "bullet":
             bullet.damage_rate = 1.0
             bullet.penetration = [1.0, 1.0, 1.0]
             bullet.speed_rate = 1.0
@@ -342,21 +357,37 @@ class BaseUnit:
     
     def _draw_health_bar(self, surface, x, y) -> None:
         """
-        绘制生命条
+        绘制生命条并在血条中间显示生命值
         """
         bar_width = 40
-        bar_height = 4
+        bar_height = 8  # 稍微增加高度以容纳文字
         
         bar_x = x - bar_width / 2
-        bar_y = y - self.size[1] / 2 - 10
+        bar_y = y - self.size[1] / 2 - 15  # 稍微上调血条位置
         
+        # 绘制背景（红色）
         pygame.draw.rect(surface, (255, 0, 0), 
                         (bar_x, bar_y, bar_width, bar_height))
         
+        # 绘制生命值（绿色）
         health_percentage = self.health / self.max_health
         current_width = bar_width * health_percentage
         pygame.draw.rect(surface, (0, 255, 0), 
                         (bar_x, bar_y, current_width, bar_height))
+        
+        # 绘制边框
+        pygame.draw.rect(surface, (255, 255, 255), 
+                        (bar_x, bar_y, bar_width, bar_height), 1)
+        
+        # 在血条中间显示生命值文本
+        health_text = f"{int(self.health)}/{int(self.max_health)}"
+        
+        # 使用小号字体
+        font = pygame.font.Font(None, 12)
+        text_surface = font.render(health_text, True, (0, 0, 0))
+        text_rect = text_surface.get_rect(center=(x, bar_y + bar_height / 2))
+        
+        surface.blit(text_surface, text_rect)
     
     def take_damage(self, damage_amount) -> float:
         """
