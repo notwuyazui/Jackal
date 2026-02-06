@@ -15,19 +15,18 @@ class RocketShell(BaseBullet):
                  position: Tuple[float, float] = (0.0, 0.0), 
                  velocity_direction: Tuple[float, float] = (1.0, 0.0)):
         
-        # 火箭弹属性
-        bullet_image_path = None  # 可以使用默认图像或指定路径
-        size = (12, 12)  # 稍大尺寸
-        lifetime = 1.5  # 1.5秒生命期
-        speed_rate = 0.8  # 速度稍慢
-        damage_rate = 1.5  # 基础伤害更高
-        penetration = [0.8, 1.0, 1.2]  # 对重甲效果更好
+        bullet_image_path = None
+        size = (12, 12)
+        lifetime = 1.5 
+        speed_rate = 0.8 
+        damage_rate = 1.5 
+        penetration = [0.8, 1.0, 1.2]
         
         # 爆炸属性
         is_explosive = True
-        explosion_radius = 60.0  # 爆炸半径
-        explosion_damage_rate = 0.8  # 爆炸伤害系数
-        explosion_image_path = None  # 可以指定爆炸效果图像路径
+        explosion_radius = 60.0 
+        explosion_damage_rate = 0.8
+        explosion_image_path = None
         
         super().__init__(
             projectile_id=projectile_id,

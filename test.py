@@ -6,7 +6,8 @@ import random
 from Unit.Tank.Tank import *
 from Map.Map import *
 from GameMode import *
-from Bullet.NormalShell.NormalShell import NormalShell  # 导入普通炮弹
+from Bullet.NormalShell.NormalShell import *
+from Bullet.BulletManager import *
 from Unit.EnemyAI import *
 
 def draw_debug_info(surface, tank, camera_offset, mouse_pos):
@@ -58,69 +59,16 @@ def draw_debug_info(surface, tank, camera_offset, mouse_pos):
                                             tank.position[1] - camera_offset[1]),
                                         1)
 
-class BulletManager:
-    """子弹管理器，负责管理所有子弹的更新和绘制"""
-    
-    def __init__(self):
-        self.bullets = []  # 存储所有活跃的子弹
-        self.to_remove = []  # 存储待移除的子弹
-        
-    def add_bullet(self, bullet):
-        """添加新子弹"""
-        if bullet:
-            self.bullets.append(bullet)
-            if BULLET_INFO_TEXT or DEBUG_MODE:
-                print(f"子弹发射: ID={bullet.id}, 位置={bullet.position}")
-    
-    def update(self, delta_time, units, obstacles):
-        """更新所有子弹"""
-        self.to_remove.clear()
-        
-        for bullet in self.bullets:
-            # 更新子弹状态
-            if not bullet.update(delta_time, units, obstacles):
-                # 子弹不再活跃，标记为待移除
-                if bullet in self.bullets and bullet not in self.to_remove:
-                    self.to_remove.append(bullet)
-            
-            # 如果子弹爆炸了，应用爆炸伤害
-            if bullet.has_exploded and bullet.is_explosive:
-                bullet.apply_explosion_damage(units)
-        
-        # 移除不再活跃的子弹
-        for bullet in self.to_remove:
-            if bullet in self.bullets:
-                self.bullets.remove(bullet)
-                if BULLET_INFO_TEXT or DEBUG_MODE:
-                    print(f"子弹移除: ID={bullet.id}")
-    
-    def draw(self, surface, camera_offset):
-        """绘制所有子弹"""
-        for bullet in self.bullets:
-            bullet.draw(surface, camera_offset)
-    
-    def get_active_count(self):
-        """获取活跃子弹数量"""
-        return len([b for b in self.bullets if b.is_active])
-    
-    def clear(self):
-        """清空所有子弹"""
-        self.bullets.clear()
 
 
 
-def create_enemy_tank(unit_id, position=(0, 0)):
-    """创建敌方坦克"""
-    enemy = Tank(unit_id, Team.ENEMY)
-    enemy.position = position
-    return enemy
 
 if __name__ == "__main__":
     pygame.init()
     
     screen_width, screen_height = 960, 640
     screen = pygame.display.set_mode((screen_width, screen_height))
-    pygame.display.set_caption("坦克对战测试 - 敌方AI攻击")
+    pygame.display.set_caption("test")
     clock = pygame.time.Clock()
     
     # 字体设置
@@ -141,27 +89,19 @@ if __name__ == "__main__":
     if font is None:
         font = pygame.font.Font(None, 24)  # 使用默认字体
     
-    # 创建地图
-    game_map = create_border_map(width=15, height=10)
-    
-    # 创建玩家坦克
+    game_map = create_border_map()
     tank = create_tank(1, Team.PLAYER, position=(400, 300))
-    
-    # 创建子弹管理器
     bullet_manager = BulletManager()
-    
-    # 创建敌方坦克和AI控制器
     enemies = []
     enemy_ais = []
     
     for i in range(3):
-        # 为每个敌人随机生成位置，确保不重叠
+        # 为每个敌人随机生成位置
         enemy_x = random.randint(100, 700)
         enemy_y = random.randint(100, 500)
         enemy = create_enemy_tank(100 + i, position=(enemy_x, enemy_y))
         enemies.append(enemy)
         
-        # 为每个敌人创建AI控制器
         ai = EnemyAI(enemy, tank, bullet_manager, game_map.obstacles)
         enemy_ais.append(ai)
     
@@ -218,7 +158,7 @@ if __name__ == "__main__":
                 elif event.key == pygame.K_F1:
                     debug_mode = not debug_mode
                 elif event.key == pygame.K_p:
-                    tank.save()
+                    game_map.save()
                 elif event.key == pygame.K_SPACE:
                     # 空格键发射子弹（备用）
                     bullet = tank.fire(NormalShell)
@@ -266,9 +206,8 @@ if __name__ == "__main__":
         if keys[pygame.K_DOWN]:
             camera_offset[1] += camera_speed
         
-        # 鼠标左键发射子弹（有冷却时间）
+        # 鼠标左键发射子弹
         if mouse_left_pressed and fire_cooldown <= 0:
-            # 发射子弹
             bullet = tank.fire(NormalShell)
             if bullet:
                 bullet_manager.add_bullet(bullet)
@@ -284,38 +223,25 @@ if __name__ == "__main__":
         mouse_pos = pygame.mouse.get_pos()
         tank.set_turret_target_to_mouse(mouse_pos, camera_offset)
         
-        # 更新玩家坦克
+        # 更新坦克、子弹
         tank.update(delta_time, game_map.obstacles)
-        
-        # 更新敌方坦克AI
         for ai in enemy_ais:
             ai.update(delta_time)
-        
-        # 更新所有子弹
         all_units = [tank] + enemies
         bullet_manager.update(delta_time, all_units, game_map.obstacles)
         
-        # 绘制
+        # 绘制地图、单位和子弹
         screen.fill((50, 50, 70))
-        
-        # 绘制地图
         game_map.draw(screen, camera_offset)
-        
-        # 绘制所有单位
         for enemy in enemies:
             if enemy.is_alive:
                 enemy.draw(screen, camera_offset)
         tank.draw(screen, camera_offset)
-        
-        # 绘制所有子弹
         bullet_manager.draw(screen, camera_offset)
         
-        # 在调试模式下绘制视线和状态
         if True:
             draw_debug_info(screen, tank, camera_offset, mouse_pos)
 
-
-        
         # 显示游戏状态
         if not tank.is_alive:
             game_over_font = pygame.font.Font(None, 72)

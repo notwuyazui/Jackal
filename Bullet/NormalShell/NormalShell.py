@@ -1,10 +1,8 @@
 '''
     普通炮弹
 '''
-
-import pygame
 from Bullet.BaseBullet import BaseBullet
-from typing import List, Tuple, Optional, Dict, Any
+from typing import Tuple
 from Parameter import *
 
 class NormalShell(BaseBullet):
@@ -17,11 +15,11 @@ class NormalShell(BaseBullet):
         
         # 普通炮弹属性
         bullet_image_path = "Bullet/NormalShell/normalshell.png"
-        size = (8, 8)  # 小尺寸
-        lifetime = 2.0  # 2秒生命期
-        speed_rate = 1.0  # 基础速度
-        damage_rate = 1.0  # 基础伤害
-        penetration = [1.2, 1.0, 0.8]  # 对轻甲120%，中甲100%，重甲80%
+        size = (8, 8)
+        lifetime = 2.0 
+        speed_rate = 1.0 
+        damage_rate = 1.0 
+        penetration = [1.2, 1.0, 0.8] 
         
         super().__init__(
             projectile_id=projectile_id,

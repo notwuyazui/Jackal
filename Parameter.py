@@ -19,8 +19,8 @@ UNIT_AMMO_SWITCH_TIME = 0.5             # 单位切换弹药的时间
 BULLET_SPEED = 500.0        # 子弹的基础速度
 BULLET_DAMAGE = 10          # 子弹的基础伤害
 
-UNIT_DIAGONAL_SPEED = UNIT_SPEED / np.sqrt(2)       # 单位对角线速度
-BULLET_DIAGONAL_SPEED = BULLET_SPEED / np.sqrt(2)   # 子弹对角线速度
+# UNIT_DIAGONAL_SPEED = UNIT_SPEED / np.sqrt(2)       # 单位对角线速度
+# BULLET_DIAGONAL_SPEED = BULLET_SPEED / np.sqrt(2)   # 子弹对角线速度
 
 
 class ArmorType(enum.Enum):     # 单位护甲类型

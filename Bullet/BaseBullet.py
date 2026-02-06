@@ -39,27 +39,25 @@ class BaseBullet:
         self.image_path: Optional[str] = bullet_image_path
         self.image: Optional[pygame.Surface] = load_image(bullet_image_path) if bullet_image_path else None
         
-        # 尺寸和碰撞
         if size == (0.0, 0.0) and self.image:
             self.size: Tuple[float, float] = self.image.get_size()
         else:
             self.size = size
             
         # 弹道属性
-        self.max_lifetime: float = lifetime
+        self.max_lifetime: float = lifetime                                                 # 射程
         self.speed_rate: float = speed_rate
         self.damage_rate: float = damage_rate
-        self.penetration: List[float] = penetration if penetration else [1.0, 1.0, 1.0]
+        self.penetration: List[float] = penetration if penetration else [1.0, 1.0, 1.0]     # 对不同护甲的伤害
         
-        # 计算基础值
-        self.speed: float = BULLET_SPEED * self.speed_rate
-        self.base_damage: float = BULLET_DAMAGE * self.damage_rate
+        self.speed: float = BULLET_SPEED * self.speed_rate                                  # 速度
+        self.base_damage: float = BULLET_DAMAGE * self.damage_rate                          # 基础伤害
         
-        # 爆炸属性
-        self.is_explosive: bool = is_explosive
-        self.explosion_radius: float = explosion_radius
-        self.explosion_damage_rate: float = explosion_damage_rate
-        self.explosion_image_path: Optional[str] = explosion_image_path
+        # 爆炸
+        self.is_explosive: bool = is_explosive                                              # 是否为爆炸弹
+        self.explosion_radius: float = explosion_radius                                     # 爆炸半径
+        self.explosion_damage_rate: float = explosion_damage_rate                           # 爆炸伤害
+        self.explosion_image_path: Optional[str] = explosion_image_path                     # 爆炸效果图像路径
         self.explosion_image: Optional[pygame.Surface] = None
         if explosion_image_path:
             self.explosion_image = load_image(explosion_image_path)
@@ -116,14 +114,6 @@ class BaseBullet:
     def update(self, delta_time: float, units: List[Any], obstacles: List[pygame.Rect]) -> bool:
         """
         更新子弹状态
-        
-        Args:
-            delta_time: 时间增量
-            units: 所有单位列表
-            obstacles: 障碍物列表
-            
-        Returns:
-            bool: 子弹是否仍然活跃
         """
         if not self.is_active:
             return False
@@ -138,15 +128,12 @@ class BaseBullet:
             self.is_active = False
             return False
         
-        # 保存旧位置用于碰撞检测
         old_position = self.position
         
-        # 更新位置
         dx = self.velocity[0] * delta_time
         dy = self.velocity[1] * delta_time
         self.position = (self.position[0] + dx, self.position[1] + dy)
         
-        # 更新碰撞箱
         self._update_bounding_box()
         
         # 更新已飞行距离
@@ -274,12 +261,6 @@ class BaseBullet:
     def apply_explosion_damage(self, units: List[Any]) -> Dict[int, float]:
         """
         应用爆炸伤害到范围内的单位
-        
-        Args:
-            units: 所有单位列表
-            
-        Returns:
-            Dict[int, float]: 单位ID到伤害值的映射
         """
         if not self.has_exploded or not self.is_explosive:
             return {}
@@ -288,29 +269,23 @@ class BaseBullet:
         explosion_center = self.position
         
         for unit in units:
-            # 跳过无效单位
-            if not hasattr(unit, 'is_alive') or not unit.is_alive:
+            if not unit.is_alive:
                 continue
                 
-            # 跳过友军（爆炸可能伤害友军，根据游戏设计决定）
-            if hasattr(unit, 'team') and unit.team == self.shooter_team:
+            if unit.team == self.shooter_team:
                 continue
             
             # 检查单位是否在爆炸范围内
-            if hasattr(unit, 'position'):
-                dx = unit.position[0] - explosion_center[0]
-                dy = unit.position[1] - explosion_center[1]
-                distance = math.sqrt(dx**2 + dy**2)
+            dx = unit.position[0] - explosion_center[0]
+            dy = unit.position[1] - explosion_center[1]
+            distance = math.sqrt(dx**2 + dy**2)
+            
+            if distance <= self.explosion_radius:
+                distance_factor = 1.0 - (distance / self.explosion_radius)
+                damage = self.base_damage * self.explosion_damage_rate * distance_factor
                 
-                if distance <= self.explosion_radius:
-                    # 计算伤害（距离越近伤害越高）
-                    distance_factor = 1.0 - (distance / self.explosion_radius)
-                    damage = self.base_damage * self.explosion_damage_rate * distance_factor
-                    
-                    # 应用伤害
-                    if hasattr(unit, 'take_damage'):
-                        actual_damage = unit.take_damage(damage)
-                        damage_map[unit.id] = actual_damage
+                actual_damage = unit.take_damage(damage)
+                damage_map[unit.id] = actual_damage
         
         return damage_map
     
@@ -333,7 +308,7 @@ class BaseBullet:
                 surface.blit(self.image, image_rect)
         
         # 调试绘制：爆炸范围
-        if self.has_exploded and self.is_explosive and DEBUG_MODE:
+        if self.has_exploded and self.is_explosive and (DEBUG_MODE or DRAW_BULLET_EXPLOSION_RANGE):
             pygame.draw.circle(
                 surface, 
                 (255, 100, 100, 128),  # 半透明红色
@@ -343,7 +318,7 @@ class BaseBullet:
             )
         
         # 调试绘制：碰撞箱
-        if DEBUG_MODE and self.bounding_box:
+        if (DEBUG_MODE or DRAW_BULLET_BOUNDING_BOX) and self.bounding_box:
             debug_rect = pygame.Rect(
                 self.bounding_box.x - camera_offset[0],
                 self.bounding_box.y - camera_offset[1],

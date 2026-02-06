@@ -44,3 +44,8 @@ def create_tank(unit_id, unit_team, position=(0, 0)):
     tank = Tank(unit_id, unit_team)
     tank.position = position
     return tank            
+
+def create_enemy_tank(unit_id, position=(0, 0)):
+    enemy = Tank(unit_id, Team.ENEMY)
+    enemy.position = position
+    return enemy
