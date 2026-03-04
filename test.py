@@ -4,11 +4,12 @@ import sys
 import os
 import random
 from Unit.Tank.Tank import *
+from Unit.EnemyAI import *
 from Map.Map import *
 from GameMode import *
 from Bullet.NormalShell.NormalShell import *
+from Bullet.RocketShell.RocketShell import *
 from Bullet.BulletManager import *
-from Unit.EnemyAI import *
 
 def draw_debug_info(surface, tank, camera_offset, mouse_pos):
     debug_font = pygame.font.Font(None, 20)
@@ -208,7 +209,7 @@ if __name__ == "__main__":
         
         # 鼠标左键发射子弹
         if mouse_left_pressed and fire_cooldown <= 0:
-            bullet = tank.fire(NormalShell)
+            bullet = tank.fire(RocketShell)
             if bullet:
                 bullet_manager.add_bullet(bullet)
                 fire_cooldown = fire_cooldown_max

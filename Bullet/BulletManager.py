@@ -39,15 +39,12 @@ class BulletManager:
                     print(f"子弹移除: ID={bullet.id}")
     
     def draw(self, surface, camera_offset):
-        """绘制所有子弹"""
         for bullet in self.bullets:
             bullet.draw(surface, camera_offset)
     
     def get_active_count(self):
-        """获取活跃子弹数量"""
         return len([b for b in self.bullets if b.is_active])
     
     def clear(self):
-        """清空所有子弹"""
         self.bullets.clear()
 

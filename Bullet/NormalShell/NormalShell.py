@@ -16,10 +16,10 @@ class NormalShell(BaseBullet):
         # 普通炮弹属性
         bullet_image_path = "Bullet/NormalShell/normalshell.png"
         size = (8, 8)
-        lifetime = 2.0 
+        lifetime = 1.2 
         speed_rate = 1.0 
         damage_rate = 1.0 
-        penetration = [1.2, 1.0, 0.8] 
+        penetration = [1.0, 1.0, 1.0] 
         
         super().__init__(
             projectile_id=projectile_id,

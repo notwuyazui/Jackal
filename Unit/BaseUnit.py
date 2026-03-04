@@ -201,9 +201,6 @@ class BaseUnit:
             # 当前弹药类型没有弹药
             return None
         
-        # 修正角度：炮塔朝向角度转换为数学上的标准角度
-        # PyGame中0度指向右侧，而我们的炮塔图像0度可能指向上方
-        # 所以需要将炮塔角度减去90度来匹配数学坐标系
         turret_angle_rad = math.radians(self.turret_direction_angle - 90)
         
         bullet_start_x = self.position[0] + math.cos(turret_angle_rad) * (self.size[0] / 2 + 5)

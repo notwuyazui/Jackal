@@ -68,7 +68,7 @@ class BaseBullet:
         self.velocity_direction: Tuple[float, float] = velocity_direction
         self.velocity: Tuple[float, float] = self._calculate_velocity()
         self.bounding_box: pygame.Rect = bounding_box if bounding_box else self._update_bounding_box()
-        self.rotation_angle: float = math.degrees(math.atan2(velocity_direction[1], velocity_direction[0]))
+        self.rotation_angle: float = math.degrees(math.atan2(velocity_direction[1], velocity_direction[0])) + 90
         
         # 状态标志
         self.is_active: bool = True
