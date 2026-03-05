@@ -125,6 +125,8 @@ class BaseUnit:
             if self.reload_timer <= 0:
                 self.reload_timer = 0
                 self.is_switching_ammo = False
+                self.current_ammunition = self.target_ammunition
+                self.target_ammunition = ""
     
     def _update_speed(self, delta_time) -> None:
         """更新速度"""
@@ -192,7 +194,10 @@ class BaseUnit:
         diff = (diff + 180) % 360 - 180
         return diff
     
-    def fire(self, bullet_class):
+    def fire(self, bullet_class = None):
+        if bullet_class is None:
+            bullet_class = get_class_from_str(self.current_ammunition)
+        
         if self.is_switching_ammo:
             # 坦克正在切换弹药
             return None
@@ -219,7 +224,7 @@ class BaseUnit:
             
             # 根据当前弹药类型设置子弹属性
             self._configure_bullet_for_ammo(bullet)
-            
+                
             return bullet
             
         except Exception as e:
@@ -246,7 +251,12 @@ class BaseUnit:
             bullet.speed_rate = 1.0
             bullet.is_explosive = False
             
-    def switch_ammunition(self, ammo_type) -> bool:
+    def switch_ammunition(self, ammo_type = None) -> bool:
+        if ammo_type == None:
+            idx = self.ammunition_types.index(self.current_ammunition)
+            next_idx = (idx + 1) % len(self.ammunition_types)
+            ammo_type = self.ammunition_types[next_idx]
+            
         if ammo_type not in self.ammunition_types:
             print(f"坦克 {self.id} 没有 {ammo_type} 类型弹药")
             return False

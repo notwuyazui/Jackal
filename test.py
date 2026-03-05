@@ -161,9 +161,11 @@ if __name__ == "__main__":
                 elif event.key == pygame.K_p:
                     game_map.save()
                 elif event.key == pygame.K_SPACE:
-                    # 空格键发射子弹（备用）
+                    # 空格键发射子弹
                     bullet = tank.fire(NormalShell)
                     bullet_manager.add_bullet(bullet)
+                elif event.key == pygame.K_q:
+                    tank.switch_ammunition()
                 elif event.key == pygame.K_c:
                     # 清空所有子弹
                     bullet_manager.clear()
@@ -209,7 +211,7 @@ if __name__ == "__main__":
         
         # 鼠标左键发射子弹
         if mouse_left_pressed and fire_cooldown <= 0:
-            bullet = tank.fire(RocketShell)
+            bullet = tank.fire()
             if bullet:
                 bullet_manager.add_bullet(bullet)
                 fire_cooldown = fire_cooldown_max

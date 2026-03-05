@@ -75,7 +75,7 @@ class BaseBullet:
         self.has_collided: bool = False
         self.has_exploded: bool = False
         self.explosion_timer: float = 0.0
-        self.max_explosion_display_time: float = 0.3  # 爆炸效果显示时间
+        self.max_explosion_display_time: float = 0.5  # 爆炸效果显示时间
         self.collided_with: Optional[str] = None  # 'unit', 'obstacle', 'friendly'
         self.collided_objects: List[Any] = []  # 碰撞到的对象列表
         self.distance_traveled: float = 0.0  # 已飞行距离
@@ -117,7 +117,7 @@ class BaseBullet:
         """
         if not self.is_active:
             return False
-            
+        
         # 如果已经爆炸，处理爆炸效果
         if self.has_exploded:
             return self._update_explosion(delta_time)
@@ -182,6 +182,7 @@ class BaseBullet:
         return None
     
     def _handle_obstacle_collision(self):
+        
         """处理与障碍物的碰撞"""
         self.has_collided = True
         self.collided_with = 'obstacle'

@@ -51,6 +51,18 @@ def get_next_filename(folder_path, prefix, extension='.txt'):
     # 返回完整路径
     return f"{prefix}{next_num}{extension}"
 
+def get_class_from_str(class_name: str):
+    
+    import Bullet.NormalShell.NormalShell
+    import Bullet.RocketShell.RocketShell
+    
+    if class_name == 'normal_shell':
+        return Bullet.NormalShell.NormalShell.NormalShell
+    elif class_name == 'rocket_shell':
+        return Bullet.RocketShell.RocketShell.RocketShell
+    else:
+        return None
+
 class MethodGroup:
     """方法分组器"""
     

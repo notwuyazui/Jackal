@@ -21,7 +21,7 @@ class Tank(BaseUnit):
         self.turret_angular_speed_rate = 1.0
         self.max_health_rate = 1.0
         self.armor_type = ArmorType.NONE                                                        # 护甲类型
-        self.ammunition_types = ['bullet']                                                      # 单位拥有弹种
+        self.ammunition_types = ['normal_shell','rocket_shell']                                                      # 单位拥有弹种
         self.ammo_switch_time =  UNIT_AMMO_SWITCH_TIME                                          # 单位切换弹种时间
         
         
