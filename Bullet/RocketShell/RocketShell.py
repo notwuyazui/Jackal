@@ -19,13 +19,13 @@ class RocketShell(BaseBullet):
         size = (32, 32)
         lifetime = 2.0 
         speed_rate = 1.0 
-        damage_rate = 1.5 
+        damage_rate = 1.0           # 被命中本体受伤=直接伤害+爆炸伤害
         penetration = [0.8, 1.0, 1.2]
         
         # 爆炸属性
         is_explosive = True
-        explosion_radius = 15.0 
-        explosion_damage_rate = 0.8
+        explosion_radius = 50.0 
+        explosion_damage_rate = 1.0     
         explosion_image_path = "Bullet/RocketShell/RocketShellExplosion.png"
         
         super().__init__(

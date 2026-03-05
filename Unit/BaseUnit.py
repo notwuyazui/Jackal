@@ -12,7 +12,7 @@ from GameMode import *
 from typing import List, Tuple
 
 class BaseUnit:
-    def __init__(self, unit_id, unit_team, unit_type, body_image_path, turret_image_path, 
+    def __init__(self, unit_id, unit_team, usingAI, unit_type, body_image_path, turret_image_path, 
                  max_speed_rate=1.0, 
                  max_acceleration_rate=INF, 
                  min_acceleration_rate=-INF, 
@@ -21,7 +21,7 @@ class BaseUnit:
                  max_health_rate=1.0, 
                  armor_type=ArmorType.NONE, 
                  ammunition_types=[], 
-                 ammo_switch_time=UNIT_AMMO_SWITCH_TIME):
+                 ammo_switch_time=UNIT_AMMO_SWITCH_TIME,):
         
         # 基本信息
         self.id: int = unit_id
@@ -32,6 +32,7 @@ class BaseUnit:
         self.body_image = load_image(self.body_image_path) if self.body_image_path else None
         self.turret_image = load_image(self.turret_image_path) if self.turret_image_path else None
         self.size = self.body_image.get_size()
+        self.usingAI = usingAI
         
         # 基本属性
         self.max_speed_rate: float = max_speed_rate

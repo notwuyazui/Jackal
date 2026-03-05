@@ -9,7 +9,7 @@ from Parameter import *
 
 class Tank(BaseUnit):
     
-    def __init__(self, unit_id: int, unit_team: Team):
+    def __init__(self, unit_id: int, unit_team: Team, usingAI = False):
         
         self.unit_type = 'tank'
         self.body_image_path = 'Unit/Tank/tank.png'
@@ -25,7 +25,7 @@ class Tank(BaseUnit):
         self.ammo_switch_time =  UNIT_AMMO_SWITCH_TIME                                          # 单位切换弹种时间
         
         
-        super().__init__(unit_id, unit_team, 
+        super().__init__(unit_id, unit_team, usingAI,
                          unit_type=self.unit_type,
                          body_image_path=self.body_image_path, 
                          turret_image_path=self.turret_image_path, 
@@ -45,7 +45,7 @@ def create_tank(unit_id, unit_team, position=(0, 0)):
     tank.position = position
     return tank            
 
-def create_enemy_tank(unit_id, position=(0, 0)):
-    enemy = Tank(unit_id, Team.ENEMY)
+def create_enemy_tank(unit_id, position=(0, 0), usingAI = False):
+    enemy = Tank(unit_id, Team.ENEMY, usingAI)
     enemy.position = position
     return enemy

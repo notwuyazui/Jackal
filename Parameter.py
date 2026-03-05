@@ -18,6 +18,8 @@ UNIT_AMMO_SWITCH_TIME = 0.5             # 单位切换弹药的时间
 
 BULLET_SPEED = 500.0        # 子弹的基础速度
 BULLET_DAMAGE = 10          # 子弹的基础伤害
+BULLET_EXPLOSION_DAMAGE_APPLY_DISTANT_FACTOR = False   # 子弹爆炸造成的伤害是否与距离有关
+EXPLOSION_IMAGE_ADAPT_TO_RANGE = False               # 爆炸图片是否根据爆炸范围调整大小
 
 # UNIT_DIAGONAL_SPEED = UNIT_SPEED / np.sqrt(2)       # 单位对角线速度
 # BULLET_DIAGONAL_SPEED = BULLET_SPEED / np.sqrt(2)   # 子弹对角线速度

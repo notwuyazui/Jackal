@@ -75,7 +75,7 @@ class BaseBullet:
         self.has_collided: bool = False
         self.has_exploded: bool = False
         self.explosion_timer: float = 0.0
-        self.max_explosion_display_time: float = 0.5  # 爆炸效果显示时间
+        self.max_explosion_display_time: float = 0.2  # 爆炸效果显示时间
         self.collided_with: Optional[str] = None  # 'unit', 'obstacle', 'friendly'
         self.collided_objects: List[Any] = []  # 碰撞到的对象列表
         self.distance_traveled: float = 0.0  # 已飞行距离
@@ -149,7 +149,7 @@ class BaseBullet:
         unit_collision = self._check_unit_collision(units)
         if unit_collision:
             unit = unit_collision
-            self._handle_unit_collision(unit)
+            self._handle_unit_collision(unit, units)
             return self.is_active
         
         return True
@@ -192,7 +192,7 @@ class BaseBullet:
         else:
             self.is_active = False
     
-    def _handle_unit_collision(self, unit):
+    def _handle_unit_collision(self, unit, units: List[Any]):
         """处理与单位的碰撞"""
         self.has_collided = True
         self.collided_objects.append(unit)
@@ -216,6 +216,7 @@ class BaseBullet:
         # 如果子弹会爆炸，触发爆炸
         if self.is_explosive:
             self._trigger_explosion()
+            self.apply_explosion_damage(units)
         else:
             self.is_active = False
     
@@ -253,7 +254,7 @@ class BaseBullet:
             self.image = self.explosion_image
             
             # 调整大小以匹配爆炸半径
-            if self.explosion_radius > 0:
+            if self.explosion_radius > 0 and EXPLOSION_IMAGE_ADAPT_TO_RANGE:
                 scaled_size = (int(self.explosion_radius * 2), int(self.explosion_radius * 2))
                 self.image = pygame.transform.scale(self.image, scaled_size)
                 self.size = scaled_size
@@ -282,8 +283,11 @@ class BaseBullet:
             distance = math.sqrt(dx**2 + dy**2)
             
             if distance <= self.explosion_radius:
-                distance_factor = 1.0 - (distance / self.explosion_radius)
-                damage = self.base_damage * self.explosion_damage_rate * distance_factor
+                if BULLET_EXPLOSION_DAMAGE_APPLY_DISTANT_FACTOR:
+                    distance_factor = 1.0 - (distance / self.explosion_radius)
+                else:
+                    distance_factor = 1.0
+                damage = BULLET_DAMAGE * self.explosion_damage_rate * distance_factor
                 
                 actual_damage = unit.take_damage(damage)
                 damage_map[unit.id] = actual_damage

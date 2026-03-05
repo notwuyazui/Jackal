@@ -26,10 +26,6 @@ class BulletManager:
                 # 子弹不再活跃，标记为待移除
                 if bullet in self.bullets and bullet not in self.to_remove:
                     self.to_remove.append(bullet)
-            
-            # 如果子弹爆炸了，应用爆炸伤害
-            if bullet.has_exploded and bullet.is_explosive:
-                bullet.apply_explosion_damage(units)
         
         # 移除不再活跃的子弹
         for bullet in self.to_remove:

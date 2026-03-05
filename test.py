@@ -96,15 +96,21 @@ if __name__ == "__main__":
     enemies = []
     enemy_ais = []
     
-    for i in range(3):
-        # 为每个敌人随机生成位置
-        enemy_x = random.randint(100, 700)
-        enemy_y = random.randint(100, 500)
-        enemy = create_enemy_tank(100 + i, position=(enemy_x, enemy_y))
-        enemies.append(enemy)
+    # for i in range(3):
+    #     # 为每个敌人随机生成位置
+    #     enemy_x = random.randint(100, 700)
+    #     enemy_y = random.randint(100, 500)
+    #     enemy = create_enemy_tank(100 + i, position=(enemy_x, enemy_y))
+    #     enemies.append(enemy)
         
-        ai = EnemyAI(enemy, tank, bullet_manager, game_map.obstacles)
-        enemy_ais.append(ai)
+    #     ai = EnemyAI(enemy, tank, bullet_manager, game_map.obstacles)
+    #     enemy_ais.append(ai)
+    enemy = create_enemy_tank(101, (400, 300), usingAI=True)
+    enemies.append(enemy)
+    enemy = create_enemy_tank(102, (400, 320), usingAI=True)
+    enemies.append(enemy)
+    enemy = create_enemy_tank(103, (430, 300))
+    enemies.append(enemy)
     
     # 相机偏移
     camera_offset = [0, 0]
@@ -169,17 +175,6 @@ if __name__ == "__main__":
                 elif event.key == pygame.K_c:
                     # 清空所有子弹
                     bullet_manager.clear()
-                elif event.key == pygame.K_r:
-                    # 重新生成敌人
-                    enemies.clear()
-                    enemy_ais.clear()
-                    for i in range(3):
-                        enemy_x = random.randint(100, 700)
-                        enemy_y = random.randint(100, 500)
-                        enemy = create_enemy_tank(100 + i, position=(enemy_x, enemy_y))
-                        enemies.append(enemy)
-                        ai = EnemyAI(enemy, tank, bullet_manager, game_map.obstacles)
-                        enemy_ais.append(ai)
             
             elif event.type == pygame.KEYUP:
                 if event.key == pygame.K_w:
@@ -228,8 +223,8 @@ if __name__ == "__main__":
         
         # 更新坦克、子弹
         tank.update(delta_time, game_map.obstacles)
-        for ai in enemy_ais:
-            ai.update(delta_time)
+        for enemy in enemies:
+            enemy.update(delta_time, game_map.obstacles)
         all_units = [tank] + enemies
         bullet_manager.update(delta_time, all_units, game_map.obstacles)
         
