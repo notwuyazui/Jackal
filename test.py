@@ -10,6 +10,7 @@ from GameMode import *
 from Bullet.NormalShell.NormalShell import *
 from Bullet.RocketShell.RocketShell import *
 from Bullet.BulletManager import *
+from Unit.UnitManager import *
 
 def draw_debug_info(surface, tank, camera_offset, mouse_pos):
     debug_font = pygame.font.Font(None, 20)
@@ -41,8 +42,8 @@ def draw_debug_info(surface, tank, camera_offset, mouse_pos):
     if DRAW_ENEMY_STATE_MESSAGE or DEBUG_MODE:
         # 绘制敌人AI状态
         debug_font = pygame.font.Font(None, 16)
-        for i, ai in enumerate(enemy_ais):
-            if ai.enemy.is_alive:
+        for i, ai in enumerate(unit_manager.units):
+            if ai.enemy.is_alive and ai.team == Team.ENEMY:
                 screen_x = ai.enemy.position[0] - camera_offset[0]
                 screen_y = ai.enemy.position[1] - camera_offset[1]
                 
@@ -91,10 +92,8 @@ if __name__ == "__main__":
         font = pygame.font.Font(None, 24)  # 使用默认字体
     
     game_map = create_border_map()
-    tank = create_tank(1, Team.PLAYER, position=(400, 300))
     bullet_manager = BulletManager()
-    enemies = []
-    enemy_ais = []
+    unit_manager = UnitManager()
     
     # for i in range(3):
     #     # 为每个敌人随机生成位置
@@ -105,12 +104,14 @@ if __name__ == "__main__":
         
     #     ai = EnemyAI(enemy, tank, bullet_manager, game_map.obstacles)
     #     enemy_ais.append(ai)
+    tank = create_tank(1, Team.PLAYER, position=(400, 300))
+    unit_manager.add_unit(tank)
     enemy = create_enemy_tank(101, (400, 300), usingAI=True)
-    enemies.append(enemy)
+    unit_manager.add_unit(enemy)
     enemy = create_enemy_tank(102, (400, 320), usingAI=True)
-    enemies.append(enemy)
+    unit_manager.add_unit(enemy)
     enemy = create_enemy_tank(103, (430, 300))
-    enemies.append(enemy)
+    unit_manager.add_unit(enemy)
     
     # 相机偏移
     camera_offset = [0, 0]
@@ -222,19 +223,13 @@ if __name__ == "__main__":
         tank.set_turret_target_to_mouse(mouse_pos, camera_offset)
         
         # 更新坦克、子弹
-        tank.update(delta_time, game_map.obstacles)
-        for enemy in enemies:
-            enemy.update(delta_time, game_map.obstacles)
-        all_units = [tank] + enemies
-        bullet_manager.update(delta_time, all_units, game_map.obstacles)
+        unit_manager.update(delta_time, game_map.obstacles)
+        bullet_manager.update(delta_time, unit_manager.units, game_map.obstacles)
         
         # 绘制地图、单位和子弹
         screen.fill((50, 50, 70))
         game_map.draw(screen, camera_offset)
-        for enemy in enemies:
-            if enemy.is_alive:
-                enemy.draw(screen, camera_offset)
-        tank.draw(screen, camera_offset)
+        unit_manager.draw(screen, camera_offset)
         bullet_manager.draw(screen, camera_offset)
         
         if True:

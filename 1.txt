@@ -1,0 +1,1668 @@
+我正在实现一个简单的坦克对战游戏，我希望我的游戏具有可扩展性（例如，未来添加新的兵种、弹药，等等），因此我为兵种和子弹设计了基类。我目前完成了兵种和地图的基类构建，请你帮我完成弹药的基类构建。如果需要，可以为已完成的类添加一些方法来实现功能。
+当单位开火时，能够生成对应弹种的子弹，子弹在游戏运行过程中会调用update()方法进行更新，子弹命中敌人时，会根据弹种和护甲计算伤害并扣除敌方的生命值；子弹命中友方时，不会产生伤害，也不会受到阻挡；子弹命中障碍物时，会受到阻挡（如果子弹具有爆炸效果，则会触发爆炸，并计算爆炸范围内的敌方受到的伤害。
+目前项目结构如下：
+D:\DESKTOP\UNIVE\毕设\DEMO
+│   GameControl.py
+│   GameMode.py
+│   Parameter.py
+│   PCControl.py
+│   test.py
+│   utils.py
+│
+├───Bullet
+│   │   BaseBullet.py
+│   │   BulletManager.py
+│   │
+│   ├───NormalShell
+│   │   │   normalshell.png
+│   │   │   NormalShell.py
+│   │   │
+│   │   └───__pycache__
+│   │           NormalShell.cpython-312.pyc
+│   │
+│   ├───RocketShell
+│   │   │   RocketShell.png
+│   │   │   RocketShell.py
+│   │   │   RocketShellExplosion.png
+│   │   │   RocketShellExplosion_16x16.png
+│   │   │
+│   │   └───__pycache__
+│   │           RocketShell.cpython-312.pyc
+│   │
+│   ├───saved
+│   └───__pycache__
+│           BaseBullet.cpython-312.pyc
+│           BulletManager.cpython-312.pyc
+│
+├───Map
+│   │   barrier.png
+│   │   flat.png
+│   │   Map.py
+│   │
+│   ├───saved
+│   │       default_map0.txt
+│   │       default_map1.txt
+│   │       test_map.txt
+│   │
+│   └───__pycache__
+│           Map.cpython-312.pyc
+│
+├───Unit
+│   │   BaseUnit.py
+│   │   EnemyAI.py
+│   │   UnitManager.py
+│   │
+│   ├───Archie
+│   │       Archie.py
+│   │
+│   ├───saved
+│   │       default_unit0.json
+│   │
+│   ├───Tank
+│   │   │   tank.png
+│   │   │   Tank.py
+│   │   │   tanks.png
+│   │   │   turret.png
+│   │   │
+│   │   └───__pycache__
+│   │           Tank.cpython-312.pyc
+│   │
+│   └───__pycache__
+│           BaseUnit.cpython-312.pyc
+│           EnemyAI.cpython-312.pyc
+│           UnitManager.cpython-312.pyc
+│
+└───__pycache__
+        GameControl.cpython-312.pyc
+        GameMode.cpython-312.pyc
+        Parameter.cpython-312.pyc
+        utils.cpython-312.pyc
+Basebulet.py中的代码如下：
+'''
+    描述弹药的基类
+'''
+
+import pygame
+import math
+from typing import List, Tuple, Optional, Dict, Any
+from Parameter import *
+from utils import *
+from GameMode import *
+import json
+import os
+
+class BaseBullet:
+    def __init__(self, 
+                 projectile_id: str, 
+                 shooter_id: int, 
+                 shooter_team: Team,
+                 position: Tuple[float, float] = (0.0, 0.0), 
+                 velocity_direction: Tuple[float, float] = (1.0, 0.0),
+                 bullet_image_path: Optional[str] = None,
+                 size: Tuple[float, float] = (0.0, 0.0),
+                 bounding_box: Optional[pygame.Rect] = None,
+                 lifetime: float = 3.0,
+                 speed_rate: float = 1.0,
+                 damage_rate: float = 1.0,
+                 penetration: List[float] = None,
+                 is_explosive: bool = False,
+                 explosion_radius: float = 0.0,
+                 explosion_damage_rate: float = 1.0,
+                 explosion_image_path: Optional[str] = None):
+        
+        # 基本信息
+        self.id: str = projectile_id
+        self.shooter_id: int = shooter_id
+        self.shooter_team: Team = shooter_team
+        
+        # 图像和渲染
+        self.image_path: Optional[str] = bullet_image_path
+        self.image: Optional[pygame.Surface] = load_image(bullet_image_path) if bullet_image_path else None
+        
+        if size == (0.0, 0.0) and self.image:
+            self.size: Tuple[float, float] = self.image.get_size()
+        else:
+            self.size = size
+            
+        # 弹道属性
+        self.max_lifetime: float = lifetime                                                 # 射程
+        self.speed_rate: float = speed_rate
+        self.damage_rate: float = damage_rate
+        self.penetration: List[float] = penetration if penetration else [1.0, 1.0, 1.0]     # 对不同护甲的伤害
+        
+        self.speed: float = BULLET_SPEED * self.speed_rate                                  # 速度
+        self.base_damage: float = BULLET_DAMAGE * self.damage_rate                          # 基础伤害
+        
+        # 爆炸
+        self.is_explosive: bool = is_explosive                                              # 是否为爆炸弹
+        self.explosion_radius: float = explosion_radius                                     # 爆炸半径
+        self.explosion_damage_rate: float = explosion_damage_rate                           # 爆炸伤害
+        self.explosion_image_path: Optional[str] = explosion_image_path                     # 爆炸效果图像路径
+        self.explosion_image: Optional[pygame.Surface] = None
+        if explosion_image_path:
+            self.explosion_image = load_image(explosion_image_path)
+        
+        # 实时属性
+        self.lifetime: float = lifetime
+        self.position: Tuple[float, float] = position
+        self.velocity_direction: Tuple[float, float] = velocity_direction
+        self.velocity: Tuple[float, float] = self._calculate_velocity()
+        self.bounding_box: pygame.Rect = bounding_box if bounding_box else self._update_bounding_box()
+        self.rotation_angle: float = math.degrees(math.atan2(velocity_direction[1], velocity_direction[0])) + 90
+        
+        # 状态标志
+        self.is_active: bool = True
+        self.has_collided: bool = False
+        self.has_exploded: bool = False
+        self.explosion_timer: float = 0.0
+        self.max_explosion_display_time: float = 0.2  # 爆炸效果显示时间
+        self.collided_with: Optional[str] = None  # 'unit', 'obstacle', 'friendly'
+        self.collided_objects: List[Any] = []  # 碰撞到的对象列表
+        self.distance_traveled: float = 0.0  # 已飞行距离
+        
+        # 初始化碰撞箱
+        self._update_bounding_box()
+        
+    def _calculate_velocity(self) -> Tuple[float, float]:
+        """计算速度向量"""
+        dir_len = math.sqrt(self.velocity_direction[0]**2 + self.velocity_direction[1]**2)
+        if dir_len > 0:
+            normalized_dir = (
+                self.velocity_direction[0] / dir_len,
+                self.velocity_direction[1] / dir_len
+            )
+        else:
+            normalized_dir = (1.0, 0.0)
+            
+        return (
+            normalized_dir[0] * self.speed,
+            normalized_dir[1] * self.speed
+        )
+    
+    def _update_bounding_box(self) -> pygame.Rect:
+        """更新碰撞箱"""
+        x, y = self.position
+        width, height = self.size
+        self.bounding_box = pygame.Rect(
+            x - width / 2,
+            y - height / 2,
+            width,
+            height
+        )
+        return self.bounding_box
+    
+    def update(self, delta_time: float, units: List[Any], obstacles: List[pygame.Rect]) -> bool:
+        """
+        更新子弹状态
+        """
+        if not self.is_active:
+            return False
+        
+        # 如果已经爆炸，处理爆炸效果
+        if self.has_exploded:
+            return self._update_explosion(delta_time)
+        
+        # 更新生命期
+        self.lifetime -= delta_time
+        if self.lifetime <= 0:
+            self.is_active = False
+            return False
+        
+        old_position = self.position
+        
+        dx = self.velocity[0] * delta_time
+        dy = self.velocity[1] * delta_time
+        self.position = (self.position[0] + dx, self.position[1] + dy)
+        
+        self._update_bounding_box()
+        
+        # 更新已飞行距离
+        self.distance_traveled += math.sqrt(dx**2 + dy**2)
+        
+        # 检查与障碍物的碰撞
+        obstacle_collision = self._check_obstacle_collision(obstacles)
+        if obstacle_collision:
+            self._handle_obstacle_collision()
+            return self.is_active
+        
+        # 检查与单位的碰撞
+        unit_collision = self._check_unit_collision(units)
+        if unit_collision:
+            unit = unit_collision
+            self._handle_unit_collision(unit, units)
+            return self.is_active
+        
+        return True
+    
+    def _update_explosion(self, delta_time: float) -> bool:
+        """更新爆炸效果"""
+        self.explosion_timer += delta_time
+        if self.explosion_timer >= self.max_explosion_display_time:
+            self.is_active = False
+        return True  # 在爆炸期间仍然返回True，以便绘制爆炸效果
+    
+    def _check_obstacle_collision(self, obstacles: List[pygame.Rect]) -> Optional[pygame.Rect]:
+        """检查与障碍物的碰撞"""
+        for obstacle in obstacles:
+            if self.bounding_box.colliderect(obstacle):
+                return obstacle
+        return None
+    
+    def _check_unit_collision(self, units: List[Any]) -> Optional[Any]:
+        """检查与单位的碰撞"""
+        for unit in units:
+            # 跳过无效单位
+            if not hasattr(unit, 'is_alive') or not unit.is_alive:
+                continue
+                
+            # 检查碰撞
+            if (hasattr(unit, 'bounding_box') and unit.bounding_box and 
+                self.bounding_box.colliderect(unit.bounding_box)):
+                return unit
+        return None
+    
+    def _handle_obstacle_collision(self):
+        
+        """处理与障碍物的碰撞"""
+        self.has_collided = True
+        self.collided_with = 'obstacle'
+        
+        if self.is_explosive:
+            self._trigger_explosion()
+        else:
+            self.is_active = False
+    
+    def _handle_unit_collision(self, unit, units: List[Any]):
+        """处理与单位的碰撞"""
+        self.has_collided = True
+        self.collided_objects.append(unit)
+        
+        # 检查是否是友军
+        if hasattr(unit, 'team') and unit.team == self.shooter_team:
+            self.collided_with = 'friendly'
+            # 友军不受伤害，子弹继续飞行
+            return
+        
+        # 是敌军
+        self.collided_with = 'unit'
+        
+        # 计算伤害
+        damage = self._calculate_damage(unit)
+        
+        # 应用伤害
+        if hasattr(unit, 'take_damage'):
+            unit.take_damage(damage)
+        
+        # 如果子弹会爆炸，触发爆炸
+        if self.is_explosive:
+            self._trigger_explosion()
+            self.apply_explosion_damage(units)
+        else:
+            self.is_active = False
+    
+    def _calculate_damage(self, unit) -> float:
+        """根据护甲类型计算伤害"""
+        base_damage = self.base_damage
+        
+        if hasattr(unit, 'armor_type'):
+            armor_type = unit.armor_type
+            # 根据护甲类型应用穿透系数
+            if armor_type == ArmorType.NONE:
+                penetration_multiplier = 1.0
+            elif armor_type == ArmorType.LIGHT:
+                penetration_multiplier = self.penetration[0] if len(self.penetration) > 0 else 1.0
+            elif armor_type == ArmorType.MEDIUM:
+                penetration_multiplier = self.penetration[1] if len(self.penetration) > 1 else 1.0
+            elif armor_type == ArmorType.HEAVY:
+                penetration_multiplier = self.penetration[2] if len(self.penetration) > 2 else 1.0
+            else:
+                penetration_multiplier = 1.0
+            
+            return base_damage * penetration_multiplier
+        
+        return base_damage
+    
+    def _trigger_explosion(self):
+        """触发爆炸"""
+        self.has_exploded = True
+        self.explosion_timer = 0.0
+        self.is_active = True  # 保持活跃以显示爆炸效果
+        
+        # 如果有爆炸图像，使用子弹位置作为爆炸中心
+        if self.explosion_image:
+            # 将子弹图像替换为爆炸图像
+            self.image = self.explosion_image
+            
+            # 调整大小以匹配爆炸半径
+            if self.explosion_radius > 0 and EXPLOSION_IMAGE_ADAPT_TO_RANGE:
+                scaled_size = (int(self.explosion_radius * 2), int(self.explosion_radius * 2))
+                self.image = pygame.transform.scale(self.image, scaled_size)
+                self.size = scaled_size
+                self._update_bounding_box()
+    
+    def apply_explosion_damage(self, units: List[Any]) -> Dict[int, float]:
+        """
+        应用爆炸伤害到范围内的单位
+        """
+        if not self.has_exploded or not self.is_explosive:
+            return {}
+        
+        damage_map = {}
+        explosion_center = self.position
+        
+        for unit in units:
+            if not unit.is_alive:
+                continue
+                
+            if unit.team == self.shooter_team:
+                continue
+            
+            # 检查单位是否在爆炸范围内
+            dx = unit.position[0] - explosion_center[0]
+            dy = unit.position[1] - explosion_center[1]
+            distance = math.sqrt(dx**2 + dy**2)
+            
+            if distance <= self.explosion_radius:
+                if BULLET_EXPLOSION_DAMAGE_APPLY_DISTANT_FACTOR:
+                    distance_factor = 1.0 - (distance / self.explosion_radius)
+                else:
+                    distance_factor = 1.0
+                damage = BULLET_DAMAGE * self.explosion_damage_rate * distance_factor
+                
+                actual_damage = unit.take_damage(damage)
+                damage_map[unit.id] = actual_damage
+        
+        return damage_map
+    
+    def draw(self, surface: pygame.Surface, camera_offset: Tuple[float, float] = (0, 0)) -> None:
+        """绘制子弹"""
+        if not self.is_active:
+            return
+        
+        screen_x = self.position[0] - camera_offset[0]
+        screen_y = self.position[1] - camera_offset[1]
+        
+        if self.image:
+            # 如果需要旋转，根据速度方向旋转图像
+            if self.rotation_angle != 0:
+                rotated_image = pygame.transform.rotate(self.image, -self.rotation_angle)
+                image_rect = rotated_image.get_rect(center=(screen_x, screen_y))
+                surface.blit(rotated_image, image_rect)
+            else:
+                image_rect = self.image.get_rect(center=(screen_x, screen_y))
+                surface.blit(self.image, image_rect)
+        
+        # 调试绘制：爆炸范围
+        if self.has_exploded and self.is_explosive and (DEBUG_MODE or DRAW_BULLET_EXPLOSION_RANGE):
+            pygame.draw.circle(
+                surface, 
+                (255, 100, 100, 128),  # 半透明红色
+                (int(screen_x), int(screen_y)),
+                int(self.explosion_radius),
+                2  # 线宽
+            )
+        
+        # 调试绘制：碰撞箱
+        if (DEBUG_MODE or DRAW_BULLET_BOUNDING_BOX) and self.bounding_box:
+            debug_rect = pygame.Rect(
+                self.bounding_box.x - camera_offset[0],
+                self.bounding_box.y - camera_offset[1],
+                self.bounding_box.width,
+                self.bounding_box.height
+            )
+            pygame.draw.rect(surface, (255, 0, 0), debug_rect, 1)
+    
+    def get_info(self) -> Dict[str, Any]:
+        """获取子弹信息"""
+        return {
+            "id": self.id,
+            "shooter_id": self.shooter_id,
+            "shooter_team": self.shooter_team.value if hasattr(self.shooter_team, 'value') else str(self.shooter_team),
+            "position": self.position,
+            "speed": self.speed,
+            "damage": self.base_damage,
+            "is_explosive": self.is_explosive,
+            "explosion_radius": self.explosion_radius,
+            "lifetime": self.lifetime,
+            "max_lifetime": self.max_lifetime,
+            "is_active": self.is_active,
+            "has_collided": self.has_collided,
+            "has_exploded": self.has_exploded,
+            "distance_traveled": self.distance_traveled
+        }
+    
+    def save_to_file(self, file_name: str = "default_bullet.json") -> bool:
+        """保存子弹配置到文件"""
+        try:
+            save_dir = DEFAULT_BULLET_PATH
+            os.makedirs(save_dir, exist_ok=True)
+            
+            filepath = os.path.join(save_dir, file_name)
+            
+            config = {
+                "bullet_type": self.__class__.__name__,
+                "image_path": self.image_path,
+                "size": self.size,
+                "max_lifetime": self.max_lifetime,
+                "speed_rate": self.speed_rate,
+                "damage_rate": self.damage_rate,
+                "penetration": self.penetration,
+                "is_explosive": self.is_explosive,
+                "explosion_radius": self.explosion_radius,
+                "explosion_damage_rate": self.explosion_damage_rate,
+                "explosion_image_path": self.explosion_image_path
+            }
+            
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(config, f, indent=4, ensure_ascii=False)
+            
+            print(f"子弹配置已保存到: {filepath}")
+            return True
+            
+        except Exception as e:
+            print(f"保存子弹配置失败: {e}")
+            return False
+    
+    def save(self) -> bool:
+        """便捷保存方法"""
+        save_path = get_next_filename(DEFAULT_BULLET_PATH, 'default_bullet', '.json')
+        return self.save_to_file(save_path)
+    
+    @classmethod
+    def load_from_file(cls, file_name: str = "default_bullet.json") -> Optional[Dict[str, Any]]:
+        """从文件加载子弹配置"""
+        try:
+            filepath = os.path.join(DEFAULT_BULLET_PATH, file_name)
+            
+            with open(filepath, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+            
+            print(f"子弹配置已从 {filepath} 加载")
+            return config
+            
+        except FileNotFoundError:
+            print(f"子弹配置文件不存在: {filepath}")
+            return None
+        except Exception as e:
+            print(f"加载子弹配置失败: {e}")
+            return None
+BulletManager.py中的代码如下：
+"""子弹管理器，负责管理所有子弹的更新和绘制"""
+from Unit.Tank.Tank import *
+from Map.Map import *
+from GameMode import *
+from Bullet.NormalShell.NormalShell import *
+from Unit.EnemyAI import *
+
+class BulletManager:
+
+    def __init__(self):
+        self.bullets = []  # 存储所有活跃的子弹
+        self.to_remove = []  # 存储待移除的子弹
+        
+    def add_bullet(self, bullet):
+        if bullet:
+            self.bullets.append(bullet)
+            if BULLET_INFO_TEXT or DEBUG_MODE:
+                print(f"子弹发射: ID={bullet.id}, 位置={bullet.position}")
+    
+    def update(self, delta_time, units, obstacles):
+        self.to_remove.clear()
+        
+        for bullet in self.bullets:
+            # 更新子弹状态
+            if not bullet.update(delta_time, units, obstacles):
+                # 子弹不再活跃，标记为待移除
+                if bullet in self.bullets and bullet not in self.to_remove:
+                    self.to_remove.append(bullet)
+        
+        # 移除不再活跃的子弹
+        for bullet in self.to_remove:
+            if bullet in self.bullets:
+                self.bullets.remove(bullet)
+                if BULLET_INFO_TEXT or DEBUG_MODE:
+                    print(f"子弹移除: ID={bullet.id}")
+    
+    def draw(self, surface, camera_offset):
+        for bullet in self.bullets:
+            bullet.draw(surface, camera_offset)
+    
+    def get_active_count(self):
+        return len([b for b in self.bullets if b.is_active])
+    
+    def clear(self):
+        self.bullets.clear()
+Map.py中的代码如下：
+'''
+地图绘制模块
+根据字符地图绘制游戏地图
+'''
+
+import random
+from typing import List, Tuple
+import pygame
+import os
+from Parameter import *
+from utils import *
+
+
+'''
+    class GameMap:
+        Attributes:
+            map_data : List[str]    字符地图数据矩阵
+            tile_size : int         每个地图块的像素大小
+            
+        Methods:
+            draw(surface:pygame.Surface, camera_offset:Tuple[int, int]) -> None         绘制地图
+            save_to_file(file_name: str) -> bool                                        保存地图
+            save() -> bool                                                              便捷保存
+            load_from_file(file_path: str, tile_size: int = 64) -> Optional['GameMap']  从文件加载地图（类方法）
+            
+            check_collision(rect:pygame.Rect) -> bool                                   检查矩形是否与地图障碍物碰撞
+            is_walkable(x: int, y: int, width: int = 0, height: int = 0) -> bool        检查指定区域是否可通行
+            get_colliding_obstacles(rect:pygame.Rect) -> List[pygame.Rect]              获取与矩形碰撞的障碍物列表
+            get_map_size() -> Tuple[int, int]                                           获取地图尺寸
+            get_tile_at_position(x: int, y: int) -> Optional[str]                       获取指定像素位置的格子字符
+            
+    Functions:
+        create_map_from_strings(strings: List[str], tile_size: int = 64) -> 'GameMap'               从字符串列表创建地图（类方法）
+        create_map_from_file(file_path: str, tile_size: int = 64) -> Optional['GameMap']            从文件创建地图（类方法）
+        create_test_map() -> 'GameMap'                                                              创建测试地图
+        create_empty_map(width: int = 10, height: int = 10) -> 'GameMap'                            创建空地图
+        create_border_map(width: int = 10, height: int = 10) -> 'GameMap'                           创建有边框的地图
+        create_random_map(width: int = 10, height: int = 10, density: float = 0.3) -> 'GameMap'     创建随机地图
+'''
+
+class GameMap:
+    def __init__(self, map_data, tile_size=64):
+        self.map_data = map_data
+        self.tile_size = tile_size      # 地图块大小
+        self.height = len(map_data)
+        self.width = len(map_data[0]) if map_data else 0
+        
+        # 加载地形图片
+        self.flat_image = self._load_image("Map/flat.png")          # 平地
+        self.barrier_image = self._load_image("Map/barrier.png")    # 障碍物
+        
+        self.map_surface = pygame.Surface((self.width * tile_size, self.height * tile_size))
+        
+        self.obstacles = []
+        
+        # 生成地图
+        self._generate_map()
+    
+    def draw(self, surface: pygame.Surface, camera_offset=(0, 0)) -> None:
+        map_x = -camera_offset[0]
+        map_y = -camera_offset[1]
+        
+        surface.blit(self.map_surface, (map_x, map_y))
+        
+        # 绘制障碍物边框
+        if hasattr(self, 'debug_draw') and self.debug_draw:
+            self._draw_debug(surface, camera_offset)
+        
+    def save_to_file(self, file_name: str) -> bool:
+        # 保存地图到文件, file_name为文件名，包含后缀，不包括路径
+        try:
+            file_path = os.path.join(DEFAULT_MAP_PATH, file_name)
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            
+            with open(file_path, 'w', encoding='utf-8') as f:
+                for row in self.map_data:
+                    f.write(row + '\n')
+            
+            print(f"地图已保存到: {file_path}")
+            return True
+            
+        except Exception as e:
+            print(f"保存地图失败: {e}")
+            return False
+        
+    def save(self) -> bool:
+        # 提供一种直接的保存方法
+        save_path = get_next_filename(DEFAULT_MAP_PATH, 'default_map', '.txt')
+        return self.save_to_file(save_path)
+    
+    @classmethod
+    def load_from_file(cls, file_name: str, tile_size=64) -> 'GameMap':
+        file_path = os.path.join(DEFAULT_MAP_PATH, file_name)
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                map_data = [line.strip() for line in f if line.strip()]
+            
+            if not map_data:
+                print(f"文件 {file_path} 为空")
+                return None
+            
+            # 检查所有行长度是否一致
+            first_length = len(map_data[0])
+            for i, row in enumerate(map_data):
+                if len(row) != first_length:
+                    print(f"第 {i} 行长度不一致")
+            
+            print(f"地图已从 {file_path} 加载")
+            return cls(map_data, tile_size)
+            
+        except FileNotFoundError:
+            print(f"地图文件不存在: {file_path}")
+            return None
+        except Exception as e:
+            print(f"加载地图失败: {e}")
+            return None
+
+    def check_collision(self, rect: pygame.Rect) -> bool:
+        # 检查矩形是否与任何障碍物碰撞
+        for obstacle in self.obstacles:
+            if rect.colliderect(obstacle):
+                return True
+        return False
+    
+    def is_walkable(self, x: float, y: float, width=0, height=0) -> bool:
+        # 创建要检查的矩形
+        if width > 0 and height > 0:
+            rect = pygame.Rect(x, y, width, height)
+        else:
+            # 如果没指定大小，检查单个格子
+            tile_x = x // self.tile_size
+            tile_y = y // self.tile_size
+            
+            if 0 <= tile_x < self.width and 0 <= tile_y < self.height:
+                return self.map_data[tile_y][tile_x] != 'x'
+            return False
+        
+        # 检查是否与任何障碍物碰撞
+        return not self.check_collision(rect)
+    
+    def get_colliding_obstacles(self, rect: pygame.Rect) -> List[pygame.Rect]:
+        # 获取与指定矩形碰撞的所有障碍物
+        colliding = []
+        for obstacle in self.obstacles:
+            if rect.colliderect(obstacle):
+                colliding.append(obstacle)
+        return colliding
+    
+    def get_map_size(self) -> Tuple[int, int]:
+        return (
+            self.width * self.tile_size,
+            self.height * self.tile_size
+        )
+    
+    def get_tile_at_position(self, x: float, y: float) -> str:
+        # 获取指定位置的格子
+        tile_x = x // self.tile_size
+        tile_y = y // self.tile_size
+        
+        if 0 <= tile_x < self.width and 0 <= tile_y < self.height:
+            return self.map_data[tile_y][tile_x]
+        
+        return None
+    
+    def _load_image(self, image_path: str) -> pygame.Surface:
+        image = load_image(image_path)
+        return pygame.transform.scale(image, (self.tile_size, self.tile_size))      # 调整到指定大小
+    
+    def _generate_map(self) -> None:
+        """生成地图表面和障碍物列表"""
+        if not self.map_data:
+            print("地图数据为空")
+            return
+        
+        self.obstacles = []
+        
+        for y, row in enumerate(self.map_data):
+            for x, cell in enumerate(row):
+                pos_x = x * self.tile_size
+                pos_y = y * self.tile_size
+                
+                if cell == 'o':  # 平地
+                    self.map_surface.blit(self.flat_image, (pos_x, pos_y))
+                    
+                elif cell == 'x':  # 障碍物
+                    self.map_surface.blit(self.barrier_image, (pos_x, pos_y))
+                    
+                    obstacle_rect = pygame.Rect(
+                        pos_x,
+                        pos_y,
+                        self.tile_size,
+                        self.tile_size
+                    )
+                    self.obstacles.append(obstacle_rect)
+                    
+                else:
+                    print(f"地图位置({x},{y})有未知字符 '{cell}'，默认为平地")
+                    self.map_surface.blit(self.flat_image, (pos_x, pos_y))
+    
+    def _draw_debug(self, surface: pygame.Surface, camera_offset: Tuple[int, int]) -> None:
+        for obstacle in self.obstacles:
+            screen_x = obstacle.x - camera_offset[0]
+            screen_y = obstacle.y - camera_offset[1]
+            
+            pygame.draw.rect(
+                surface,
+                (255, 0, 0),
+                (screen_x, screen_y, obstacle.width, obstacle.height),
+                2  # 边框宽度
+            )
+    
+
+
+# 便捷函数
+def create_map_from_strings(map_strings: List[str], tile_size=64) -> GameMap:
+    return GameMap(map_strings, tile_size)
+
+def create_map_from_file(file_name: str, tile_size=64) -> GameMap:
+    return GameMap.load_from_file(file_name, tile_size)
+
+# 预定义地图
+def create_test_map() -> GameMap:
+    """创建测试地图"""
+    return GameMap.load_from_file("test_map.txt")
+
+def create_empty_map(width=15, height=10) -> GameMap:
+    # 创建空地图
+    map_data = ["o" * width for _ in range(height)]
+    return GameMap(map_data)
+
+def create_border_map(width=15, height=10) -> GameMap:
+    # 创建有边框的地图
+    map_data = []
+    for y in range(height):
+        if y == 0 or y == height - 1:
+            map_data.append("x" * width)
+        else:
+            row = "x" + "o" * (width - 2) + "x"
+            map_data.append(row)
+    return GameMap(map_data)
+
+def create_random_map(width=15, height=10, density=0.3) -> GameMap:
+    # 创建随机地图, 但是会生成一个边界
+    map_data = []
+    for y in range(height):
+        row = []
+        for x in range(width):
+            is_border = (y == 0 or y == height - 1 or x == 0 or x == width - 1)
+            if is_border:
+                # 边界总是障碍物
+                row.append('x')
+            else:
+                # 内部区域根据密度随机生成
+                if random.random() < density:
+                    row.append('x')
+                else:
+                    row.append('o') 
+        map_data.append(''.join(row))
+    return GameMap(map_data)
+BaseUnit.py中的代码如下：
+'''
+    描述战斗单位的基类
+'''
+
+import pygame
+import math
+import json
+import os
+from Parameter import *
+from utils import *
+from GameMode import *
+from typing import List, Tuple
+
+class BaseUnit:
+    def __init__(self, unit_id, unit_team, usingAI, unit_type, body_image_path, turret_image_path, 
+                 max_speed_rate=1.0, 
+                 max_acceleration_rate=INF, 
+                 min_acceleration_rate=-INF, 
+                 max_angular_speed_rate=INF, 
+                 turret_angular_speed_rate=INF, 
+                 max_health_rate=1.0, 
+                 armor_type=ArmorType.NONE, 
+                 ammunition_types=[], 
+                 ammo_switch_time=UNIT_AMMO_SWITCH_TIME,):
+        
+        # 基本信息
+        self.id: int = unit_id
+        self.team: Team = unit_team
+        self.unit_type: str = unit_type
+        self.body_image_path: str = body_image_path
+        self.turret_image_path: str = turret_image_path
+        self.body_image = load_image(self.body_image_path) if self.body_image_path else None
+        self.turret_image = load_image(self.turret_image_path) if self.turret_image_path else None
+        self.size = self.body_image.get_size()
+        self.usingAI = usingAI
+        
+        # 基本属性
+        self.max_speed_rate: float = max_speed_rate
+        self.max_acceleration_rate: float = max_acceleration_rate
+        self.min_acceleration_rate: float = min_acceleration_rate
+        self.max_angular_speed_rate: float = max_angular_speed_rate
+        self.turret_angular_speed_rate: float = turret_angular_speed_rate
+        self.max_health_rate: float = max_health_rate
+        self.armor_type: ArmorType = armor_type                                                            # 护甲类型
+        self.ammunition_types: List[str] = ammunition_types                                                # 单位拥有弹种
+        self.ammo_switch_time: float =  ammo_switch_time                                               # 单位切换弹种时间
+        
+        self.max_speed = UNIT_SPEED * self.max_speed_rate                                       # 最大速度  
+        self.max_acceleration = UNIT_ACC * self.max_acceleration_rate                           # 最大加速度
+        self.min_acceleration = UNIT_ACC * self.min_acceleration_rate                           # 最小加速度
+        self.max_angular_speed = UNIT_ANGULAR_SPEED * self.max_angular_speed_rate               # 最大角速度
+        self.turret_angular_speed = UNIT_TURRET_ANGULAR_SPEED * self.turret_angular_speed_rate  # 炮塔转动角速度
+        self.max_health = UNIT_HEALTH * self.max_health_rate                                    # 最大生命值
+        
+        # 实时属性
+        self.position = (0.0, 0.0)
+        self.speed = 0.0
+        self.direction_angle = 0.0              # 单位朝向角度
+        self.turret_direction_angle = 0.0       # 单位炮塔朝向角度
+        self.acceleration = 0.0
+        self.angular_speed = 0.0
+        self.health: float = self.max_health
+        self.bounding_box: pygame.Rect = None                # 碰撞箱，pygame.Rect对象
+        self.velocity: Tuple[float, float] = self.cal_velocity()     # 速度向量
+        self.current_ammunition: str = ""            # 单位当前选中弹种
+        
+        if self.ammunition_types:
+            self.current_ammunition = self.ammunition_types[0]
+        
+        # 预留属性
+        self.is_alive = True
+        self.reload_timer = 0.0         # 切换弹种剩余时间计时器
+        self.reward = 0.0
+        self.turret_target_angle = 0.0          # 炮塔目标角度
+        self.is_switching_ammo = False          # 是否正在切换弹药
+        
+        # 初始化碰撞箱
+        self._update_bounding_box()
+        
+    def cal_velocity(self):
+        adjusted_angle = self.direction_angle - 90
+        angle_rad = math.radians(adjusted_angle)
+        return (
+            self.speed * math.cos(angle_rad),
+            self.speed * math.sin(angle_rad)
+        )
+
+    def update(self, delta_time, obstacles):
+        old_position = self.position
+        old_bounding_box = self.bounding_box.copy() if self.bounding_box else None
+        
+        if not self.is_alive:
+            return False
+        
+        if self.health <= 0:
+            self.is_alive = False
+            return False
+        
+        self._update_ammo_switch(delta_time)         # 更新弹种切换计时器
+        self._update_speed(delta_time)               # 更新速度
+        self._update_direction(delta_time)           # 更新朝向
+        self._update_turret_direction(delta_time)    # 更新炮塔朝向
+        self._update_position(delta_time)            # 更新位置
+        self._update_bounding_box()                  # 更新碰撞箱
+        self.velocity = self.cal_velocity()          # 更新速度向量
+        
+        if self.is_switching_ammo and self.reload_timer <= 0:
+            self._complete_ammo_switch()
+        
+        # 检查与障碍物的碰撞
+        if self.bounding_box:
+            for obstacle in obstacles:
+                if self.bounding_box.colliderect(obstacle):
+                    # 发生碰撞，恢复到之前的位置
+                    self.position = old_position
+                    self._update_bounding_box()
+                    self.speed = 0  # 停止移动
+                    return True
+        
+        return True
+    
+    def _update_ammo_switch(self, delta_time) -> None:
+        """更新弹药切换状态"""
+        if self.is_switching_ammo and self.reload_timer > 0:
+            self.reload_timer -= delta_time
+            if self.reload_timer <= 0:
+                self.reload_timer = 0
+                self.is_switching_ammo = False
+                self.current_ammunition = self.target_ammunition
+                self.target_ammunition = ""
+    
+    def _update_speed(self, delta_time) -> None:
+        """更新速度"""
+        # 应用加速度
+        self.speed += self.acceleration * delta_time
+        
+        # 限制速度范围
+        if self.speed > self.max_speed:
+            self.speed = self.max_speed
+        elif self.speed < -self.max_speed:
+            self.speed = -self.max_speed
+    
+    def _update_direction(self, delta_time) -> None:
+        """更新单位朝向角度"""
+        if self.angular_speed != 0:
+            self.direction_angle += self.angular_speed * delta_time
+            self.direction_angle = self.normalize_angle(self.direction_angle)
+            if abs(self.angular_speed) > self.max_angular_speed:
+                self.angular_speed = self.max_angular_speed if self.angular_speed > 0 else -self.max_angular_speed
+    
+    def _update_turret_direction(self, delta_time) -> None:
+        """更新炮塔朝向角度"""
+        angle_diff = self.get_angle_difference(self.turret_direction_angle, self.turret_target_angle)
+        
+        if abs(angle_diff) > 0.1:
+            rotation_speed = self.turret_angular_speed * delta_time
+            
+            if angle_diff > 0:
+                if rotation_speed > angle_diff:
+                    rotation_speed = angle_diff
+                self.turret_direction_angle += rotation_speed
+            else:
+                if rotation_speed > -angle_diff:
+                    rotation_speed = -angle_diff
+                self.turret_direction_angle -= rotation_speed
+            
+            # 规范化角度到0-360度范围
+            self.turret_direction_angle = self.normalize_angle(self.turret_direction_angle)
+    
+    def _update_position(self, delta_time) -> None:
+        """根据速度更新位置"""
+        dx = self.velocity[0] * delta_time
+        dy = self.velocity[1] * delta_time
+        x, y = self.position
+        self.position = (x + dx, y + dy)
+    
+    def _update_bounding_box(self) -> None:
+        if self.size[0] > 0 and self.size[1] > 0:
+            x, y = self.position
+            width, height = self.size
+            self.bounding_box = pygame.Rect(x - width / 2, y - height / 2, width, height)
+            
+    def normalize_angle(self, angle) -> float:
+        """将角度规范化到0-360度范围内"""
+        angle %= 360
+        if angle < 0:
+            angle += 360
+        return angle
+    
+    def get_angle_difference(self, angle1, angle2) -> float:
+        """
+        计算两个角度之间的最小差值(考虑360度循环)
+        """
+        diff = angle2 - angle1
+        diff = (diff + 180) % 360 - 180
+        return diff
+    
+    def fire(self, bullet_class = None):
+        if bullet_class is None:
+            bullet_class = get_class_from_str(self.current_ammunition)
+        
+        if self.is_switching_ammo:
+            # 坦克正在切换弹药
+            return None
+        
+        if not self.current_ammunition:
+            # 当前弹药类型没有弹药
+            return None
+        
+        turret_angle_rad = math.radians(self.turret_direction_angle - 90)
+        
+        bullet_start_x = self.position[0] + math.cos(turret_angle_rad) * (self.size[0] / 2 + 5)
+        bullet_start_y = self.position[1] + math.sin(turret_angle_rad) * (self.size[1] / 2 + 5)
+        
+        bullet_direction = (math.cos(turret_angle_rad), math.sin(turret_angle_rad))
+        
+        try:
+            bullet = bullet_class(
+                projectile_id=f"bullet_{self.id}_{pygame.time.get_ticks()}",  # 使用时间戳确保唯一性
+                shooter_id=self.id,
+                shooter_team=self.team,
+                position=(bullet_start_x, bullet_start_y),
+                velocity_direction=bullet_direction
+            )
+            
+            # 根据当前弹药类型设置子弹属性
+            self._configure_bullet_for_ammo(bullet)
+                
+            return bullet
+            
+        except Exception as e:
+            print(f"创建子弹时出错: {e}")
+            return None 
+        
+    def _configure_bullet_for_ammo(self, bullet) -> None:
+        """
+        根据当前弹药类型配置子弹属性
+        """
+        if self.current_ammunition == "normal_shell":
+            from Bullet.NormalShell.NormalShell import NormalShell
+            if isinstance(bullet, NormalShell):
+                # 可以在这里调整特定属性
+                pass
+        elif self.current_ammunition == "rocket_shell":
+            from Bullet.RocketShell.RocketShell import RocketShell
+            if isinstance(bullet, RocketShell):
+                # 可以在这里调整特定属性
+                pass
+        elif self.current_ammunition == "bullet":
+            bullet.damage_rate = 1.0
+            bullet.penetration = [1.0, 1.0, 1.0]
+            bullet.speed_rate = 1.0
+            bullet.is_explosive = False
+            
+    def switch_ammunition(self, ammo_type = None) -> bool:
+        if ammo_type == None:
+            idx = self.ammunition_types.index(self.current_ammunition)
+            next_idx = (idx + 1) % len(self.ammunition_types)
+            ammo_type = self.ammunition_types[next_idx]
+            
+        if ammo_type not in self.ammunition_types:
+            print(f"坦克 {self.id} 没有 {ammo_type} 类型弹药")
+            return False
+        
+        if ammo_type == self.current_ammunition:
+            return True
+        
+        self.is_switching_ammo = True
+        self.reload_timer = self.ammo_switch_time
+        
+        self.target_ammunition = ammo_type
+        
+        return True     
+    
+    def _complete_ammo_switch(self) -> None:
+        if hasattr(self, 'target_ammunition'):
+            self.current_ammunition = self.target_ammunition
+            delattr(self, 'target_ammunition')
+        self.is_switching_ammo = False
+        
+    def set_movement(self, forward=False, backward=False) -> None:
+        """
+        设置坦克前进或后退
+        """
+        if forward and not backward:
+            self.acceleration = self.max_acceleration
+        elif backward and not forward:
+            self.acceleration = self.min_acceleration
+        else:
+            self.acceleration = 0
+    
+    def set_turning(self, left=False, right=False) -> None:
+        """
+        设置坦克转向
+        """
+        if left and not right:
+            self.angular_speed = -self.max_angular_speed
+        elif right and not left:
+            self.angular_speed = self.max_angular_speed
+        else:
+            self.angular_speed = 0
+    
+    def set_turret_target_to_mouse(self, mouse_pos, camera_offset) -> None:
+        """
+        设置炮塔目标指向鼠标位置
+        """
+        # 计算鼠标的世界坐标
+        world_mouse_x = mouse_pos[0] + camera_offset[0]
+        world_mouse_y = mouse_pos[1] + camera_offset[1]
+        
+        dx = world_mouse_x - self.position[0]
+        dy = world_mouse_y - self.position[1]
+        
+        # 计算角度（度）
+        target_angle = math.degrees(math.atan2(dy, dx))
+        target_angle += 90
+        
+        # 规范化角度到0-360度
+        target_angle %= 360
+        if target_angle < 0:
+            target_angle += 360
+        
+        self.turret_target_angle = target_angle
+    
+    def get_info(self) -> dict:
+        return {
+            "id": self.id,
+            "team": self.team,
+            "type": self.unit_type,
+            "position": self.position,
+            "health": self.health,
+            "max_health": self.max_health,
+            "speed": self.speed,
+            "max_speed": self.max_speed,
+            "direction": self.direction_angle,
+            "turret_direction": self.turret_direction_angle,
+            "current_ammo": self.current_ammunition,
+            "is_alive": self.is_alive,
+            "is_switching_ammo": self.is_switching_ammo,
+            "reload_timer": self.reload_timer
+        }
+    
+    def draw(self, surface, camera_offset=(0, 0)) -> None:
+        if not self.is_alive:
+            return
+        
+        screen_x = self.position[0] - camera_offset[0]
+        screen_y = self.position[1] - camera_offset[1]
+        
+        # 绘制车身
+        if self.body_image:
+            rotated_body = pygame.transform.rotate(self.body_image, -self.direction_angle)
+            body_rect = rotated_body.get_rect(center=(screen_x, screen_y))
+            surface.blit(rotated_body, body_rect)
+        
+        # 绘制炮塔
+        if self.turret_image:
+            rotated_turret = pygame.transform.rotate(self.turret_image, -self.turret_direction_angle)
+            turret_rect = rotated_turret.get_rect(center=(screen_x, screen_y))
+            surface.blit(rotated_turret, turret_rect)
+        
+        # 绘制生命条
+        if DRAW_HEALTH_BAR or DEBUG_MODE:
+            self._draw_health_bar(surface, screen_x, screen_y)
+    
+    def _draw_health_bar(self, surface, x, y) -> None:
+        """
+        绘制生命条并在血条中间显示生命值
+        """
+        bar_width = 40
+        bar_height = 8  # 稍微增加高度以容纳文字
+        
+        bar_x = x - bar_width / 2
+        bar_y = y - self.size[1] / 2 - 15  # 稍微上调血条位置
+        
+        # 绘制背景（红色）
+        pygame.draw.rect(surface, (255, 0, 0), 
+                        (bar_x, bar_y, bar_width, bar_height))
+        
+        # 绘制生命值（绿色）
+        health_percentage = self.health / self.max_health
+        current_width = bar_width * health_percentage
+        pygame.draw.rect(surface, (0, 255, 0), 
+                        (bar_x, bar_y, current_width, bar_height))
+        
+        # 绘制边框
+        pygame.draw.rect(surface, (255, 255, 255), 
+                        (bar_x, bar_y, bar_width, bar_height), 1)
+        
+        # 在血条中间显示生命值文本
+        health_text = f"{int(self.health)}/{int(self.max_health)}"
+        
+        # 使用小号字体
+        font = pygame.font.Font(None, 12)
+        text_surface = font.render(health_text, True, (0, 0, 0))
+        text_rect = text_surface.get_rect(center=(x, bar_y + bar_height / 2))
+        
+        surface.blit(text_surface, text_rect)
+    
+    def take_damage(self, damage_amount) -> float:
+        """
+        坦克承受伤害
+        """
+        self.health -= damage_amount
+        
+        if self.health <= 0:
+            self.health = 0
+            self.is_alive = False
+            print(f"坦克 {self.id} 被摧毁")
+        
+        return damage_amount
+
+    def save_to_file(self, file_name="default_unit.json") -> bool:
+        # 保存单位信息到文件, file_name包含后缀，但不包含路径
+        # 当前BaseUnit类中的属性没有确定下来，该方法为TODO
+        save_dir = DEFAULT_UNIT_PATH
+        filepath = os.path.join(save_dir, file_name)
+        
+        pass
+        
+    def save(self) -> bool:
+        # 提供一种直接的保存方法
+        save_path = get_next_filename(DEFAULT_UNIT_PATH, 'default_unit', '.json')
+        return self.save_to_file(save_path)
+    
+    @classmethod
+    def load_from_file(cls, file_name="default_unit.json") -> 'BaseUnit':
+        # 从JSON文件加载兵种单位信息并创建实例
+        # 当前BaseUnit类中的属性没有确定下来，该方法为TODO
+        filepath = os.path.join(DEFAULT_UNIT_PATH, file_name)
+        
+        pass
+UnitManager.py中的代码如下:
+"""单位管理器，负责管理所有单位的更新和绘制"""
+from Unit.Tank.Tank import *
+from Map.Map import *
+from GameMode import *
+from Bullet.NormalShell.NormalShell import *
+from Unit.EnemyAI import *
+
+class UnitManager:
+
+    def __init__(self):
+        self.units = []
+        self.to_remove = []
+        
+    def add_unit(self, unit):
+        if unit:
+            self.units.append(unit)
+    
+    def update(self, delta_time, obstacles):
+        self.to_remove.clear()
+        
+        for unit in self.units:
+            # 更新单位状态
+            if not unit.update(delta_time, obstacles):
+                # 单位死亡，标记为待移除
+                if unit in self.units and unit not in self.to_remove:
+                    self.to_remove.append(unit)
+        
+        # 移除死亡单位
+        for unit in self.to_remove:
+            if unit in self.units:
+                self.units.remove(unit)
+    
+    def draw(self, surface, camera_offset):
+        for unit in self.units:
+            unit.draw(surface, camera_offset)
+    
+    def get_active_count(self):
+        return len([b for b in self.bullets if b.is_active])
+    
+    def clear(self):
+        self.units.clear()
+GameMode.py中的代码如下：
+'''
+    在此处设定和更改游戏模式
+    主要是控制可显示的信息
+'''
+
+DEBUG_MODE = False                  # 一键开启调试模式
+
+DRAW_HEALTH_BAR = True              # 绘制坦克血条
+DRAW_MOUSE_TARGET_LINE = True       # 绘制鼠标瞄准线
+DRAW_STATUS_MESSAGE = False         # 绘制单位状态信息
+DRAW_ENEMY_STATE_MESSAGE = False    # 绘制敌方坦克状态信息
+DRAW_ENEMY_SEE_LINE = False         # 绘制敌方坦克视野线
+DRAW_BULLET_EXPLOSION_RANGE = True # 绘制子弹爆炸范围
+DRAW_BULLET_BOUNDING_BOX = False    # 绘制子弹碰撞箱
+
+BULLET_INFO_TEXT = False            # 增加子弹发射和移除时的文本提示
+ENEMY_STATE_TEXT = False            # 增加敌方坦克状态信息文本提示
+Parameter/py中的代码如下：
+'''
+    此处定义一些基本属性
+'''
+import numpy as np
+import enum
+
+FPS = 60
+DELTA_TIME = 1.0 / FPS
+
+INF = 10000                # 当需要无视加速度/速度时，取此值
+
+UNIT_SPEED = 50.0                       # 单位的基础速度
+UNIT_ACC = 100.0                        # 单位的基础加速度
+UNIT_HEALTH = 100                       # 单位的基础血量
+UNIT_ANGULAR_SPEED = 100.0              # 单位的基础旋转速度
+UNIT_TURRET_ANGULAR_SPEED = 100.0       # 单位炮塔的基础旋转速度
+UNIT_AMMO_SWITCH_TIME = 0.5             # 单位切换弹药的时间
+
+BULLET_SPEED = 500.0        # 子弹的基础速度
+BULLET_DAMAGE = 10          # 子弹的基础伤害
+BULLET_EXPLOSION_DAMAGE_APPLY_DISTANT_FACTOR = False   # 子弹爆炸造成的伤害是否与距离有关
+EXPLOSION_IMAGE_ADAPT_TO_RANGE = False               # 爆炸图片是否根据爆炸范围调整大小
+
+# UNIT_DIAGONAL_SPEED = UNIT_SPEED / np.sqrt(2)       # 单位对角线速度
+# BULLET_DIAGONAL_SPEED = BULLET_SPEED / np.sqrt(2)   # 子弹对角线速度
+
+
+class ArmorType(enum.Enum):     # 单位护甲类型
+    NONE = 0
+    LIGHT = 1
+    MEDIUM = 2
+    HEAVY = 3
+class Team(enum.Enum):
+    PLAYER = 0
+    ENEMY = 1
+    NEUTRAL = 2
+    
+DEFAULT_MAP_PATH = 'Map\saved'
+DEFAULT_UNIT_PATH = 'Unit\saved'
+DEFAULT_BULLET_PATH = 'Bullet\saved'
+test.py中的代码如下：
+import pygame
+import math
+import sys
+import os
+import random
+from Unit.Tank.Tank import *
+from Unit.EnemyAI import *
+from Map.Map import *
+from GameMode import *
+from Bullet.NormalShell.NormalShell import *
+from Bullet.RocketShell.RocketShell import *
+from Bullet.BulletManager import *
+from Unit.UnitManager import *
+
+def draw_debug_info(surface, tank, camera_offset, mouse_pos):
+    debug_font = pygame.font.Font(None, 20)
+    
+    # 坦克中心点
+    screen_x = tank.position[0] - camera_offset[0]
+    screen_y = tank.position[1] - camera_offset[1]
+
+    # 鼠标目标线
+    world_mouse_x = mouse_pos[0] + camera_offset[0]
+    world_mouse_y = mouse_pos[1] + camera_offset[1]
+    screen_mouse_x = world_mouse_x - camera_offset[0]
+    screen_mouse_y = world_mouse_y - camera_offset[1]
+    if DRAW_MOUSE_TARGET_LINE or DEBUG_MODE:
+        pygame.draw.line(surface, (255, 0, 255), (screen_x, screen_y), (screen_mouse_x, screen_mouse_y), 1)
+        pygame.draw.circle(surface, (255, 0, 255), (int(screen_mouse_x), int(screen_mouse_y)), 3)
+    
+    if DRAW_STATUS_MESSAGE or DEBUG_MODE:
+        debug_text = [
+            f"position: ({tank.position[0]:.1f}, {tank.position[1]:.1f})",
+            f"speed: {tank.speed:.1f}",
+            f"acc: {tank.acceleration:.1f}",
+            f"target_angle: {tank.angular_speed:.1f}",
+        ]
+        for i, text in enumerate(debug_text):
+            text_surface = debug_font.render(text, True, (255, 255, 255))
+            surface.blit(text_surface, (screen_x + 40, screen_y - 40 + i * 20))
+    
+    if DRAW_ENEMY_STATE_MESSAGE or DEBUG_MODE:
+        # 绘制敌人AI状态
+        debug_font = pygame.font.Font(None, 16)
+        for i, ai in enumerate(unit_manager.units):
+            if ai.enemy.is_alive and ai.team == Team.ENEMY:
+                screen_x = ai.enemy.position[0] - camera_offset[0]
+                screen_y = ai.enemy.position[1] - camera_offset[1]
+                
+                # 绘制状态文本
+                state_text = f"State: {ai.ai_state}"
+                state_surface = debug_font.render(state_text, True, (255, 255, 0))
+                screen.blit(state_surface, (screen_x + 40, screen_y - 20))
+                
+                # 绘制视线
+                if DRAW_ENEMY_SEE_LINE or DEBUG_MODE:
+                    if ai.can_see_player and tank.is_alive:
+                        pygame.draw.line(screen, (255, 0, 0), 
+                                        (screen_x, screen_y),
+                                        (tank.position[0] - camera_offset[0], 
+                                            tank.position[1] - camera_offset[1]),
+                                        1)
+
+
+
+
+
+if __name__ == "__main__":
+    pygame.init()
+    
+    screen_width, screen_height = 960, 640
+    screen = pygame.display.set_mode((screen_width, screen_height))
+    pygame.display.set_caption("test")
+    clock = pygame.time.Clock()
+    
+    # 字体设置
+    font_paths = [
+        "C:/Windows/Fonts/simhei.ttf",  # 黑体
+        "C:/Windows/Fonts/simsun.ttc",  # 宋体
+        "C:/Windows/Fonts/msyh.ttc",    # 微软雅黑
+    ]
+    
+    font = None
+    for path in font_paths:
+        try:
+            font = pygame.font.Font(path, 24)
+            break
+        except:
+            continue
+    
+    if font is None:
+        font = pygame.font.Font(None, 24)  # 使用默认字体
+    
+    game_map = create_border_map()
+    bullet_manager = BulletManager()
+    unit_manager = UnitManager()
+    
+    # for i in range(3):
+    #     # 为每个敌人随机生成位置
+    #     enemy_x = random.randint(100, 700)
+    #     enemy_y = random.randint(100, 500)
+    #     enemy = create_enemy_tank(100 + i, position=(enemy_x, enemy_y))
+    #     enemies.append(enemy)
+        
+    #     ai = EnemyAI(enemy, tank, bullet_manager, game_map.obstacles)
+    #     enemy_ais.append(ai)
+    tank = create_tank(1, Team.PLAYER, position=(400, 300))
+    unit_manager.add_unit(tank)
+    enemy = create_enemy_tank(101, (400, 300), usingAI=True)
+    unit_manager.add_unit(enemy)
+    enemy = create_enemy_tank(102, (400, 320), usingAI=True)
+    unit_manager.add_unit(enemy)
+    enemy = create_enemy_tank(103, (430, 300))
+    unit_manager.add_unit(enemy)
+    
+    # 相机偏移
+    camera_offset = [0, 0]
+    camera_speed = 5
+    
+    # 玩家控制状态
+    moving_forward = False
+    moving_backward = False
+    turning_left = False
+    turning_right = False
+    
+    # 鼠标状态
+    mouse_left_pressed = False
+    mouse_left_was_pressed = False
+    
+    # 发射冷却时间
+    fire_cooldown = 0.0
+    fire_cooldown_max = 0.2  # 200毫秒冷却时间，防止连续发射
+    
+    debug_mode = DEBUG_MODE
+    
+    # 用于显示信息的表面
+    info_surface = pygame.Surface((200, 120), pygame.SRCALPHA)
+    info_surface.fill((0, 0, 0, 128))  # 半透明黑色背景
+    
+    running = True
+    while running:
+        delta_time = clock.tick(60) / 1000.0
+        
+        # 更新发射冷却
+        if fire_cooldown > 0:
+            fire_cooldown -= delta_time
+        
+        # 获取键盘状态
+        keys = pygame.key.get_pressed()
+        
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    running = False
+                elif event.key == pygame.K_w:
+                    moving_forward = True
+                elif event.key == pygame.K_s:
+                    moving_backward = True
+                elif event.key == pygame.K_a:
+                    turning_left = True
+                elif event.key == pygame.K_d:
+                    turning_right = True
+                elif event.key == pygame.K_F1:
+                    debug_mode = not debug_mode
+                elif event.key == pygame.K_p:
+                    game_map.save()
+                elif event.key == pygame.K_SPACE:
+                    # 空格键发射子弹
+                    bullet = tank.fire(NormalShell)
+                    bullet_manager.add_bullet(bullet)
+                elif event.key == pygame.K_q:
+                    tank.switch_ammunition()
+                elif event.key == pygame.K_c:
+                    # 清空所有子弹
+                    bullet_manager.clear()
+            
+            elif event.type == pygame.KEYUP:
+                if event.key == pygame.K_w:
+                    moving_forward = False
+                elif event.key == pygame.K_s:
+                    moving_backward = False
+                elif event.key == pygame.K_a:
+                    turning_left = False
+                elif event.key == pygame.K_d:
+                    turning_right = False
+            
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1:  # 左键
+                    mouse_left_pressed = True
+            
+            elif event.type == pygame.MOUSEBUTTONUP:
+                if event.button == 1:  # 左键
+                    mouse_left_pressed = False
+        
+        # 处理相机移动
+        if keys[pygame.K_LEFT]:
+            camera_offset[0] -= camera_speed
+        if keys[pygame.K_RIGHT]:
+            camera_offset[0] += camera_speed
+        if keys[pygame.K_UP]:
+            camera_offset[1] -= camera_speed
+        if keys[pygame.K_DOWN]:
+            camera_offset[1] += camera_speed
+        
+        # 鼠标左键发射子弹
+        if mouse_left_pressed and fire_cooldown <= 0:
+            bullet = tank.fire()
+            if bullet:
+                bullet_manager.add_bullet(bullet)
+                fire_cooldown = fire_cooldown_max
+        
+        mouse_left_was_pressed = mouse_left_pressed
+        
+        # 玩家坦克的状态更新
+        tank.set_movement(forward=moving_forward, backward=moving_backward)
+        tank.set_turning(left=turning_left, right=turning_right)
+        
+        # 炮塔指向鼠标
+        mouse_pos = pygame.mouse.get_pos()
+        tank.set_turret_target_to_mouse(mouse_pos, camera_offset)
+        
+        # 更新坦克、子弹
+        unit_manager.update(delta_time, game_map.obstacles)
+        bullet_manager.update(delta_time, unit_manager.units, game_map.obstacles)
+        
+        # 绘制地图、单位和子弹
+        screen.fill((50, 50, 70))
+        game_map.draw(screen, camera_offset)
+        unit_manager.draw(screen, camera_offset)
+        bullet_manager.draw(screen, camera_offset)
+        
+        if True:
+            draw_debug_info(screen, tank, camera_offset, mouse_pos)
+
+        # 显示游戏状态
+        if not tank.is_alive:
+            game_over_font = pygame.font.Font(None, 72)
+            game_over_surface = game_over_font.render("GAME OVER", True, (255, 50, 50))
+            screen.blit(game_over_surface, (screen_width//2 - 180, screen_height//2 - 50))
+        
+        pygame.display.flip()
+    
+    pygame.quit()
+    sys.exit()
+utils.py中的代码如下：
+'''
+    此处用于定义一些全局可用的函数
+'''
+import pygame
+import os
+import re
+
+def load_image(image_path):
+    try:
+        return pygame.image.load(image_path)
+    except:
+        print(f"Warning: Cannot load image: {image_path}")
+        return None
+    
+def get_next_filename(folder_path, prefix, extension='.txt'):
+    """
+    获取文件夹中最小的未被使用的文件名
+    示例： next_filename = get_next_filename('Map/saved', 'map', '.txt')
+          如果Map/saved文件夹中已有map0.txt, map1.txt, map2.txt, 则next_filename为map3.txt
+          结果不包含路径
+    """
+    # 确保文件夹路径存在
+    os.makedirs(folder_path, exist_ok=True)
+    
+    # 获取所有文件
+    files = [f for f in os.listdir(folder_path) 
+             if os.path.isfile(os.path.join(folder_path, f))]
+    
+    # 提取已存在的编号
+    existing_numbers = []
+    pattern = re.compile(rf'^{re.escape(prefix)}(\d+){re.escape(extension)}$')
+    
+    for file in files:
+        match = pattern.match(file)
+        if match:
+            existing_numbers.append(int(match.group(1)))
+    
+    # 找到最小可用的编号
+    if not existing_numbers:
+        next_num = 0
+    else:
+        existing_numbers.sort()
+        # 寻找缺失的编号
+        for i in range(len(existing_numbers)):
+            if i != existing_numbers[i]:
+                next_num = i
+                break
+        else:
+            next_num = existing_numbers[-1] + 1
+    
+    # 返回完整路径
+    return f"{prefix}{next_num}{extension}"
+
+def get_class_from_str(class_name: str):
+    
+    import Bullet.NormalShell.NormalShell
+    import Bullet.RocketShell.RocketShell
+    
+    if class_name == 'normal_shell':
+        return Bullet.NormalShell.NormalShell.NormalShell
+    elif class_name == 'rocket_shell':
+        return Bullet.RocketShell.RocketShell.RocketShell
+    else:
+        return None
+
+class MethodGroup:
+    """方法分组器"""
+    
+    def __init__(self, group_name):
+        self.group_name = group_name
+        self.methods = {}
+    
+    def __call__(self, func):
+        self.methods[func.__name__] = func
+        func._group = self.group_name
+        return func
+    
+    def get_method_names(self):
+        return list(self.methods.keys())
+    
+    def execute_all(self, instance):
+        results = {}
+        for name, method in self.methods.items():
+            bound_method = getattr(instance, name, None)
+            if bound_method:
+                results[name] = bound_method()
+        return results
+请你帮我完成EnemyAI.py中的代码，并修改UnitManager.py中的代码，实现以下功能：
+1. 在EnemyAI.py中，创建一个EnemyAI类，用于管理敌人的AI行为。UnitManager中添加一个数组用于存放EnemyAI类。当UnitManager中添加一个usingAI=True的单位后，则创建一个EnemyAI类，并加入到该数组中。当UnitManager被调用update方法时，若units数组中存在usingAI=True的单位，则跳过该单位的update，在其后统一使用EnemyAI数组中的update方法。
+2. EnemyAI需要知道所有敌军的位置(当两者的team不一样时为敌军)、所有友军的位置、子弹管理器、地图障碍物，以便进行AI行为。在EnemyAI中，需要实现自动控制坦克的移动、攻击敌军、自动躲避障碍物等行为。
+3. 在环境中不一定只存在一个玩家，可能是多个玩家和多个敌人的交战，玩家的坦克也可能是usingAI=True。
