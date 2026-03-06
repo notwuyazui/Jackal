@@ -1,6 +1,6 @@
 '''
-    一个坦克类
-    拥有标准的机动性、生存性和攻击性，装备子弹和火箭弹
+    一个飞机类
+    机动性为0，生命值较高，装备重炮弹
 '''
 
 import pygame
@@ -8,23 +8,24 @@ import math
 from Unit.BaseUnit import BaseUnit
 from Parameter import *
 
-class Tank(BaseUnit):
+class Plane(BaseUnit):
     
     def __init__(self, unit_id: int, unit_team: Team, usingAI = False):
         
-        self.unit_type = 'tank'
-        self.body_image_path = 'Unit/Tank/tank.png'
+        self.unit_type = 'plane'
+        self.body_image_path = 'Unit/Plane/plane.png'
+        self.turret_image_path = 'Unit/Plane/turret.png'
         if unit_team == Team.ENEMY:
-            self.body_image_path = 'Unit/Tank/enemy_tank.png'
-        self.turret_image_path = 'Unit/Tank/turret.png'
-        self.max_speed_rate = 1.0
-        self.max_acceleration_rate = 1.0
-        self.min_acceleration_rate = -1.0
-        self.max_angular_speed_rate = 1.0
+            self.body_image_path = 'Unit/Plane/enemy_plane.png'
+            self.turret_image_path = 'Unit/Plane/enemy_turret.png'
+        self.max_speed_rate = 0.0
+        self.max_acceleration_rate = 0.0
+        self.min_acceleration_rate = 0.0
+        self.max_angular_speed_rate = 0.0
         self.turret_angular_speed_rate = 1.0
-        self.max_health_rate = 1.0
+        self.max_health_rate = 5.0
         self.armor_type = ArmorType.NONE                                                        # 护甲类型
-        self.ammunition_types = ['normal_shell','rocket_shell','heavy_shell']                                                      # 单位拥有弹种
+        self.ammunition_types = ['heavy_shell']                                                      # 单位拥有弹种
         self.ammo_switch_time =  UNIT_AMMO_SWITCH_TIME                                          # 单位切换弹种时间
         
         
@@ -42,18 +43,18 @@ class Tank(BaseUnit):
                          ammunition_types=self.ammunition_types, 
                          ammo_switch_time=self.ammo_switch_time)
 
-def create_tank(unit_id, unit_team=Team.PLAYER, position=(0, 0)):
-    # 示例：tank = create_tank(1, Team.PLAYER, position=(400, 300))
-    tank = Tank(unit_id, unit_team)
-    tank.position = position
-    return tank            
+def create_plane(unit_id, unit_team=Team.PLAYER, position=(0, 0)):
+    # 示例：plane = create_plane(1, Team.PLAYER, position=(400, 300))
+    plane = Plane(unit_id, unit_team)
+    plane.position = position
+    return plane            
 
-def create_enemy_tank(unit_id, position=(0, 0), usingAI = False):
-    enemy = Tank(unit_id, Team.ENEMY, usingAI)
+def create_enemy_plane(unit_id, position=(0, 0), usingAI = False):
+    enemy = Plane(unit_id, Team.ENEMY, usingAI)
     enemy.position = position
     return enemy
 
-def create_player_tank(unit_id, position=(0, 0), usingAI = False):
-    player = Tank(unit_id, Team.PLAYER, usingAI)
+def create_player_plane(unit_id, position=(0, 0), usingAI = False):
+    player = Plane(unit_id, Team.PLAYER, usingAI)
     player.position = position
     return player

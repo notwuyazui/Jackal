@@ -7,6 +7,7 @@ from Unit.UnitManager import *
 from Bullet.BulletManager import *
 from Unit.Tank.Tank import *
 from Unit.Archie.Archie import *
+from Unit.Plane.Plane import *
 
 class GameManager:
     def __init__ (self, game_map:GameMap = create_empty_map(), unit_manager = UnitManager(), bullet_manager = BulletManager()):
@@ -119,6 +120,20 @@ class GameManager:
         archie = create_enemy_archie(unit_id, position, usingAI)
         self.add_unit(archie)
         return archie
+    
+    def add_player_plane(self, position=(0,0), unit_id = None, usingAI = False):
+        if unit_id is None:
+            unit_id = len(self.unit_manager.units)
+        plane = create_player_plane(unit_id, position, usingAI)
+        self.add_unit(plane)
+        return plane
+    
+    def add_enemy_plane(self, position=(0,0), unit_id = None, usingAI = False):
+        if unit_id is None:
+            unit_id = len(self.unit_manager.units)
+        plane = create_enemy_plane(unit_id, position, usingAI)
+        self.add_unit(plane)
+        return plane
     
     def add_bullet(self, bullet):
         self.bullet_manager.add_bullet(bullet)

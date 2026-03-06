@@ -55,11 +55,14 @@ def get_class_from_str(class_name: str):
     
     import Bullet.NormalShell.NormalShell
     import Bullet.RocketShell.RocketShell
+    import Bullet.HeavyShell.HeavyShell
     
     if class_name == 'normal_shell':
         return Bullet.NormalShell.NormalShell.NormalShell
     elif class_name == 'rocket_shell':
         return Bullet.RocketShell.RocketShell.RocketShell
+    elif class_name == 'heavy_shell':
+        return Bullet.HeavyShell.HeavyShell.HeavyShell
     else:
         return None
 

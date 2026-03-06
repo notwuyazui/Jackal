@@ -15,11 +15,11 @@ class NormalShell(BaseBullet):
         
         # 普通炮弹属性
         self.bullet_image_path = "Bullet/NormalShell/normalshell.png"
-        self.size = (8, 8)
+        self.size = (6, 6)
         self.lifetime = 1.2 
         self.speed_rate = 1.0 
         self.damage_rate = 1.0 
-        self.cooldown = 0.2
+        self.cooldown = 0.3
         self.penetration = [1.0, 1.0, 1.0] 
         
         self.is_explosive = False  # 普通炮弹不会爆炸

@@ -4,11 +4,14 @@ import sys
 import os
 import random
 from Unit.Tank.Tank import *
+from Unit.Archie.Archie import *
+from Unit.Plane.Plane import *
 from Unit.EnemyAI import *
 from Map.Map import *
 from GameMode import *
 from Bullet.NormalShell.NormalShell import *
 from Bullet.RocketShell.RocketShell import *
+from Bullet.HeavyShell.HeavyShell import *
 from Bullet.BulletManager import *
 from Unit.UnitManager import *
 from GameManager import *
@@ -96,15 +99,17 @@ if __name__ == "__main__":
     game_manager = GameManager()
     game_manager.set_border_map()
     game_manager.add_player_tank(position = (200, 400), usingAI = True)
-    game_manager.add_player_archie(position = (400, 400), usingAI = True)
+    game_manager.add_player_tank(position = (400, 400), usingAI = True)
     game_manager.add_player_tank(position = (600, 400), usingAI = True)
-    game_manager.add_player_tank(position = (300, 500), usingAI = True)
-    game_manager.add_player_tank(position = (500, 500), usingAI = True)
-    game_manager.add_enemy_tank(position = (200, 200), usingAI = True)
+    game_manager.add_player_tank(position = (200, 500), usingAI = True)
+    game_manager.add_player_plane(position = (400, 500), usingAI = True)
+    game_manager.add_player_archie(position = (600, 500), usingAI = True)
+    game_manager.add_enemy_archie(position = (200, 200), usingAI = True)
     game_manager.add_enemy_tank(position = (400, 200), usingAI = True)
-    game_manager.add_enemy_tank(position = (600, 200), usingAI = True)
-    game_manager.add_enemy_archie(position = (300, 100), usingAI = True)
-    game_manager.add_enemy_archie(position = (500, 100), usingAI = True)
+    game_manager.add_enemy_archie(position = (600, 200), usingAI = True)
+    game_manager.add_enemy_tank(position = (200, 100), usingAI = True)
+    game_manager.add_enemy_plane(position = (400, 100), usingAI = True)
+    game_manager.add_enemy_tank(position = (600, 100), usingAI = True)
     
     # 玩家控制状态
     moving_forward = False

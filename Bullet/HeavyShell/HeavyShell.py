@@ -1,13 +1,11 @@
 '''
-    火箭弹
+    普通炮弹
 '''
-
-import pygame
 from Bullet.BaseBullet import BaseBullet
-from typing import List, Tuple, Optional, Dict, Any
+from typing import Tuple
 from Parameter import *
 
-class RocketShell(BaseBullet):
+class HeavyShell(BaseBullet):
     def __init__(self, 
                  projectile_id: str, 
                  shooter_id: int, 
@@ -15,19 +13,20 @@ class RocketShell(BaseBullet):
                  position: Tuple[float, float] = (0.0, 0.0), 
                  velocity_direction: Tuple[float, float] = (1.0, 0.0)):
         
-        self.bullet_image_path = "Bullet/RocketShell/RocketShell.png"
-        self.size = (32, 32)
-        self.lifetime = 1.5 
-        self.speed_rate = 1.2 
-        self.damage_rate = 0.75           # 被命中本体受伤=直接伤害+爆炸伤害
-        self.cooldown = 0.8
-        self.penetration = [0.8, 1.0, 1.2]
+        # 普通炮弹属性
+        self.bullet_image_path = "Bullet/HeavyShell/heavyshell.png"
+        self.size = (10, 10)
+        self.lifetime = 8.0 
+        self.speed_rate = 0.5 
+        self.damage_rate = 2.0
+        self.cooldown = 1.2
+        self.penetration = [1.0, 1.0, 1.0] 
         
         # 爆炸属性
         self.is_explosive = True
-        self.explosion_radius = 50.0 
-        self.explosion_damage_rate = 0.75     
-        self.explosion_image_path = "Bullet/RocketShell/RocketShellExplosion.png"
+        self.explosion_radius = 100.0 
+        self.explosion_damage_rate = 2.0  
+        self.explosion_image_path = "Bullet/HeavyShell/HeavyShellExplosion.png"
         
         super().__init__(
             projectile_id=projectile_id,
