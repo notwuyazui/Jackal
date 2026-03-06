@@ -83,10 +83,21 @@ class GameMap:
             print(f"保存地图失败: {e}")
             return False
         
-    def save(self) -> bool:
+    def save(self, file_name: str = None) -> bool:
         # 提供一种直接的保存方法
-        save_path = get_next_filename(DEFAULT_MAP_PATH, 'default_map', '.txt')
-        return self.save_to_file(save_path)
+        if file_name is None:
+            save_path = get_next_filename(DEFAULT_MAP_PATH, 'default_map', '.txt')
+            return self.save_to_file(save_path)
+        return self.save_to_file(file_name)
+
+    @classmethod
+    def create_map_from_strings(cls, strings: List[str], tile_size: int = 64) -> 'GameMap':
+        # 从字符串列表创建地图
+        map_data = [list(row) for row in strings]
+        return cls(map_data, tile_size)
+
+    @classmethod
+
     
     @classmethod
     def load_from_file(cls, file_name: str, tile_size=64) -> 'GameMap':

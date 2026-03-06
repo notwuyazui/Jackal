@@ -383,10 +383,12 @@ class BaseBullet:
             print(f"保存子弹配置失败: {e}")
             return False
     
-    def save(self) -> bool:
+    def save(self, file_name: str = None) -> bool:
         """便捷保存方法"""
-        save_path = get_next_filename(DEFAULT_BULLET_PATH, 'default_bullet', '.json')
-        return self.save_to_file(save_path)
+        if file_name is None:
+            save_path = get_next_filename(DEFAULT_BULLET_PATH, 'default_bullet', '.json')
+            return self.save_to_file(save_path)
+        return self.save_to_file(file_name)
     
     @classmethod
     def load_from_file(cls, file_name: str = "default_bullet.json") -> Optional[Dict[str, Any]]:

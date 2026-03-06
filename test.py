@@ -11,6 +11,7 @@ from Bullet.NormalShell.NormalShell import *
 from Bullet.RocketShell.RocketShell import *
 from Bullet.BulletManager import *
 from Unit.UnitManager import *
+from GameManager import *
 
 def draw_debug_info(surface, tank, camera_offset, mouse_pos):
     debug_font = pygame.font.Font(None, 20)
@@ -42,7 +43,7 @@ def draw_debug_info(surface, tank, camera_offset, mouse_pos):
     if DRAW_ENEMY_STATE_MESSAGE or DEBUG_MODE:
         # 绘制敌人AI状态
         debug_font = pygame.font.Font(None, 16)
-        for i, ai in enumerate(unit_manager.units):
+        for i, ai in enumerate(game_manager.unit_manager.units):
             if ai.enemy.is_alive and ai.team == Team.ENEMY:
                 screen_x = ai.enemy.position[0] - camera_offset[0]
                 screen_y = ai.enemy.position[1] - camera_offset[1]
@@ -91,27 +92,14 @@ if __name__ == "__main__":
     if font is None:
         font = pygame.font.Font(None, 24)  # 使用默认字体
     
-    game_map = create_border_map()
-    bullet_manager = BulletManager()
-    unit_manager = UnitManager()
-    
-    # for i in range(3):
-    #     # 为每个敌人随机生成位置
-    #     enemy_x = random.randint(100, 700)
-    #     enemy_y = random.randint(100, 500)
-    #     enemy = create_enemy_tank(100 + i, position=(enemy_x, enemy_y))
-    #     enemies.append(enemy)
-        
-    #     ai = EnemyAI(enemy, tank, bullet_manager, game_map.obstacles)
-    #     enemy_ais.append(ai)
-    tank = create_tank(1, Team.PLAYER, position=(400, 300))
-    unit_manager.add_unit(tank)
-    enemy = create_enemy_tank(101, (400, 300), usingAI=True)
-    unit_manager.add_unit(enemy)
-    enemy = create_enemy_tank(102, (400, 320), usingAI=True)
-    unit_manager.add_unit(enemy)
-    enemy = create_enemy_tank(103, (430, 300))
-    unit_manager.add_unit(enemy)
+    game_manager = GameManager()
+    game_manager.set_test_map()
+    game_manager.add_player_tank(position = (200, 400), usingAI = True)
+    game_manager.add_player_tank(position = (400, 400), usingAI = True)
+    game_manager.add_player_tank(position = (600, 400), usingAI = True)
+    game_manager.add_enemy_tank(position = (200, 200), usingAI = True)
+    game_manager.add_enemy_tank(position = (400, 200), usingAI = True)
+    game_manager.add_enemy_tank(position = (600, 200), usingAI = True)
     
     # 相机偏移
     camera_offset = [0, 0]
@@ -166,16 +154,16 @@ if __name__ == "__main__":
                 elif event.key == pygame.K_F1:
                     debug_mode = not debug_mode
                 elif event.key == pygame.K_p:
-                    game_map.save()
+                    game_manager.save_map()
                 elif event.key == pygame.K_SPACE:
                     # 空格键发射子弹
-                    bullet = tank.fire(NormalShell)
-                    bullet_manager.add_bullet(bullet)
+                    bullet = game_manager.unit_manager.units[0].fire(NormalShell)
+                    game_manager.add_bullet(bullet)
                 elif event.key == pygame.K_q:
-                    tank.switch_ammunition()
+                    game_manager.unit_manager.units[0].switch_ammunition()
                 elif event.key == pygame.K_c:
                     # 清空所有子弹
-                    bullet_manager.clear()
+                    game_manager.clear_bullets()
             
             elif event.type == pygame.KEYUP:
                 if event.key == pygame.K_w:
@@ -207,36 +195,37 @@ if __name__ == "__main__":
         
         # 鼠标左键发射子弹
         if mouse_left_pressed and fire_cooldown <= 0:
-            bullet = tank.fire()
+            bullet = game_manager.unit_manager.units[0].fire()
             if bullet:
-                bullet_manager.add_bullet(bullet)
+                game_manager.add_bullet(bullet)
                 fire_cooldown = fire_cooldown_max
         
         mouse_left_was_pressed = mouse_left_pressed
         
         # 玩家坦克的状态更新
-        tank.set_movement(forward=moving_forward, backward=moving_backward)
-        tank.set_turning(left=turning_left, right=turning_right)
+        game_manager.unit_manager.units[0].set_movement(forward=moving_forward, backward=moving_backward)
+        game_manager.unit_manager.units[0].set_turning(left=turning_left, right=turning_right)
         
         # 炮塔指向鼠标
         mouse_pos = pygame.mouse.get_pos()
-        tank.set_turret_target_to_mouse(mouse_pos, camera_offset)
+        game_manager.unit_manager.units[0].set_turret_target_to_mouse(mouse_pos, camera_offset)
         
         # 更新坦克、子弹
-        unit_manager.update(delta_time, game_map.obstacles)
-        bullet_manager.update(delta_time, unit_manager.units, game_map.obstacles)
-        
+        game_manager.update(delta_time)
+
         # 绘制地图、单位和子弹
         screen.fill((50, 50, 70))
-        game_map.draw(screen, camera_offset)
-        unit_manager.draw(screen, camera_offset)
-        bullet_manager.draw(screen, camera_offset)
-        
-        if True:
-            draw_debug_info(screen, tank, camera_offset, mouse_pos)
+        game_manager.draw(screen, camera_offset)
 
         # 显示游戏状态
-        if not tank.is_alive:
+        if not game_manager.unit_manager.units[0].is_alive:
+            game_over_font = pygame.font.Font(None, 72)
+        
+        if True:
+            draw_debug_info(screen, game_manager.unit_manager.units[0], camera_offset, mouse_pos)
+
+        # 显示游戏状态
+        if not game_manager.unit_manager.units[0].is_alive:
             game_over_font = pygame.font.Font(None, 72)
             game_over_surface = game_over_font.render("GAME OVER", True, (255, 50, 50))
             screen.blit(game_over_surface, (screen_width//2 - 180, screen_height//2 - 50))

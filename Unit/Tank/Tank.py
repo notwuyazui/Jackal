@@ -13,6 +13,8 @@ class Tank(BaseUnit):
         
         self.unit_type = 'tank'
         self.body_image_path = 'Unit/Tank/tank.png'
+        if unit_team == Team.ENEMY:
+            self.body_image_path = 'Unit/Tank/enemy_tank.png'
         self.turret_image_path = 'Unit/Tank/turret.png'
         self.max_speed_rate = 1.0
         self.max_acceleration_rate = 1.0
@@ -39,7 +41,7 @@ class Tank(BaseUnit):
                          ammunition_types=self.ammunition_types, 
                          ammo_switch_time=self.ammo_switch_time)
 
-def create_tank(unit_id, unit_team, position=(0, 0)):
+def create_tank(unit_id, unit_team=Team.PLAYER, position=(0, 0)):
     # 示例：tank = create_tank(1, Team.PLAYER, position=(400, 300))
     tank = Tank(unit_id, unit_team)
     tank.position = position
@@ -49,3 +51,8 @@ def create_enemy_tank(unit_id, position=(0, 0), usingAI = False):
     enemy = Tank(unit_id, Team.ENEMY, usingAI)
     enemy.position = position
     return enemy
+
+def create_player_tank(unit_id, position=(0, 0), usingAI = False):
+    player = Tank(unit_id, Team.PLAYER, usingAI)
+    player.position = position
+    return player

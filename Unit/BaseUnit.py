@@ -418,10 +418,12 @@ class BaseUnit:
         
         pass
         
-    def save(self) -> bool:
+    def save(self, file_name = None) -> bool:
         # 提供一种直接的保存方法
-        save_path = get_next_filename(DEFAULT_UNIT_PATH, 'default_unit', '.json')
-        return self.save_to_file(save_path)
+        if file_name is None:
+            save_path = get_next_filename(DEFAULT_UNIT_PATH, 'default_unit', '.json')
+            return self.save_to_file(save_path)
+        return self.save_to_file(file_name)
     
     @classmethod
     def load_from_file(cls, file_name="default_unit.json") -> 'BaseUnit':

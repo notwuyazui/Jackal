@@ -43,4 +43,8 @@ class BulletManager:
     
     def clear(self):
         self.bullets.clear()
+        
+    def save(self):
+        return [bullet.save() for bullet in self.bullets]
+
 
