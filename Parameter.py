@@ -34,6 +34,11 @@ class Team(enum.Enum):
     PLAYER = 0
     ENEMY = 1
     NEUTRAL = 2
+class Direction(enum.Enum):
+    UP = 0
+    DOWN = 1
+    LEFT = 2
+    RIGHT = 3
     
 DEFAULT_MAP_PATH = 'Map\saved'
 DEFAULT_UNIT_PATH = 'Unit\saved'

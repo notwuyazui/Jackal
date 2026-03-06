@@ -44,6 +44,12 @@ class UnitManager:
     def draw(self, surface, camera_offset):
         for unit in self.units:
             unit.draw(surface, camera_offset)
+            
+    def get_unit_by_id(self, unit_id):
+        for unit in self.units:
+            if unit.id == unit_id:
+                return unit
+        return None
 
     def get_active_count(self):
         return len([u for u in self.units if u.is_alive])

@@ -93,17 +93,15 @@ if __name__ == "__main__":
         font = pygame.font.Font(None, 24)  # 使用默认字体
     
     game_manager = GameManager()
-    game_manager.set_test_map()
+    game_manager.set_border_map()
     game_manager.add_player_tank(position = (200, 400), usingAI = True)
     game_manager.add_player_tank(position = (400, 400), usingAI = True)
     game_manager.add_player_tank(position = (600, 400), usingAI = True)
+    game_manager.add_player_archie(position = (400, 500), usingAI = True)
     game_manager.add_enemy_tank(position = (200, 200), usingAI = True)
     game_manager.add_enemy_tank(position = (400, 200), usingAI = True)
     game_manager.add_enemy_tank(position = (600, 200), usingAI = True)
-    
-    # 相机偏移
-    camera_offset = [0, 0]
-    camera_speed = 5
+    game_manager.add_enemy_archie(position = (400, 100), usingAI = True)
     
     # 玩家控制状态
     moving_forward = False
@@ -157,10 +155,10 @@ if __name__ == "__main__":
                     game_manager.save_map()
                 elif event.key == pygame.K_SPACE:
                     # 空格键发射子弹
-                    bullet = game_manager.unit_manager.units[0].fire(NormalShell)
+                    game_manager.set_unit_fire(0)
                     game_manager.add_bullet(bullet)
                 elif event.key == pygame.K_q:
-                    game_manager.unit_manager.units[0].switch_ammunition()
+                    game_manager.set_unit_switch_ammo(0)
                 elif event.key == pygame.K_c:
                     # 清空所有子弹
                     game_manager.clear_bullets()
@@ -185,17 +183,17 @@ if __name__ == "__main__":
         
         # 处理相机移动
         if keys[pygame.K_LEFT]:
-            camera_offset[0] -= camera_speed
+            game_manager.set_camera_offset_move(Direction.LEFT)
         if keys[pygame.K_RIGHT]:
-            camera_offset[0] += camera_speed
+            game_manager.set_camera_offset_move(Direction.RIGHT)
         if keys[pygame.K_UP]:
-            camera_offset[1] -= camera_speed
+            game_manager.set_camera_offset_move(Direction.UP)
         if keys[pygame.K_DOWN]:
-            camera_offset[1] += camera_speed
+            game_manager.set_camera_offset_move(Direction.DOWN)
         
         # 鼠标左键发射子弹
         if mouse_left_pressed and fire_cooldown <= 0:
-            bullet = game_manager.unit_manager.units[0].fire()
+            bullet = game_manager.set_unit_fire(0)
             if bullet:
                 game_manager.add_bullet(bullet)
                 fire_cooldown = fire_cooldown_max
@@ -203,29 +201,22 @@ if __name__ == "__main__":
         mouse_left_was_pressed = mouse_left_pressed
         
         # 玩家坦克的状态更新
-        game_manager.unit_manager.units[0].set_movement(forward=moving_forward, backward=moving_backward)
-        game_manager.unit_manager.units[0].set_turning(left=turning_left, right=turning_right)
+        game_manager.set_unit_movement(0, forward=moving_forward, backward=moving_backward)
+        game_manager.set_unit_turning(0, left=turning_left, right=turning_right)
+        mouse_pos = pygame.mouse.get_pos()      # 炮塔指向鼠标
+        game_manager.set_unit_turret_target_to_mouse(0, mouse_pos)
         
-        # 炮塔指向鼠标
-        mouse_pos = pygame.mouse.get_pos()
-        game_manager.unit_manager.units[0].set_turret_target_to_mouse(mouse_pos, camera_offset)
-        
-        # 更新坦克、子弹
+        # 更新、绘制
         game_manager.update(delta_time)
-
-        # 绘制地图、单位和子弹
         screen.fill((50, 50, 70))
-        game_manager.draw(screen, camera_offset)
+        game_manager.draw(screen)
 
         # 显示游戏状态
-        if not game_manager.unit_manager.units[0].is_alive:
+        if not game_manager.get_unit(0).is_alive:
             game_over_font = pygame.font.Font(None, 72)
-        
         if True:
-            draw_debug_info(screen, game_manager.unit_manager.units[0], camera_offset, mouse_pos)
-
-        # 显示游戏状态
-        if not game_manager.unit_manager.units[0].is_alive:
+            draw_debug_info(screen, game_manager.get_unit(0), game_manager.camera_offset, mouse_pos)
+        if not game_manager.get_unit(0).is_alive:
             game_over_font = pygame.font.Font(None, 72)
             game_over_surface = game_over_font.render("GAME OVER", True, (255, 50, 50))
             screen.blit(game_over_surface, (screen_width//2 - 180, screen_height//2 - 50))
