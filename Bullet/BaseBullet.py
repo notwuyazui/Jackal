@@ -24,6 +24,7 @@ class BaseBullet:
                  lifetime: float = 3.0,
                  speed_rate: float = 1.0,
                  damage_rate: float = 1.0,
+                 cooldown: float = 0.2,
                  penetration: List[float] = None,
                  is_explosive: bool = False,
                  explosion_radius: float = 0.0,
@@ -44,7 +45,7 @@ class BaseBullet:
         else:
             self.size = size
             
-        # 弹道属性
+        # 基本属性
         self.max_lifetime: float = lifetime                                                 # 射程
         self.speed_rate: float = speed_rate
         self.damage_rate: float = damage_rate
@@ -52,6 +53,7 @@ class BaseBullet:
         
         self.speed: float = BULLET_SPEED * self.speed_rate                                  # 速度
         self.base_damage: float = BULLET_DAMAGE * self.damage_rate                          # 基础伤害
+        self.cooldown: float = cooldown                                                     # 开火冷却时间
         
         # 爆炸
         self.is_explosive: bool = is_explosive                                              # 是否为爆炸弹

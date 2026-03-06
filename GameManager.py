@@ -73,7 +73,9 @@ class GameManager:
         return self.unit_manager.get_unit_by_id(unit_id).set_turret_target_to_mouse(mouse_pos, camera_offset)
     
     def set_unit_fire(self, unit_id):
-        return self.unit_manager.get_unit_by_id(unit_id).fire()
+        bullet = self.unit_manager.get_unit_by_id(unit_id).fire()
+        self.add_bullet(bullet)
+        return bullet
         
     def set_unit_switch_ammo(self, unit_id):
         return self.unit_manager.get_unit_by_id(unit_id).switch_ammunition()

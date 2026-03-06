@@ -41,8 +41,8 @@ class BaseUnit:
         self.max_angular_speed_rate: float = max_angular_speed_rate
         self.turret_angular_speed_rate: float = turret_angular_speed_rate
         self.max_health_rate: float = max_health_rate
-        self.armor_type: ArmorType = armor_type                                                            # 护甲类型
-        self.ammunition_types: List[str] = ammunition_types                                                # 单位拥有弹种
+        self.armor_type: ArmorType = armor_type                                                        # 护甲类型
+        self.ammunition_types: List[str] = ammunition_types                                            # 单位拥有弹种
         self.ammo_switch_time: float =  ammo_switch_time                                               # 单位切换弹种时间
         
         self.max_speed = UNIT_SPEED * self.max_speed_rate                                       # 最大速度  
@@ -63,6 +63,7 @@ class BaseUnit:
         self.bounding_box: pygame.Rect = None                # 碰撞箱，pygame.Rect对象
         self.velocity: Tuple[float, float] = self.cal_velocity()     # 速度向量
         self.current_ammunition: str = ""            # 单位当前选中弹种
+        self.fire_cooldown: float = 0.0              # 剩余开火冷却时间
         
         if self.ammunition_types:
             self.current_ammunition = self.ammunition_types[0]
@@ -97,6 +98,7 @@ class BaseUnit:
             return False
         
         self._update_ammo_switch(delta_time)         # 更新弹种切换计时器
+        self._update_fire_cooldown(delta_time)       # 更新开火冷却时间
         self._update_speed(delta_time)               # 更新速度
         self._update_direction(delta_time)           # 更新朝向
         self._update_turret_direction(delta_time)    # 更新炮塔朝向
@@ -104,7 +106,7 @@ class BaseUnit:
         self._update_bounding_box()                  # 更新碰撞箱
         self.velocity = self.cal_velocity()          # 更新速度向量
         
-        if self.is_switching_ammo and self.reload_timer <= 0:
+        if self.is_switching_ammo and self.reload_timer <= 0:    # 完成弹种切换
             self._complete_ammo_switch()
         
         # 检查与障碍物的碰撞
@@ -128,6 +130,13 @@ class BaseUnit:
                 self.is_switching_ammo = False
                 self.current_ammunition = self.target_ammunition
                 self.target_ammunition = ""
+    
+    def _update_fire_cooldown(self, delta_time) -> None:
+        """更新开火冷却时间"""
+        if self.fire_cooldown > 0:
+            self.fire_cooldown -= delta_time
+            if self.fire_cooldown < 0:
+                self.fire_cooldown = 0
     
     def _update_speed(self, delta_time) -> None:
         """更新速度"""
@@ -207,6 +216,10 @@ class BaseUnit:
             # 当前弹药类型没有弹药
             return None
         
+        if self.fire_cooldown > 0:
+            # 坦克开火冷却中
+            return None
+        
         turret_angle_rad = math.radians(self.turret_direction_angle - 90)
         
         bullet_start_x = self.position[0] + math.cos(turret_angle_rad) * (self.size[0] / 2 + 5)
@@ -225,6 +238,7 @@ class BaseUnit:
             
             # 根据当前弹药类型设置子弹属性
             self._configure_bullet_for_ammo(bullet)
+            self.fire_cooldown = bullet.cooldown        # 设置开火冷却时间
                 
             return bullet
             

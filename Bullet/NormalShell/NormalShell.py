@@ -14,12 +14,15 @@ class NormalShell(BaseBullet):
                  velocity_direction: Tuple[float, float] = (1.0, 0.0)):
         
         # 普通炮弹属性
-        bullet_image_path = "Bullet/NormalShell/normalshell.png"
-        size = (8, 8)
-        lifetime = 1.2 
-        speed_rate = 1.0 
-        damage_rate = 1.0 
-        penetration = [1.0, 1.0, 1.0] 
+        self.bullet_image_path = "Bullet/NormalShell/normalshell.png"
+        self.size = (8, 8)
+        self.lifetime = 1.2 
+        self.speed_rate = 1.0 
+        self.damage_rate = 1.0 
+        self.cooldown = 0.2
+        self.penetration = [1.0, 1.0, 1.0] 
+        
+        self.is_explosive = False  # 普通炮弹不会爆炸
         
         super().__init__(
             projectile_id=projectile_id,
@@ -27,11 +30,12 @@ class NormalShell(BaseBullet):
             shooter_team=shooter_team,
             position=position,
             velocity_direction=velocity_direction,
-            bullet_image_path=bullet_image_path,
-            size=size,
-            lifetime=lifetime,
-            speed_rate=speed_rate,
-            damage_rate=damage_rate,
-            penetration=penetration,
-            is_explosive=False  # 普通炮弹不会爆炸
+            bullet_image_path=self.bullet_image_path,
+            size=self.size,
+            lifetime=self.lifetime,
+            speed_rate=self.speed_rate,
+            damage_rate=self.damage_rate,
+            cooldown=self.cooldown,
+            penetration=self.penetration,
+            is_explosive=self.is_explosive  # 普通炮弹不会爆炸
         )

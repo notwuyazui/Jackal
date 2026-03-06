@@ -92,16 +92,19 @@ if __name__ == "__main__":
     if font is None:
         font = pygame.font.Font(None, 24)  # 使用默认字体
     
+    # 添加地图和单位
     game_manager = GameManager()
     game_manager.set_border_map()
     game_manager.add_player_tank(position = (200, 400), usingAI = True)
-    game_manager.add_player_tank(position = (400, 400), usingAI = True)
+    game_manager.add_player_archie(position = (400, 400), usingAI = True)
     game_manager.add_player_tank(position = (600, 400), usingAI = True)
-    game_manager.add_player_archie(position = (400, 500), usingAI = True)
+    game_manager.add_player_tank(position = (300, 500), usingAI = True)
+    game_manager.add_player_tank(position = (500, 500), usingAI = True)
     game_manager.add_enemy_tank(position = (200, 200), usingAI = True)
     game_manager.add_enemy_tank(position = (400, 200), usingAI = True)
     game_manager.add_enemy_tank(position = (600, 200), usingAI = True)
-    game_manager.add_enemy_archie(position = (400, 100), usingAI = True)
+    game_manager.add_enemy_archie(position = (300, 100), usingAI = True)
+    game_manager.add_enemy_archie(position = (500, 100), usingAI = True)
     
     # 玩家控制状态
     moving_forward = False
@@ -109,7 +112,6 @@ if __name__ == "__main__":
     turning_left = False
     turning_right = False
     
-    # 鼠标状态
     mouse_left_pressed = False
     mouse_left_was_pressed = False
     
@@ -192,11 +194,8 @@ if __name__ == "__main__":
             game_manager.set_camera_offset_move(Direction.DOWN)
         
         # 鼠标左键发射子弹
-        if mouse_left_pressed and fire_cooldown <= 0:
+        if mouse_left_pressed:
             bullet = game_manager.set_unit_fire(0)
-            if bullet:
-                game_manager.add_bullet(bullet)
-                fire_cooldown = fire_cooldown_max
         
         mouse_left_was_pressed = mouse_left_pressed
         
@@ -212,11 +211,9 @@ if __name__ == "__main__":
         game_manager.draw(screen)
 
         # 显示游戏状态
-        if not game_manager.get_unit(0).is_alive:
-            game_over_font = pygame.font.Font(None, 72)
-        if True:
+        if game_manager.get_unit(0) is not None:
             draw_debug_info(screen, game_manager.get_unit(0), game_manager.camera_offset, mouse_pos)
-        if not game_manager.get_unit(0).is_alive:
+        if game_manager.get_unit(0) is None:
             game_over_font = pygame.font.Font(None, 72)
             game_over_surface = game_over_font.render("GAME OVER", True, (255, 50, 50))
             screen.blit(game_over_surface, (screen_width//2 - 180, screen_height//2 - 50))
