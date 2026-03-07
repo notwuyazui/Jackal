@@ -1,6 +1,6 @@
 '''
     一个火箭炮类
-    拥有更低的机动性和更高的生命值，仅装备火箭弹
+    较低机动，较高生命，较低侦察范围，仅装备火箭弹
 '''
 
 import pygame
@@ -18,14 +18,14 @@ class Archie(BaseUnit):
         if unit_team == Team.ENEMY:
             self.body_image_path = 'Unit/Archie/enemy_archie.png'
             self.turret_image_path = 'Unit/Archie/enemy_turret.png'
-        self.max_speed_rate = 0.5
+        self.max_speed_rate = 0.75
         self.max_acceleration_rate = 0.5
         self.min_acceleration_rate = -0.5
         self.max_angular_speed_rate = 0.3
         self.turret_angular_speed_rate = 0.5
         self.max_health_rate = 2.0
         self.sight_range = 100
-        self.armor_type = ArmorType.NONE                                                        # 护甲类型
+        self.armor_type = ArmorType.MEDIUM                                                        # 护甲类型
         self.ammunition_types = ['rocket_shell']                                                # 单位拥有弹种
         self.ammo_switch_time =  UNIT_AMMO_SWITCH_TIME                                          # 单位切换弹种时间
         

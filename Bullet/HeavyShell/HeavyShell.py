@@ -20,7 +20,7 @@ class HeavyShell(BaseBullet):
         self.speed_rate = 0.5 
         self.damage_rate = 2.0
         self.cooldown = 1.2
-        self.penetration = [1.0, 1.0, 1.0] 
+        self.penetration = [0.8, 1.0, 1.2] 
         
         # 爆炸属性
         self.is_explosive = True

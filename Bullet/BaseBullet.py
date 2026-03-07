@@ -113,7 +113,7 @@ class BaseBullet:
         )
         return self.bounding_box
     
-    def update(self, delta_time: float, unit_manager, obstacles: List[pygame.Rect]) -> bool:
+    def update(self, delta_time: float, unit_manager, game_map) -> bool:
         """
         更新子弹状态
         """
@@ -142,7 +142,7 @@ class BaseBullet:
         self.distance_traveled += math.sqrt(dx**2 + dy**2)
         
         # 检查与障碍物的碰撞
-        obstacle_collision = self._check_obstacle_collision(obstacles)
+        obstacle_collision = self._check_obstacle_collision(game_map)
         if obstacle_collision:
             self._handle_obstacle_collision()
             return self.is_active
@@ -163,9 +163,9 @@ class BaseBullet:
             self.is_active = False
         return True  # 在爆炸期间仍然返回True，以便绘制爆炸效果
     
-    def _check_obstacle_collision(self, obstacles: List[pygame.Rect]) -> Optional[pygame.Rect]:
+    def _check_obstacle_collision(self, game_map) -> Optional[pygame.Rect]:
         """检查与障碍物的碰撞"""
-        for obstacle in obstacles:
+        for obstacle in game_map.obstacles:
             if self.bounding_box.colliderect(obstacle):
                 return obstacle
         return None

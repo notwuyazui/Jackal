@@ -1,6 +1,6 @@
 '''
     一个坦克类
-    拥有标准的机动性、生存性和攻击性，装备子弹和火箭弹
+    标准机动性，标准生存性，较高侦察范围，装备子弹、火箭弹和重炮弹
 '''
 
 import pygame
@@ -24,7 +24,7 @@ class Tank(BaseUnit):
         self.turret_angular_speed_rate = 1.0
         self.max_health_rate = 1.0
         self.sight_range = 200
-        self.armor_type = ArmorType.NONE                                                        # 护甲类型
+        self.armor_type = ArmorType.LIGHT                                                        # 护甲类型
         self.ammunition_types = ['normal_shell','rocket_shell','heavy_shell']                                                      # 单位拥有弹种
         self.ammo_switch_time =  UNIT_AMMO_SWITCH_TIME                                          # 单位切换弹种时间
         

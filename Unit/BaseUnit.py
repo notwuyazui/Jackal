@@ -104,7 +104,7 @@ class BaseUnit:
             self.speed * math.sin(angle_rad)
         )
 
-    def update(self, delta_time, unit_manager = None, bullet_manager = None, map = None):
+    def update(self, delta_time, unit_manager = None, bullet_manager = None, game_map = None):
         from Unit.UnitManager import UnitManager
         from Bullet.BulletManager import BulletManager
         from Map.Map import GameMap
@@ -112,10 +112,9 @@ class BaseUnit:
             unit_manager = UnitManager()
         if bullet_manager is None:
             bullet_manager = BulletManager()
-        if map is None:
-            map = GameMap()
+        if game_map is None:
+            game_map = GameMap()
             
-        obstacles = map.obstacles
         old_position = self.position
         old_bounding_box = self.bounding_box.copy() if self.bounding_box else None
         
@@ -127,7 +126,7 @@ class BaseUnit:
             return False
         
         self.living_time += delta_time
-        self._update_vision(unit_manager, bullet_manager, map)              # 更新视野
+        self._update_vision(unit_manager, bullet_manager, game_map)              # 更新视野
         self._update_ammo_switch(delta_time)         # 更新弹种切换计时器
         self._update_fire_cooldown(delta_time)       # 更新开火冷却时间
         self._update_speed(delta_time)               # 更新速度
@@ -142,7 +141,7 @@ class BaseUnit:
         
         # 检查与障碍物的碰撞
         if self.bounding_box:
-            for obstacle in obstacles:
+            for obstacle in game_map.obstacles:
                 if self.bounding_box.colliderect(obstacle):
                     # 发生碰撞，恢复到之前的位置
                     self.position = old_position
@@ -159,7 +158,7 @@ class BaseUnit:
         self.visible_bullets.clear()
         for unit in unit_manager.units:
             if count_distance(self,unit) <= self.sight_range:
-                self.visible_units.add_unit(unit, bullet_manager, game_map.obstacles)
+                self.visible_units.add_unit(unit, bullet_manager, game_map)
         for bullet in bullet_manager.bullets:
             if count_distance(self,bullet) <= self.sight_range:
                 self.visible_bullets.add_bullet(bullet)

@@ -12,7 +12,7 @@ from Unit.BaseUnit import BaseUnit
 
 
 class EnemyAI:
-    def __init__(self, unit: BaseUnit, unit_manager, bullet_manager, obstacles):
+    def __init__(self, unit: BaseUnit, unit_manager, bullet_manager, game_map):
         """
         :param unit: 受此 AI 控制的单位
         :param unit_manager: 单位管理器，用于获取所有单位信息及障碍物
@@ -21,7 +21,7 @@ class EnemyAI:
         self.unit = unit
         self.unit_manager = unit_manager
         self.bullet_manager = bullet_manager
-        self.obstacles = obstacles
+        self.game_map = game_map
 
         # AI 状态
         self.ai_state = "idle"          # 可能的状态：idle, chase, attack, retreat, dodge
@@ -38,10 +38,10 @@ class EnemyAI:
         self.desired_distance = 200      # 理想攻击距离（像素）
         self.strafe_enabled = True       # 是否允许横向移动（通过转向实现）
 
-    def update(self, delta_time: float, unit_manager, bullet_manager, obstacles):
+    def update(self, delta_time: float, unit_manager, bullet_manager, game_map):
         self.unit_manager = unit_manager
         self.bullet_manager = bullet_manager
-        self.obstacles = obstacles
+        self.game_map = game_map
         
         """每帧更新 AI 决策"""
         # 更新开火冷却
@@ -184,7 +184,7 @@ class EnemyAI:
         )
 
         # 检查与障碍物碰撞
-        for obs in self.obstacles:
+        for obs in self.game_map.obstacles:
             if detect_rect.colliderect(obs):
                 # 有障碍，计算避开方向：垂直于当前方向，并偏向于目标方向
                 # 简单策略：左转或右转，取决于哪边更空旷
@@ -277,7 +277,7 @@ class EnemyAI:
         """检查从控制单位到目标之间是否有障碍物阻挡视线"""
         start = self.unit.position
         end = target.position
-        for obs in self.obstacles:
+        for obs in self.game_map.obstacles:
             if obs.clipline(start, end):
                 return False
         return True

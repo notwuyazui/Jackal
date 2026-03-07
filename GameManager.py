@@ -25,7 +25,7 @@ class GameManager:
     def update(self, delta_time):
         self.time += delta_time
         self.unit_manager.update(delta_time, self.unit_manager, self.bullet_manager, self.game_map)
-        self.bullet_manager.update(delta_time, self.unit_manager, self.game_map.obstacles)
+        self.bullet_manager.update(delta_time, self.unit_manager, self.game_map)
 
     def draw(self, screen, camera_offset = None):
         if camera_offset == None:
@@ -94,7 +94,7 @@ class GameManager:
         if switch_ammo: self.set_unit_switch_ammo(unit_id)
         
     def add_unit(self, unit):
-        self.unit_manager.add_unit(unit, self.bullet_manager, self.game_map.obstacles)
+        self.unit_manager.add_unit(unit, self.bullet_manager, self.game_map)
         
     def add_player_tank(self, position=(0,0), unit_id = None, usingAI = False):
         if unit_id is None:

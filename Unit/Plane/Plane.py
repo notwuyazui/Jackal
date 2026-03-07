@@ -1,6 +1,6 @@
 '''
     一个飞机类
-    机动性为0，生命值较高，装备重炮弹
+    无机动，极高生命值，较高侦察范围，装备重炮弹
 '''
 
 import pygame
@@ -25,7 +25,7 @@ class Plane(BaseUnit):
         self.turret_angular_speed_rate = 1.0
         self.max_health_rate = 5.0
         self.sight_range = 200
-        self.armor_type = ArmorType.NONE                                                        # 护甲类型
+        self.armor_type = ArmorType.HEAVY                                                        # 护甲类型
         self.ammunition_types = ['heavy_shell']                                                      # 单位拥有弹种
         self.ammo_switch_time =  UNIT_AMMO_SWITCH_TIME                                          # 单位切换弹种时间
         

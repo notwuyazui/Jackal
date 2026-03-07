@@ -20,7 +20,7 @@ class NormalShell(BaseBullet):
         self.speed_rate = 1.0 
         self.damage_rate = 1.0 
         self.cooldown = 0.3
-        self.penetration = [1.0, 1.0, 1.0] 
+        self.penetration = [1.0, 0.8, 0.6] 
         
         self.is_explosive = False  # 普通炮弹不会爆炸
         

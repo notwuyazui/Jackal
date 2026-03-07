@@ -17,12 +17,12 @@ class BulletManager:
             if BULLET_INFO_TEXT or DEBUG_MODE:
                 print(f"子弹发射: ID={bullet.id}, 位置={bullet.position}")
     
-    def update(self, delta_time, unit_manager, obstacles):
+    def update(self, delta_time, unit_manager, game_map):
         self.to_remove.clear()
         
         for bullet in self.bullets:
             # 更新子弹状态
-            if not bullet.update(delta_time, unit_manager, obstacles):
+            if not bullet.update(delta_time, unit_manager, game_map):
                 # 子弹不再活跃，标记为待移除
                 if bullet in self.bullets and bullet not in self.to_remove:
                     self.to_remove.append(bullet)
