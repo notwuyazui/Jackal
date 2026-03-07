@@ -8,7 +8,7 @@ from Parameter import *
 class HeavyShell(BaseBullet):
     def __init__(self, 
                  projectile_id: str, 
-                 shooter_id: int, 
+                 shooter, 
                  shooter_team: Team,
                  position: Tuple[float, float] = (0.0, 0.0), 
                  velocity_direction: Tuple[float, float] = (1.0, 0.0)):
@@ -30,7 +30,7 @@ class HeavyShell(BaseBullet):
         
         super().__init__(
             projectile_id=projectile_id,
-            shooter_id=shooter_id,
+            shooter=shooter,
             shooter_team=shooter_team,
             position=position,
             velocity_direction=velocity_direction,

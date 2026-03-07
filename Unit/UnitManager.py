@@ -53,6 +53,9 @@ class UnitManager:
     def get_active_count(self):
         return len([u for u in self.units if u.is_alive])
 
+    def is_in(self, unit_id):
+        return any(unit.id == unit_id for unit in self.units)
+    
     def clear(self):
         self.units.clear()
         self.enemy_ais.clear()

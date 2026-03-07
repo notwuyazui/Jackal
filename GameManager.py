@@ -18,11 +18,14 @@ class GameManager:
         self.camera_offset = [0, 0]
         self.camera_speed = 5
         
+        self.time = 0.0        # 游戏时间
+        
         self.add_player_tank(position=(100,500), unit_id=0, usingAI=False)      # 默认添加一个玩家坦克
 
     def update(self, delta_time):
+        self.time += delta_time
         self.unit_manager.update(delta_time, self.unit_manager, self.bullet_manager, self.game_map)
-        self.bullet_manager.update(delta_time, self.unit_manager.units, self.game_map.obstacles)
+        self.bullet_manager.update(delta_time, self.unit_manager, self.game_map.obstacles)
 
     def draw(self, screen, camera_offset = None):
         if camera_offset == None:

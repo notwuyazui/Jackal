@@ -62,15 +62,6 @@ class BaseUnit:
         self.visible_units = UnitManager()
         self.visible_bullets = BulletManager()
         
-        # 记录
-        self.destroy_enemy_count = 0        # 击杀数
-        self.damage_dealt = 0               # 伤害输出
-        self.assist_destroy_count = 0       # 协助击杀（为击杀者提供视野造成的击杀）
-        self.assist_damage_dealt = 0        # 协助伤害（为击杀者提供视野造成的伤害）
-        self.damage_received = 0            # 伤害承受
-        self.killed_by = None               # 击杀者
-        self.living_time = None             # 存活时间
-        
         # 实时属性
         self.position = (0.0, 0.0)
         self.speed = 0.0
@@ -84,15 +75,23 @@ class BaseUnit:
         self.current_ammunition: str = ""            # 单位当前选中弹种
         self.fire_cooldown: float = 0.0              # 剩余开火冷却时间
         
+        self.is_alive = True
+        self.reload_timer = 0.0         # 切换弹种剩余时间计时器
+        self.turret_target_angle = 0.0          # 炮塔目标角度
+        self.is_switching_ammo = False          # 是否正在切换弹药
+        
         if self.ammunition_types:
             self.current_ammunition = self.ammunition_types[0]
         
-        # 预留属性
-        self.is_alive = True
-        self.reload_timer = 0.0         # 切换弹种剩余时间计时器
+        # 记录
+        self.destroy_enemy_count = 0        # 击杀数
+        self.damage_dealt = 0               # 伤害输出
+        self.assist_destroy_count = 0       # 协助击杀（为击杀者提供视野造成的击杀）
+        self.assist_damage_dealt = 0        # 协助伤害（为击杀者提供视野造成的伤害）
+        self.damage_received = 0            # 伤害承受
+        self.killed_by = None               # 击杀者
+        self.living_time = 0.0              # 存活时间
         self.reward = 0.0
-        self.turret_target_angle = 0.0          # 炮塔目标角度
-        self.is_switching_ammo = False          # 是否正在切换弹药
         
         # 初始化碰撞箱
         self._update_bounding_box()
@@ -127,6 +126,7 @@ class BaseUnit:
             self.is_alive = False
             return False
         
+        self.living_time += delta_time
         self._update_vision(unit_manager, bullet_manager, map)              # 更新视野
         self._update_ammo_switch(delta_time)         # 更新弹种切换计时器
         self._update_fire_cooldown(delta_time)       # 更新开火冷却时间
@@ -163,10 +163,6 @@ class BaseUnit:
         for bullet in bullet_manager.bullets:
             if count_distance(self,bullet) <= self.sight_range:
                 self.visible_bullets.add_bullet(bullet)
-        if self.id == 0:
-            print("Visible Units:")
-            for unit in self.visible_units.units:
-                print(unit.id)
     
     def _update_ammo_switch(self, delta_time) -> None:
         """更新弹药切换状态"""
@@ -277,7 +273,7 @@ class BaseUnit:
         try:
             bullet = bullet_class(
                 projectile_id=f"bullet_{self.id}_{pygame.time.get_ticks()}",  # 使用时间戳确保唯一性
-                shooter_id=self.id,
+                shooter=self,
                 shooter_team=self.team,
                 position=(bullet_start_x, bullet_start_y),
                 velocity_direction=bullet_direction
@@ -472,18 +468,52 @@ class BaseUnit:
                           (int(screen_x), int(screen_y)), 
                           int(self.sight_range), 1)
     
-    def take_damage(self, damage_amount) -> float:
+    def take_damage(self, unit_manager, damage_source, damage_amount) -> float:
         """
         坦克承受伤害
         """
         self.health -= damage_amount
+        self.damage_received += damage_amount
+        damage_source.damage_dealt += damage_amount
+        destroyed = False
         
         if self.health <= 0:
             self.health = 0
             self.is_alive = False
+            destroyed = True
             print(f"坦克 {self.id} 被摧毁")
-        
-        return damage_amount
+            damage_source.destroy_enemy_count += 1
+            self.killed_by = damage_source.id
+        self._handle_assistance(unit_manager, damage_source, destroyed, damage_amount)
+        return destroyed, damage_amount
+
+    def _handle_assistance(self, unit_manager, damage_source, destroy:bool , damage_amount:float) -> None:
+        # 当自身受到伤害时，处理伤害来源的协助信息
+        for unit in unit_manager.units:
+            if unit.id == damage_source.id:
+                continue
+            if unit.team != damage_source.team:
+                continue
+            if unit.is_alive == False:
+                continue
+            if count_distance(self, unit) <= unit.sight_range:
+                unit.assist_damage_dealt += damage_amount
+                if destroy:
+                    unit.assist_destroy_count += 1
+        return None
+
+    def get_record(self) -> dict:
+        return {
+            "id": self.id,
+            "destroy_enemy_count": self.destroy_enemy_count,
+            "damage_dealt": self.damage_dealt,
+            "assist_destroy_count": self.assist_destroy_count,
+            "assist_damage_dealt": self.assist_damage_dealt,
+            "damage_received": self.damage_received,
+            "killed_by": self.killed_by,
+            "living_time": self.living_time,
+            "reward": self.reward
+        }
 
     def save_to_file(self, file_name="default_unit.json") -> bool:
         # 保存单位信息到文件, file_name包含后缀，但不包含路径

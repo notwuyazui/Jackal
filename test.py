@@ -98,18 +98,18 @@ if __name__ == "__main__":
     # 添加地图和单位
     game_manager = GameManager()
     game_manager.set_border_map()
-    game_manager.add_player_tank(position = (200, 400), usingAI = True)
-    game_manager.add_player_tank(position = (400, 400), usingAI = True)
-    game_manager.add_player_tank(position = (600, 400), usingAI = True)
-    game_manager.add_player_tank(position = (200, 500), usingAI = True)
-    game_manager.add_player_plane(position = (400, 500), usingAI = True)
-    game_manager.add_player_archie(position = (600, 500), usingAI = True)
-    game_manager.add_enemy_archie(position = (200, 200), usingAI = True)
-    game_manager.add_enemy_tank(position = (400, 200), usingAI = True)
-    game_manager.add_enemy_archie(position = (600, 200), usingAI = True)
-    game_manager.add_enemy_tank(position = (200, 100), usingAI = True)
-    game_manager.add_enemy_plane(position = (400, 100), usingAI = True)
-    game_manager.add_enemy_tank(position = (600, 100), usingAI = True)
+    game_manager.add_player_tank(unit_id=101, position = (200, 400), usingAI = True)
+    game_manager.add_player_tank(unit_id=102, position = (400, 400), usingAI = True)
+    game_manager.add_player_tank(unit_id=103, position = (600, 400), usingAI = True)
+    game_manager.add_player_tank(unit_id=104, position = (200, 500), usingAI = True)
+    game_manager.add_player_plane(unit_id=105, position = (400, 500), usingAI = True)
+    game_manager.add_player_archie(unit_id=106, position = (600, 500), usingAI = True)
+    game_manager.add_enemy_archie(unit_id=201, position = (200, 200), usingAI = True)
+    game_manager.add_enemy_tank(unit_id=202, position = (400, 200), usingAI = True)
+    game_manager.add_enemy_archie(unit_id=203, position = (600, 200), usingAI = True)
+    game_manager.add_enemy_tank(unit_id=204, position = (200, 100), usingAI = True)
+    game_manager.add_enemy_plane(unit_id=205, position = (400, 100), usingAI = True)
+    game_manager.add_enemy_tank(unit_id=206, position = (600, 100), usingAI = True)
     
     # 玩家控制状态
     moving_forward = False
@@ -129,6 +129,8 @@ if __name__ == "__main__":
     # 用于显示信息的表面
     info_surface = pygame.Surface((200, 120), pygame.SRCALPHA)
     info_surface.fill((0, 0, 0, 128))  # 半透明黑色背景
+    
+    timer = 0.0
     
     running = True
     while running:
@@ -224,6 +226,16 @@ if __name__ == "__main__":
             screen.blit(game_over_surface, (screen_width//2 - 180, screen_height//2 - 50))
         
         pygame.display.flip()
+        
+        # 每5秒打印一次单位记录
+        timer += delta_time
+        if timer>=5:
+            timer =0
+            if UNIT_RECORD_TEXT or DEBUG_MODE:
+                print("time: " + str(int(game_manager.time)))
+                for unit in game_manager.unit_manager.units:
+                    if unit is not None:
+                        print(unit.get_record())
     
     pygame.quit()
     sys.exit()
