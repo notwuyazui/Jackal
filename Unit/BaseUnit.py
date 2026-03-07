@@ -19,6 +19,7 @@ class BaseUnit:
                  max_angular_speed_rate=INF, 
                  turret_angular_speed_rate=INF, 
                  max_health_rate=1.0, 
+                 sight_range=INF,
                  armor_type=ArmorType.NONE, 
                  ammunition_types=[], 
                  ammo_switch_time=UNIT_AMMO_SWITCH_TIME,):
@@ -51,6 +52,24 @@ class BaseUnit:
         self.max_angular_speed = UNIT_ANGULAR_SPEED * self.max_angular_speed_rate               # 最大角速度
         self.turret_angular_speed = UNIT_TURRET_ANGULAR_SPEED * self.turret_angular_speed_rate  # 炮塔转动角速度
         self.max_health = UNIT_HEALTH * self.max_health_rate                                    # 最大生命值
+        self.sight_range = sight_range                                                          # 视野范围
+        
+        # 视野
+        from Map.Map import GameMap
+        from Unit.UnitManager import UnitManager
+        from Bullet.BulletManager import BulletManager
+        self.visible_map = GameMap()
+        self.visible_units = UnitManager()
+        self.visible_bullets = BulletManager()
+        
+        # 记录
+        self.destroy_enemy_count = 0        # 击杀数
+        self.damage_dealt = 0               # 伤害输出
+        self.assist_destroy_count = 0       # 协助击杀（为击杀者提供视野造成的击杀）
+        self.assist_damage_dealt = 0        # 协助伤害（为击杀者提供视野造成的伤害）
+        self.damage_received = 0            # 伤害承受
+        self.killed_by = None               # 击杀者
+        self.living_time = None             # 存活时间
         
         # 实时属性
         self.position = (0.0, 0.0)
@@ -86,7 +105,18 @@ class BaseUnit:
             self.speed * math.sin(angle_rad)
         )
 
-    def update(self, delta_time, obstacles):
+    def update(self, delta_time, unit_manager = None, bullet_manager = None, map = None):
+        from Unit.UnitManager import UnitManager
+        from Bullet.BulletManager import BulletManager
+        from Map.Map import GameMap
+        if unit_manager is None:
+            unit_manager = UnitManager()
+        if bullet_manager is None:
+            bullet_manager = BulletManager()
+        if map is None:
+            map = GameMap()
+            
+        obstacles = map.obstacles
         old_position = self.position
         old_bounding_box = self.bounding_box.copy() if self.bounding_box else None
         
@@ -97,6 +127,7 @@ class BaseUnit:
             self.is_alive = False
             return False
         
+        self._update_vision(unit_manager, bullet_manager, map)              # 更新视野
         self._update_ammo_switch(delta_time)         # 更新弹种切换计时器
         self._update_fire_cooldown(delta_time)       # 更新开火冷却时间
         self._update_speed(delta_time)               # 更新速度
@@ -120,6 +151,22 @@ class BaseUnit:
                     return True
         
         return True
+    
+    def _update_vision(self, unit_manager, bullet_manager, game_map) -> None:
+        """更新视野"""
+        self.visible_map = game_map
+        self.visible_units.clear()
+        self.visible_bullets.clear()
+        for unit in unit_manager.units:
+            if count_distance(self,unit) <= self.sight_range:
+                self.visible_units.add_unit(unit, bullet_manager, game_map.obstacles)
+        for bullet in bullet_manager.bullets:
+            if count_distance(self,bullet) <= self.sight_range:
+                self.visible_bullets.add_bullet(bullet)
+        if self.id == 0:
+            print("Visible Units:")
+            for unit in self.visible_units.units:
+                print(unit.id)
     
     def _update_ammo_switch(self, delta_time) -> None:
         """更新弹药切换状态"""
@@ -376,6 +423,10 @@ class BaseUnit:
         # 绘制生命条
         if DRAW_HEALTH_BAR or DEBUG_MODE:
             self._draw_health_bar(surface, screen_x, screen_y)
+            
+        # 绘制视野范围
+        if DRAW_SIGHT_RANGE or DEBUG_MODE:
+            self._draw_sight_range(surface, camera_offset)
     
     def _draw_health_bar(self, surface, x, y) -> None:
         """
@@ -410,6 +461,16 @@ class BaseUnit:
         text_rect = text_surface.get_rect(center=(x, bar_y + bar_height / 2))
         
         surface.blit(text_surface, text_rect)
+    
+    def _draw_sight_range(self, surface, camera_offset):
+        """绘制视野范围"""
+        if not self.is_alive:
+            return
+        screen_x = self.position[0] - camera_offset[0]
+        screen_y = self.position[1] - camera_offset[1]
+        pygame.draw.circle(surface, (0, 0, 0), 
+                          (int(screen_x), int(screen_y)), 
+                          int(self.sight_range), 1)
     
     def take_damage(self, damage_amount) -> float:
         """

@@ -39,7 +39,7 @@ from utils import *
 '''
 
 class GameMap:
-    def __init__(self, map_data, tile_size=64):
+    def __init__(self, map_data=[], tile_size=64):
         self.map_data = map_data
         self.tile_size = tile_size      # 地图块大小
         self.height = len(map_data)
@@ -180,7 +180,6 @@ class GameMap:
     def _generate_map(self) -> None:
         """生成地图表面和障碍物列表"""
         if not self.map_data:
-            print("地图数据为空")
             return
         
         self.obstacles = []

@@ -65,6 +65,9 @@ def get_class_from_str(class_name: str):
         return Bullet.HeavyShell.HeavyShell.HeavyShell
     else:
         return None
+    
+def count_distance(a, b):
+    return ((a.position[0] - b.position[0]) ** 2 + (a.position[1] - b.position[1]) ** 2) ** 0.5
 
 class MethodGroup:
     """方法分组器"""

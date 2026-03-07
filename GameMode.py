@@ -6,6 +6,7 @@
 DEBUG_MODE = False                  # 一键开启调试模式
 
 DRAW_HEALTH_BAR = True              # 绘制坦克血条
+DRAW_SIGHT_RANGE = True            # 绘制坦克视野范围
 DRAW_MOUSE_TARGET_LINE = True       # 绘制鼠标瞄准线
 DRAW_STATUS_MESSAGE = False         # 绘制单位状态信息
 DRAW_ENEMY_STATE_MESSAGE = False    # 绘制敌方坦克状态信息

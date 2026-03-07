@@ -21,7 +21,7 @@ class GameManager:
         self.add_player_tank(position=(100,500), unit_id=0, usingAI=False)      # 默认添加一个玩家坦克
 
     def update(self, delta_time):
-        self.unit_manager.update(delta_time, self.unit_manager, self.bullet_manager, self.game_map.obstacles)
+        self.unit_manager.update(delta_time, self.unit_manager, self.bullet_manager, self.game_map)
         self.bullet_manager.update(delta_time, self.unit_manager.units, self.game_map.obstacles)
 
     def draw(self, screen, camera_offset = None):

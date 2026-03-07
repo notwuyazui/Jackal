@@ -24,6 +24,7 @@ class Plane(BaseUnit):
         self.max_angular_speed_rate = 0.0
         self.turret_angular_speed_rate = 1.0
         self.max_health_rate = 5.0
+        self.sight_range = 200
         self.armor_type = ArmorType.NONE                                                        # 护甲类型
         self.ammunition_types = ['heavy_shell']                                                      # 单位拥有弹种
         self.ammo_switch_time =  UNIT_AMMO_SWITCH_TIME                                          # 单位切换弹种时间
@@ -39,6 +40,7 @@ class Plane(BaseUnit):
                          max_angular_speed_rate=self.max_angular_speed_rate, 
                          turret_angular_speed_rate=self.turret_angular_speed_rate, 
                          max_health_rate=self.max_health_rate, 
+                         sight_range=self.sight_range,
                          armor_type=self.armor_type, 
                          ammunition_types=self.ammunition_types, 
                          ammo_switch_time=self.ammo_switch_time)
