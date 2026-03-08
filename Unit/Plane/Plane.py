@@ -10,7 +10,7 @@ from Parameter import *
 
 class Plane(BaseUnit):
     
-    def __init__(self, unit_id: int, unit_team: Team, usingAI = False):
+    def __init__(self, unit_id: int, unit_team: Team, usingAI = False, visible = True):
         
         self.unit_type = 'plane'
         self.body_image_path = 'Unit/Plane/plane.png'
@@ -18,6 +18,7 @@ class Plane(BaseUnit):
         if unit_team == Team.ENEMY:
             self.body_image_path = 'Unit/Plane/enemy_plane.png'
             self.turret_image_path = 'Unit/Plane/enemy_turret.png'
+        self.visible=visible
         self.max_speed_rate = 0.0
         self.max_acceleration_rate = 0.0
         self.min_acceleration_rate = 0.0
@@ -34,6 +35,7 @@ class Plane(BaseUnit):
                          unit_type=self.unit_type,
                          body_image_path=self.body_image_path, 
                          turret_image_path=self.turret_image_path, 
+                         visible=self.visible,
                          max_speed_rate=self.max_speed_rate, 
                          max_acceleration_rate=self.max_acceleration_rate, 
                          min_acceleration_rate=self.min_acceleration_rate, 
@@ -45,18 +47,18 @@ class Plane(BaseUnit):
                          ammunition_types=self.ammunition_types, 
                          ammo_switch_time=self.ammo_switch_time)
 
-def create_plane(unit_id, unit_team=Team.PLAYER, position=(0, 0)):
+def create_plane(unit_id, unit_team, position=(0, 0), usingAI = False, visible = True):
     # 示例：plane = create_plane(1, Team.PLAYER, position=(400, 300))
-    plane = Plane(unit_id, unit_team)
+    plane = Plane(unit_id, unit_team, usingAI, visible)
     plane.position = position
     return plane            
 
-def create_enemy_plane(unit_id, position=(0, 0), usingAI = False):
-    enemy = Plane(unit_id, Team.ENEMY, usingAI)
+def create_enemy_plane(unit_id, position=(0, 0), usingAI = False, visible = True):
+    enemy = Plane(unit_id, Team.ENEMY, usingAI, visible)
     enemy.position = position
     return enemy
 
-def create_player_plane(unit_id, position=(0, 0), usingAI = False):
-    player = Plane(unit_id, Team.PLAYER, usingAI)
+def create_player_plane(unit_id, position=(0, 0), usingAI = False, visible = True):
+    player = Plane(unit_id, Team.PLAYER, usingAI, visible)
     player.position = position
     return player

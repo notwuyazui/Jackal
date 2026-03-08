@@ -92,11 +92,11 @@ class EnemyAI:
     # ----------------- 感知方法 -----------------
     def _get_enemy_units(self) -> List[BaseUnit]:
         """获取所有敌军单位（与控制的单位不同队伍）"""
-        return [u for u in self.unit_manager.units if u.is_alive and u.team != self.unit.team]
+        return [u for u in self.unit_manager.units if u.is_alive and u.visible and u.team != self.unit.team]
 
     def _get_friendly_units(self) -> List[BaseUnit]:
         """获取所有友军单位（同队伍且不是自己）"""
-        return [u for u in self.unit_manager.units if u.is_alive and u.team == self.unit.team and u.id != self.unit.id]
+        return [u for u in self.unit_manager.units if u.is_alive and u.visible and u.team == self.unit.team and u.id != self.unit.id]
 
     def _get_closest_unit(self, units: List[BaseUnit]) -> Optional[BaseUnit]:
         """返回距离控制单位最近的有效单位"""

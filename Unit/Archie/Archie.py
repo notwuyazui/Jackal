@@ -10,7 +10,7 @@ from Parameter import *
 
 class Archie(BaseUnit):
     
-    def __init__(self, unit_id: int, unit_team: Team, usingAI = False):
+    def __init__(self, unit_id: int, unit_team: Team, usingAI = False, visible = True):
         
         self.unit_type = 'archie'
         self.body_image_path = 'Unit/Archie/archie.png'
@@ -18,7 +18,8 @@ class Archie(BaseUnit):
         if unit_team == Team.ENEMY:
             self.body_image_path = 'Unit/Archie/enemy_archie.png'
             self.turret_image_path = 'Unit/Archie/enemy_turret.png'
-        self.max_speed_rate = 0.75
+        self.visible = visible
+        self.max_speed_rate = 0.6
         self.max_acceleration_rate = 0.5
         self.min_acceleration_rate = -0.5
         self.max_angular_speed_rate = 0.3
@@ -34,6 +35,7 @@ class Archie(BaseUnit):
                          unit_type=self.unit_type,
                          body_image_path=self.body_image_path, 
                          turret_image_path=self.turret_image_path, 
+                         visible=self.visible,
                          max_speed_rate=self.max_speed_rate, 
                          max_acceleration_rate=self.max_acceleration_rate, 
                          min_acceleration_rate=self.min_acceleration_rate, 
@@ -45,18 +47,18 @@ class Archie(BaseUnit):
                          ammunition_types=self.ammunition_types, 
                          ammo_switch_time=self.ammo_switch_time)
 
-def create_archie(unit_id, unit_team=Team.PLAYER, position=(0, 0)):
+def create_archie(unit_id, unit_team, position=(0, 0), usingAI = False, visible = True):
     # 示例：archie = create_archie(1, Team.PLAYER, position=(400, 300))
-    archie = Archie(unit_id, unit_team)
+    archie = Archie(unit_id, unit_team, usingAI, visible)
     archie.position = position
     return archie            
 
-def create_enemy_archie(unit_id, position=(0, 0), usingAI = False):
-    enemy = Archie(unit_id, Team.ENEMY, usingAI)
+def create_enemy_archie(unit_id, position=(0, 0), usingAI = False, visible = True):
+    enemy = Archie(unit_id, Team.ENEMY, usingAI, visible)
     enemy.position = position
     return enemy
 
-def create_player_archie(unit_id, position=(0, 0), usingAI = False):
-    player = Archie(unit_id, Team.PLAYER, usingAI)
+def create_player_archie(unit_id, position=(0, 0), usingAI = False, visible = True):
+    player = Archie(unit_id, Team.PLAYER, usingAI, visible)
     player.position = position
     return player

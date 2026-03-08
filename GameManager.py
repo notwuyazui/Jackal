@@ -8,6 +8,7 @@ from Bullet.BulletManager import *
 from Unit.Tank.Tank import *
 from Unit.Archie.Archie import *
 from Unit.Plane.Plane import *
+from GameMode import *
 
 class GameManager:
     def __init__ (self, game_map:GameMap = create_empty_map(), unit_manager = UnitManager(), bullet_manager = BulletManager()):
@@ -19,11 +20,11 @@ class GameManager:
         self.camera_speed = 5
         
         self.time = 0.0        # 游戏时间
-        
-        self.add_player_tank(position=(100,500), unit_id=0, usingAI=False)      # 默认添加一个玩家坦克
+        self.print_record_timer = 0.0
 
     def update(self, delta_time):
         self.time += delta_time
+        self.print_record_timer += delta_time
         self.unit_manager.update(delta_time, self.unit_manager, self.bullet_manager, self.game_map)
         self.bullet_manager.update(delta_time, self.unit_manager, self.game_map)
 
@@ -83,58 +84,58 @@ class GameManager:
         
     def set_unit_switch_ammo(self, unit_id):
         return self.unit_manager.get_unit_by_id(unit_id).switch_ammunition()
-    
-    def set_unit_action(self, unit_id, forward = False, backward = False, left = False, right = False, mouse_pos = (0,0), fire = False, switch_ammo = False):
+        
+    def set_unit_action(self, unit_id, action: Action):
         # 控制单位行为的七个基本动作：
         # 前进，后退，左转，右转，鼠标瞄准，开火，切换弹药
-        self.set_unit_movement(unit_id, forward, backward)
-        self.set_unit_turning(unit_id, left, right)
-        self.set_unit_turret_target_to_mouse(unit_id, mouse_pos, self.camera_offset)
-        if fire: self.set_unit_fire(unit_id)
-        if switch_ammo: self.set_unit_switch_ammo(unit_id)
+        self.set_unit_movement(unit_id, action.forward, action.backward)
+        self.set_unit_turning(unit_id, action.left, action.right)
+        self.set_unit_turret_target_to_mouse(unit_id, action.mouse_pos, self.camera_offset)
+        if action.fire: self.set_unit_fire(unit_id)
+        if action.switch_ammo: self.set_unit_switch_ammo(unit_id)
         
     def add_unit(self, unit):
         self.unit_manager.add_unit(unit, self.bullet_manager, self.game_map)
         
-    def add_player_tank(self, position=(0,0), unit_id = None, usingAI = False):
+    def add_player_tank(self, position=(0,0), unit_id = None, usingAI = False, visible = True):
         if unit_id is None:
             unit_id = len(self.unit_manager.units)
-        tank = create_player_tank(unit_id, position, usingAI)
+        tank = create_player_tank(unit_id, position, usingAI, visible)
         self.add_unit(tank)
         return tank
         
-    def add_enemy_tank(self, position=(0,0), unit_id = None, usingAI = False):
+    def add_enemy_tank(self, position=(0,0), unit_id = None, usingAI = False, visible = True):
         if unit_id is None:
             unit_id = len(self.unit_manager.units)
-        tank = create_enemy_tank(unit_id, position, usingAI)
+        tank = create_enemy_tank(unit_id, position, usingAI, visible)
         self.add_unit(tank)
         return tank
     
-    def add_player_archie(self, position=(0,0), unit_id = None, usingAI = False):
+    def add_player_archie(self, position=(0,0), unit_id = None, usingAI = False, visible = True):
         if unit_id is None:
             unit_id = len(self.unit_manager.units)
-        archie = create_player_archie(unit_id, position, usingAI)
+        archie = create_player_archie(unit_id, position, usingAI, visible)
         self.add_unit(archie)
         return archie
     
-    def add_enemy_archie(self, position=(0,0), unit_id = None, usingAI = False):
+    def add_enemy_archie(self, position=(0,0), unit_id = None, usingAI = False, visible = True):
         if unit_id is None:
             unit_id = len(self.unit_manager.units)
-        archie = create_enemy_archie(unit_id, position, usingAI)
+        archie = create_enemy_archie(unit_id, position, usingAI, visible)
         self.add_unit(archie)
         return archie
     
-    def add_player_plane(self, position=(0,0), unit_id = None, usingAI = False):
+    def add_player_plane(self, position=(0,0), unit_id = None, usingAI = False, visible = True):
         if unit_id is None:
             unit_id = len(self.unit_manager.units)
-        plane = create_player_plane(unit_id, position, usingAI)
+        plane = create_player_plane(unit_id, position, usingAI, visible)
         self.add_unit(plane)
         return plane
     
-    def add_enemy_plane(self, position=(0,0), unit_id = None, usingAI = False):
+    def add_enemy_plane(self, position=(0,0), unit_id = None, usingAI = False, visible = True):
         if unit_id is None:
             unit_id = len(self.unit_manager.units)
-        plane = create_enemy_plane(unit_id, position, usingAI)
+        plane = create_enemy_plane(unit_id, position, usingAI, visible)
         self.add_unit(plane)
         return plane
     
@@ -150,6 +151,16 @@ class GameManager:
 
     def get_active_bullets_counts(self):
         return self.bullet_manager.get_active_count()
+    
+    def print_record(self):
+        if self.print_record_timer > 5:
+            self.print_record_timer = 0
+            if UNIT_RECORD_TEXT or DEBUG_MODE:
+                print("time: " + str(int(self.time)))
+                for unit in self.unit_manager.units:
+                    if unit is not None:
+                        print(unit.get_record())
+            
     
     def clear_bullets(self):
         self.bullet_manager.clear()

@@ -69,6 +69,36 @@ def get_class_from_str(class_name: str):
 def count_distance(a, b):
     return ((a.position[0] - b.position[0]) ** 2 + (a.position[1] - b.position[1]) ** 2) ** 0.5
 
+def set_font():
+    # 字体设置
+    font_paths = [
+        "C:/Windows/Fonts/simhei.ttf",  # 黑体
+        "C:/Windows/Fonts/simsun.ttc",  # 宋体
+        "C:/Windows/Fonts/msyh.ttc",    # 微软雅黑
+    ]
+    font = None
+    for path in font_paths:
+        try:
+            font = pygame.font.Font(path, 24)
+            break
+        except:
+            continue
+    if font is None:
+        font = pygame.font.Font(None, 24)  # 使用默认字体
+    return font
+
+class Action:
+    """单位的基本动作"""
+    def __init__(self, forward = False, backward = False, left = False, right = False, mouse_pos = (0,0), fire = False, switch_ammo = False):
+        self.forward = forward
+        self.backward = backward
+        self.left = left
+        self.right = right
+        self.mouse_pos = mouse_pos
+        self.fire = fire
+        self.switch_ammo = switch_ammo
+    
+
 class MethodGroup:
     """方法分组器"""
     
