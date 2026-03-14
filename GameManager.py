@@ -160,8 +160,11 @@ class GameManager:
                 for unit in self.unit_manager.units:
                     if unit is not None:
                         print(unit.get_record())
-            
-    
+                        
+    def draw_mouse_target(self, unit_id, surface, mouse_pos):
+        if self.unit_manager.is_in(unit_id):
+            self.unit_manager.get_unit_by_id(unit_id)._draw_mouse_target_line(surface, self.camera_offset, mouse_pos)
+                        
     def clear_bullets(self):
         self.bullet_manager.clear()
         

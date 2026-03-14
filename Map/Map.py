@@ -10,34 +10,6 @@ import os
 from Parameter import *
 from utils import *
 
-
-'''
-    class GameMap:
-        Attributes:
-            map_data : List[str]    字符地图数据矩阵
-            tile_size : int         每个地图块的像素大小
-            
-        Methods:
-            draw(surface:pygame.Surface, camera_offset:Tuple[int, int]) -> None         绘制地图
-            save_to_file(file_name: str) -> bool                                        保存地图
-            save() -> bool                                                              便捷保存
-            load_from_file(file_path: str, tile_size: int = 64) -> Optional['GameMap']  从文件加载地图（类方法）
-            
-            check_collision(rect:pygame.Rect) -> bool                                   检查矩形是否与地图障碍物碰撞
-            is_walkable(x: int, y: int, width: int = 0, height: int = 0) -> bool        检查指定区域是否可通行
-            get_colliding_obstacles(rect:pygame.Rect) -> List[pygame.Rect]              获取与矩形碰撞的障碍物列表
-            get_map_size() -> Tuple[int, int]                                           获取地图尺寸
-            get_tile_at_position(x: int, y: int) -> Optional[str]                       获取指定像素位置的格子字符
-            
-    Functions:
-        create_map_from_strings(strings: List[str], tile_size: int = 64) -> 'GameMap'               从字符串列表创建地图（类方法）
-        create_map_from_file(file_path: str, tile_size: int = 64) -> Optional['GameMap']            从文件创建地图（类方法）
-        create_test_map() -> 'GameMap'                                                              创建测试地图
-        create_empty_map(width: int = 10, height: int = 10) -> 'GameMap'                            创建空地图
-        create_border_map(width: int = 10, height: int = 10) -> 'GameMap'                           创建有边框的地图
-        create_random_map(width: int = 10, height: int = 10, density: float = 0.3) -> 'GameMap'     创建随机地图
-'''
-
 class GameMap:
     def __init__(self, map_data=[], tile_size=64):
         self.map_data = map_data
@@ -48,10 +20,13 @@ class GameMap:
         # 加载地形图片
         self.flat_image = self._load_image("Map/flat.png")          # 平地
         self.barrier_image = self._load_image("Map/barrier.png")    # 障碍物
+        self.water_image = self._load_image("Map/water.png")        # 水
         
         self.map_surface = pygame.Surface((self.width * tile_size, self.height * tile_size))
         
-        self.obstacles = []
+        # 障碍物列表（按用途区分）
+        self.unit_obstacles = []   # 阻挡单位的障碍物（包含 x 和 w）
+        self.bullet_obstacles = [] # 阻挡子弹的障碍物（仅 x）
         
         # 生成地图
         self._generate_map()
@@ -62,7 +37,7 @@ class GameMap:
         
         surface.blit(self.map_surface, (map_x, map_y))
         
-        # 绘制障碍物边框
+        # 绘制障碍物边框（调试用）
         if hasattr(self, 'debug_draw') and self.debug_draw:
             self._draw_debug(surface, camera_offset)
         
@@ -97,9 +72,6 @@ class GameMap:
         return cls(map_data, tile_size)
 
     @classmethod
-
-    
-    @classmethod
     def load_from_file(cls, file_name: str, tile_size=64) -> 'GameMap':
         file_path = os.path.join(DEFAULT_MAP_PATH, file_name)
         try:
@@ -127,35 +99,43 @@ class GameMap:
             return None
 
     def check_collision(self, rect: pygame.Rect) -> bool:
-        # 检查矩形是否与任何障碍物碰撞
-        for obstacle in self.obstacles:
+        """检查矩形是否与任何单位障碍物碰撞（用于单位移动）"""
+        for obstacle in self.unit_obstacles:
             if rect.colliderect(obstacle):
                 return True
         return False
     
     def is_walkable(self, x: float, y: float, width=0, height=0) -> bool:
+        """检查指定区域是否可通行（单位使用）"""
         # 创建要检查的矩形
         if width > 0 and height > 0:
             rect = pygame.Rect(x, y, width, height)
         else:
             # 如果没指定大小，检查单个格子
-            tile_x = x // self.tile_size
-            tile_y = y // self.tile_size
+            tile_x = int(x // self.tile_size)
+            tile_y = int(y // self.tile_size)
             
             if 0 <= tile_x < self.width and 0 <= tile_y < self.height:
-                return self.map_data[tile_y][tile_x] != 'x'
+                return self.map_data[tile_y][tile_x] not in ('x', 'w')
             return False
         
-        # 检查是否与任何障碍物碰撞
+        # 检查是否与任何单位障碍物碰撞
         return not self.check_collision(rect)
     
     def get_colliding_obstacles(self, rect: pygame.Rect) -> List[pygame.Rect]:
-        # 获取与指定矩形碰撞的所有障碍物
+        """获取与指定矩形碰撞的所有单位障碍物"""
         colliding = []
-        for obstacle in self.obstacles:
+        for obstacle in self.unit_obstacles:
             if rect.colliderect(obstacle):
                 colliding.append(obstacle)
         return colliding
+    
+    def is_bullet_blocked(self, rect: pygame.Rect) -> bool:
+        """检查子弹是否被障碍物阻挡（仅实心障碍物 x）"""
+        for obstacle in self.bullet_obstacles:
+            if rect.colliderect(obstacle):
+                return True
+        return False
     
     def get_map_size(self) -> Tuple[int, int]:
         return (
@@ -165,8 +145,8 @@ class GameMap:
     
     def get_tile_at_position(self, x: float, y: float) -> str:
         # 获取指定位置的格子
-        tile_x = x // self.tile_size
-        tile_y = y // self.tile_size
+        tile_x = int(x // self.tile_size)
+        tile_y = int(y // self.tile_size)
         
         if 0 <= tile_x < self.width and 0 <= tile_y < self.height:
             return self.map_data[tile_y][tile_x]
@@ -182,7 +162,8 @@ class GameMap:
         if not self.map_data:
             return
         
-        self.obstacles = []
+        self.unit_obstacles.clear()
+        self.bullet_obstacles.clear()
         
         for y, row in enumerate(self.map_data):
             for x, cell in enumerate(row):
@@ -192,7 +173,7 @@ class GameMap:
                 if cell == 'o':  # 平地
                     self.map_surface.blit(self.flat_image, (pos_x, pos_y))
                     
-                elif cell == 'x':  # 障碍物
+                elif cell == 'x':  # 障碍物（阻挡单位和子弹）
                     self.map_surface.blit(self.barrier_image, (pos_x, pos_y))
                     
                     obstacle_rect = pygame.Rect(
@@ -201,25 +182,46 @@ class GameMap:
                         self.tile_size,
                         self.tile_size
                     )
-                    self.obstacles.append(obstacle_rect)
+                    self.unit_obstacles.append(obstacle_rect)
+                    self.bullet_obstacles.append(obstacle_rect)
+                
+                elif cell == 'w':  # 水（仅阻挡单位）
+                    self.map_surface.blit(self.water_image, (pos_x, pos_y))
+                    
+                    obstacle_rect = pygame.Rect(
+                        pos_x,
+                        pos_y,
+                        self.tile_size,
+                        self.tile_size
+                    )
+                    self.unit_obstacles.append(obstacle_rect)
+                    # 不加入 bullet_obstacles，子弹可穿过
                     
                 else:
                     print(f"地图位置({x},{y})有未知字符 '{cell}'，默认为平地")
                     self.map_surface.blit(self.flat_image, (pos_x, pos_y))
     
     def _draw_debug(self, surface: pygame.Surface, camera_offset: Tuple[int, int]) -> None:
-        for obstacle in self.obstacles:
+        # 绘制单位障碍物（红色）
+        for obstacle in self.unit_obstacles:
             screen_x = obstacle.x - camera_offset[0]
             screen_y = obstacle.y - camera_offset[1]
-            
             pygame.draw.rect(
                 surface,
                 (255, 0, 0),
                 (screen_x, screen_y, obstacle.width, obstacle.height),
-                2  # 边框宽度
+                2
             )
-    
-
+        # 可选择性绘制子弹障碍物（绿色）用于区分
+        for obstacle in self.bullet_obstacles:
+            screen_x = obstacle.x - camera_offset[0]
+            screen_y = obstacle.y - camera_offset[1]
+            pygame.draw.rect(
+                surface,
+                (0, 255, 0),
+                (screen_x, screen_y, obstacle.width, obstacle.height),
+                1
+            )
 
 # 便捷函数
 def create_map_from_strings(map_strings: List[str], tile_size=64) -> GameMap:
@@ -228,18 +230,15 @@ def create_map_from_strings(map_strings: List[str], tile_size=64) -> GameMap:
 def create_map_from_file(file_name: str, tile_size=64) -> GameMap:
     return GameMap.load_from_file(file_name, tile_size)
 
-# 预定义地图
 def create_test_map() -> GameMap:
     """创建测试地图"""
     return GameMap.load_from_file("test_map.txt")
 
 def create_empty_map(width=15, height=10) -> GameMap:
-    # 创建空地图
     map_data = ["o" * width for _ in range(height)]
     return GameMap(map_data)
 
 def create_border_map(width=15, height=10) -> GameMap:
-    # 创建有边框的地图
     map_data = []
     for y in range(height):
         if y == 0 or y == height - 1:
@@ -250,17 +249,14 @@ def create_border_map(width=15, height=10) -> GameMap:
     return GameMap(map_data)
 
 def create_random_map(width=15, height=10, density=0.3) -> GameMap:
-    # 创建随机地图, 但是会生成一个边界
     map_data = []
     for y in range(height):
         row = []
         for x in range(width):
             is_border = (y == 0 or y == height - 1 or x == 0 or x == width - 1)
             if is_border:
-                # 边界总是障碍物
                 row.append('x')
             else:
-                # 内部区域根据密度随机生成
                 if random.random() < density:
                     row.append('x')
                 else:

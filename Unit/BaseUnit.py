@@ -140,10 +140,10 @@ class BaseUnit:
         
         if self.is_switching_ammo and self.reload_timer <= 0:    # 完成弹种切换
             self._complete_ammo_switch()
-        
+
         # 检查与障碍物的碰撞
         if self.bounding_box:
-            for obstacle in game_map.obstacles:
+            for obstacle in game_map.unit_obstacles: 
                 if self.bounding_box.colliderect(obstacle):
                     # 发生碰撞，恢复到之前的位置
                     self.position = old_position
@@ -398,7 +398,7 @@ class BaseUnit:
             "reload_timer": self.reload_timer
         }
     
-    def draw(self, surface, camera_offset=(0, 0)) -> None:
+    def draw(self, surface, camera_offset=(0, 0), mouse_pos=None) -> None:
         if not self.is_alive:
             return
         if not self.visible:
@@ -427,6 +427,10 @@ class BaseUnit:
         # 绘制视野范围
         if DRAW_SIGHT_RANGE or DEBUG_MODE:
             self._draw_sight_range(surface, camera_offset)
+            
+        # 绘制从坦克到鼠标位置的线段
+        if mouse_pos is not None and (DRAW_MOUSE_TARGET_LINE or DEBUG_MODE) :
+            self._draw_mouse_target_line(surface, camera_offset, mouse_pos)
     
     def _draw_health_bar(self, surface, x, y) -> None:
         """
@@ -471,6 +475,16 @@ class BaseUnit:
         pygame.draw.circle(surface, (0, 0, 0), 
                           (int(screen_x), int(screen_y)), 
                           int(self.sight_range), 1)
+    
+    def _draw_mouse_target_line(self, surface, camera_offset, mouse_pos):
+        """绘制从坦克到鼠标位置的线段"""
+        if not self.is_alive:
+            return
+        screen_x = self.position[0] - camera_offset[0]
+        screen_y = self.position[1] - camera_offset[1]
+        pygame.draw.line(surface, (255, 0, 255), (screen_x, screen_y), (mouse_pos[0], mouse_pos[1]), 1)
+        pygame.draw.circle(surface, (255, 0, 255), (int(mouse_pos[0]), int(mouse_pos[1])), 3)
+                         
     
     def take_damage(self, unit_manager, damage_source, damage_amount) -> float:
         """

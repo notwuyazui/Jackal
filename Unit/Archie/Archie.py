@@ -22,7 +22,7 @@ class Archie(BaseUnit):
         self.max_speed_rate = 0.6
         self.max_acceleration_rate = 0.5
         self.min_acceleration_rate = -0.5
-        self.max_angular_speed_rate = 0.3
+        self.max_angular_speed_rate = 0.5
         self.turret_angular_speed_rate = 0.5
         self.max_health_rate = 2.0
         self.sight_range = 100

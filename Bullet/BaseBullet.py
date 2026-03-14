@@ -163,9 +163,9 @@ class BaseBullet:
             self.is_active = False
         return True  # 在爆炸期间仍然返回True，以便绘制爆炸效果
     
-    def _check_obstacle_collision(self, game_map) -> Optional[pygame.Rect]:
-        """检查与障碍物的碰撞"""
-        for obstacle in game_map.obstacles:
+    def _check_obstacle_collision(self, game_map):
+        """检查与障碍物的碰撞（使用 bullet_obstacles）"""
+        for obstacle in game_map.bullet_obstacles: 
             if self.bounding_box.colliderect(obstacle):
                 return obstacle
         return None

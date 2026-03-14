@@ -38,9 +38,9 @@ class UnitManager:
             # 移除对应的 AI
             self.enemy_ais = [ai for ai in self.enemy_ais if ai.unit != unit]
 
-    def draw(self, surface, camera_offset):
+    def draw(self, surface, camera_offset, mouse_pos = None):
         for unit in self.units:
-            unit.draw(surface, camera_offset)
+            unit.draw(surface, camera_offset, mouse_pos)
             
     def get_unit_by_id(self, unit_id):
         for unit in self.units:
