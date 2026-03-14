@@ -22,6 +22,8 @@ BULLET_COOLDOWN = 1.0       # 子弹的基础冷却时间
 BULLET_EXPLOSION_DAMAGE_APPLY_DISTANT_FACTOR = False   # 子弹爆炸造成的伤害是否与距离有关
 EXPLOSION_IMAGE_ADAPT_TO_RANGE = False               # 爆炸图片是否根据爆炸范围调整大小
 
+POTENTIAL_DAMAGE_THRESHOLD = 30.0      # 计算潜在伤害的范围
+
 # UNIT_DIAGONAL_SPEED = UNIT_SPEED / np.sqrt(2)       # 单位对角线速度
 # BULLET_DIAGONAL_SPEED = BULLET_SPEED / np.sqrt(2)   # 子弹对角线速度
 

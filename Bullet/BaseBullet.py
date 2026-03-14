@@ -81,6 +81,7 @@ class BaseBullet:
         self.collided_with: Optional[str] = None  # 'unit', 'obstacle', 'friendly'
         self.collided_objects: List[Any] = []  # 碰撞到的对象列表
         self.distance_traveled: float = 0.0  # 已飞行距离
+        self.potential_recorded_units: set = set()   # 存储已经贡献过潜在伤害的单位id
         
         # 初始化碰撞箱
         self._update_bounding_box()
@@ -140,6 +141,9 @@ class BaseBullet:
         
         # 更新已飞行距离
         self.distance_traveled += math.sqrt(dx**2 + dy**2)
+        
+        # 检查与单位的潜在伤害
+        self._check_potential_damage(unit_manager)
         
         # 检查与障碍物的碰撞
         obstacle_collision = self._check_obstacle_collision(game_map)
@@ -244,6 +248,32 @@ class BaseBullet:
         
         return base_damage
     
+    def _check_potential_damage(self, unit_manager):
+        """
+        检查子弹是否进入任何存活单位的潜在伤害范围（100像素）
+        如果进入且尚未对该单位记录过，则累加潜在伤害到该单位
+        """
+        threshold = POTENTIAL_DAMAGE_THRESHOLD
+        for unit in unit_manager.units:
+            if not unit.is_alive:
+                continue
+            # 跳过已经记录过的单位
+            if unit.id in self.potential_recorded_units:
+                continue
+            # 计算距离
+            dx = unit.position[0] - self.position[0]
+            dy = unit.position[1] - self.position[1]
+            dist = math.hypot(dx, dy)
+            if dist <= threshold:
+                # 计算此子弹的潜在伤害：基础伤害 + 爆炸伤害（如果有）
+                potential = self.base_damage
+                if self.is_explosive:
+                    potential += BULLET_DAMAGE * self.explosion_damage_rate  # 爆炸伤害（不考虑距离衰减）
+                # 累加到单位
+                unit.potential_damage += potential
+                # 记录已处理
+                self.potential_recorded_units.add(unit.id)
+                
     def _trigger_explosion(self):
         """触发爆炸"""
         self.has_exploded = True

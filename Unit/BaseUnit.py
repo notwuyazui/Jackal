@@ -91,6 +91,7 @@ class BaseUnit:
         self.assist_destroy_count = 0       # 协助击杀（为击杀者提供视野造成的击杀）
         self.assist_damage_dealt = 0        # 协助伤害（为击杀者提供视野造成的伤害）
         self.damage_received = 0            # 伤害承受
+        self.potential_damage = 0.0         # 潜在伤害
         self.killed_by = None               # 击杀者
         self.living_time = 0.0              # 存活时间
         self.reward = 0.0
@@ -528,6 +529,7 @@ class BaseUnit:
             "assist_destroy_count": self.assist_destroy_count,
             "assist_damage_dealt": self.assist_damage_dealt,
             "damage_received": self.damage_received,
+            "potential_damage": self.potential_damage,
             "killed_by": self.killed_by,
             "living_time": self.living_time,
             "reward": self.reward
