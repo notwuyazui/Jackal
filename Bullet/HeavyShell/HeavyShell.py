@@ -1,5 +1,5 @@
 '''
-    普通炮弹
+    重型炮弹，拥有4.0倍的伤害，对重甲单位伤害较高，速度很慢，射程很长，冷却时间较长，大范围爆炸，爆炸伤害为一半
 '''
 from Bullet.BaseBullet import BaseBullet
 from typing import Tuple

@@ -21,6 +21,7 @@ class BaseUnit:
                  turret_angular_speed_rate=INF, 
                  max_health_rate=1.0, 
                  sight_range=INF,
+                 communication_range=INF,
                  armor_type=ArmorType.NONE, 
                  ammunition_types=[], 
                  ammo_switch_time=UNIT_AMMO_SWITCH_TIME):
@@ -55,6 +56,7 @@ class BaseUnit:
         self.turret_angular_speed = UNIT_TURRET_ANGULAR_SPEED * self.turret_angular_speed_rate  # 炮塔转动角速度
         self.max_health = UNIT_HEALTH * self.max_health_rate                                    # 最大生命值
         self.sight_range = sight_range                                                          # 视野范围
+        self.communication_range = communication_range                                     # 通信范围, 此值应小于等于视野范围
         
         # 视野
         from Map.Map import GameMap
@@ -380,7 +382,121 @@ class BaseUnit:
             target_angle += 360
         
         self.turret_target_angle = target_angle
-    
+
+    def _merge_visible_info_from(self, source_unit):
+        """
+        将源单位的可见单位和子弹合并到自己的可见信息中。
+        返回 (unit_added, bullet_added, map_added, any_added)
+        """
+        unit_added = False
+        bullet_added = False
+
+        # 合并可见单位
+        for other_unit in source_unit.visible_units.units:
+            if other_unit.id == self.id:
+                continue
+            if not any(u.id == other_unit.id for u in self.visible_units.units):
+                self.visible_units.units.append(other_unit)
+                unit_added = True
+
+        # 合并可见子弹
+        for bullet in source_unit.visible_bullets.bullets:
+            if not any(b.id == bullet.id for b in self.visible_bullets.bullets):
+                self.visible_bullets.bullets.append(bullet)
+                bullet_added = True
+
+        # 地图信息（目前所有单位共享同一地图对象，因此永远不会有新增）
+        map_added = False
+        any_added = unit_added or bullet_added or map_added
+        return unit_added, bullet_added, map_added, any_added
+
+    def communicate_to(self, target_unit):
+        """
+        向指定的友方单位单向发送自己的可见信息。
+        返回四个布尔值，表示目标单位是否因此获得了新的信息：(unit_added, bullet_added, map_added, any_added)
+        """
+        # 检查目标是否存活且可见且为友方
+        if not target_unit.is_alive or not target_unit.visible:
+            return False, False, False, False
+        if target_unit.team != self.team:
+            return False, False, False, False
+        # 检查距离是否在通讯范围内
+        dist = count_distance(self, target_unit)
+        if dist > self.communication_range:
+            return False, False, False, False
+
+        # 将自身信息合并到目标单位
+        return target_unit._merge_visible_info_from(self)
+
+    def broadcast(self, unit_manager):
+        """
+        向通讯范围内所有可见的友方单位广播自己的可见信息。
+        返回四个布尔值，表示本次广播是否有任何单位获得了新信息：(any_unit_added, any_bullet_added, any_map_added, any_added)
+        """
+        any_unit_added = False
+        any_bullet_added = False
+        any_map_added = False
+
+        for other in unit_manager.units:
+            if not other.is_alive or not other.visible:
+                continue
+            if other.team != self.team or other.id == self.id:
+                continue
+            dist = count_distance(self, other)
+            if dist <= self.communication_range:
+                unit_added, bullet_added, map_added, _ = other._merge_visible_info_from(self)
+                if unit_added:
+                    any_unit_added = True
+                if bullet_added:
+                    any_bullet_added = True
+                if map_added:
+                    any_map_added = True
+
+        any_added = any_unit_added or any_bullet_added or any_map_added
+        return any_unit_added, any_bullet_added, any_map_added, any_added
+
+    def receive_from(self, source_unit):
+        """
+        从指定的友方单位接收信息（要求源单位在通讯范围内）。
+        返回四个布尔值，表示自己是否因此获得了新的信息：(unit_added, bullet_added, map_added, any_added)
+        """
+        if not source_unit.is_alive or not source_unit.visible:
+            return False, False, False, False
+        if source_unit.team != self.team:
+            return False, False, False, False
+        dist = count_distance(self, source_unit)
+        if dist > source_unit.communication_range:  # 使用源单位的通讯范围
+            return False, False, False, False
+
+        return self._merge_visible_info_from(source_unit)
+
+    def broadcast_receive(self, unit_manager):
+        """
+        检查所有可见的友方单位，如果自己在对方的通讯范围内，则从对方接收信息。
+        返回四个布尔值，表示自己是否因此获得了新的信息：(unit_added, bullet_added, map_added, any_added)
+        """
+        unit_added = False
+        bullet_added = False
+        map_added = False
+
+        for other in unit_manager.units:
+            if not other.is_alive or not other.visible:
+                continue
+            if other.team != self.team or other.id == self.id:
+                continue
+            dist = count_distance(self, other)
+            if dist <= other.communication_range:  # 检查自己是否在其他单位的通讯范围内
+                u_added, b_added, m_added, _ = self._merge_visible_info_from(other)
+                if u_added:
+                    unit_added = True
+                if b_added:
+                    bullet_added = True
+                if m_added:
+                    map_added = True
+
+        any_added = unit_added or bullet_added or map_added
+        return unit_added, bullet_added, map_added, any_added
+
     def get_info(self) -> dict:
         return {
             "id": self.id,

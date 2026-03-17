@@ -16,4 +16,6 @@ DRAW_BULLET_BOUNDING_BOX = False    # 绘制子弹碰撞箱
 
 BULLET_INFO_TEXT = False            # 增加子弹发射和移除时的文本提示
 ENEMY_STATE_TEXT = False            # 增加敌方坦克状态信息文本提示
-UNIT_RECORD_TEXT = True            # 单位记录文本
+UNIT_RECORD_TEXT = True             # 单位记录文本
+
+AUTO_COMMUNICATE = True             # 自动通信

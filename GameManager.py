@@ -94,6 +94,18 @@ class GameManager:
         if action.fire: self.set_unit_fire(unit_id)
         if action.switch_ammo: self.set_unit_switch_ammo(unit_id)
         
+    def set_unit_communicate_to(self, unit_id, target_unit_id):
+        self.unit_manager.get_unit_by_id(unit_id).set_communicate_to(target_unit_id)
+        
+    def set_unit_broadcast(self, unit_id):
+        self.unit_manager.get_unit_by_id(unit_id).broadcast()
+    
+    def set_unit_receive_from(self, unit_id, source_unit_id):
+        self.unit_manager.get_unit_by_id(unit_id).receive_from(source_unit_id)
+        
+    def set_unit_broadcast_receive(self, unit_id):
+        self.unit_manager.get_unit_by_id(unit_id).broadcast_receive()
+    
     def add_unit(self, unit):
         self.unit_manager.add_unit(unit, self.bullet_manager, self.game_map)
         

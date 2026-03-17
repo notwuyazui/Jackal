@@ -26,6 +26,7 @@ class Archie(BaseUnit):
         self.turret_angular_speed_rate = 0.5
         self.max_health_rate = 2.0
         self.sight_range = 100
+        self.communication_range = 100
         self.armor_type = ArmorType.MEDIUM                                                        # 护甲类型
         self.ammunition_types = ['rocket_shell']                                                # 单位拥有弹种
         self.ammo_switch_time =  UNIT_AMMO_SWITCH_TIME                                          # 单位切换弹种时间
@@ -43,6 +44,7 @@ class Archie(BaseUnit):
                          turret_angular_speed_rate=self.turret_angular_speed_rate, 
                          max_health_rate=self.max_health_rate, 
                          sight_range=self.sight_range,
+                         communication_range=self.communication_range,
                          armor_type=self.armor_type, 
                          ammunition_types=self.ammunition_types, 
                          ammo_switch_time=self.ammo_switch_time)

@@ -28,6 +28,10 @@ class UnitManager:
         # 更新所有单位
         for unit in self.units:
             unit.update(delta_time, unit_manager, bullet_manager, game_map)
+            
+        # 自动通信
+        if AUTO_COMMUNICATE:
+            self.auto_communicate()
 
         self.to_remove.clear()
         for unit in self.units:
@@ -37,6 +41,20 @@ class UnitManager:
         for unit in self.to_remove:
             # 移除对应的 AI
             self.enemy_ais = [ai for ai in self.enemy_ais if ai.unit != unit]
+
+    def auto_communicate(self):
+        """
+        自动通信：反复让所有存活单位广播自己的可见信息，直到一轮中没有任何单位获得新信息为止。
+        """
+        changed = True
+        while changed:
+            changed = False
+            # 收集当前所有存活单位（避免在迭代过程中列表变化）
+            alive_units = [u for u in self.units if u.is_alive]
+            for unit in alive_units:
+                _, _, _, any_added = unit.broadcast(self)
+                if any_added:
+                    changed = True
 
     def draw(self, surface, camera_offset, mouse_pos = None):
         for unit in self.units:

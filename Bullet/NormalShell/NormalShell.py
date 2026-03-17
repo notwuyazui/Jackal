@@ -1,5 +1,5 @@
 '''
-    普通炮弹
+    普通炮弹，拥有标准的伤害，对重甲单位伤害较低，速度一般，射程较短，冷却时间较短，不会爆炸
 '''
 from Bullet.BaseBullet import BaseBullet
 from typing import Tuple

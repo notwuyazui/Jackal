@@ -25,6 +25,7 @@ class Tank(BaseUnit):
         self.turret_angular_speed_rate = 1.0
         self.max_health_rate = 1.0
         self.sight_range = 200
+        self.communication_range = 200
         self.armor_type = ArmorType.LIGHT                                                        # 护甲类型
         self.ammunition_types = ['normal_shell','rocket_shell','heavy_shell']                                                      # 单位拥有弹种
         self.ammo_switch_time =  UNIT_AMMO_SWITCH_TIME                                          # 单位切换弹种时间
@@ -42,6 +43,7 @@ class Tank(BaseUnit):
                          turret_angular_speed_rate=self.turret_angular_speed_rate, 
                          max_health_rate=self.max_health_rate, 
                          sight_range=self.sight_range,
+                         communication_range=self.communication_range,
                          armor_type=self.armor_type, 
                          ammunition_types=self.ammunition_types, 
                          ammo_switch_time=self.ammo_switch_time)
