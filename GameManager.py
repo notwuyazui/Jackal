@@ -167,11 +167,15 @@ class GameManager:
     def print_record(self):
         if self.print_record_timer > 5:
             self.print_record_timer = 0
+            print("time: " + str(int(self.time)))
             if UNIT_RECORD_TEXT or DEBUG_MODE:
-                print("time: " + str(int(self.time)))
                 for unit in self.unit_manager.units:
                     if unit is not None:
                         print(unit.get_record())
+            if PRINT_VISIBLE_UNIT or DEBUG_MODE:
+                ids = self.unit_manager.get_unit_by_id(0).get_visible_unit_ids()
+                print(f"Unit 0 可见的单位ID: {ids}")
+            
                         
     def draw_mouse_target(self, unit_id, surface, mouse_pos):
         if self.unit_manager.is_in(unit_id):

@@ -56,7 +56,8 @@ class BaseUnit:
         self.turret_angular_speed = UNIT_TURRET_ANGULAR_SPEED * self.turret_angular_speed_rate  # 炮塔转动角速度
         self.max_health = UNIT_HEALTH * self.max_health_rate                                    # 最大生命值
         self.sight_range = sight_range                                                          # 视野范围
-        self.communication_range = communication_range                                     # 通信范围, 此值应小于等于视野范围
+        self.min_sight_range = UNIT_MIN_SIGHT_RATIO * self.sight_range                          # 应用水滴形视野时，最小视野范围（即向正后方的视野范围）
+        self.communication_range = communication_range                                          # 通信范围, 此值应小于等于视野范围
         
         # 视野
         from Map.Map import GameMap
@@ -162,10 +163,10 @@ class BaseUnit:
         self.visible_units.clear()
         self.visible_bullets.clear()
         for unit in unit_manager.units:
-            if count_distance(self,unit) <= self.sight_range:
+            if self.is_in_sight(unit):
                 self.visible_units.add_unit(unit, bullet_manager, game_map)
         for bullet in bullet_manager.bullets:
-            if count_distance(self,bullet) <= self.sight_range:
+            if self.is_in_sight(bullet):
                 self.visible_bullets.add_bullet(bullet)
     
     def _update_ammo_switch(self, delta_time) -> None:
@@ -235,7 +236,31 @@ class BaseUnit:
             x, y = self.position
             width, height = self.size
             self.bounding_box = pygame.Rect(x - width / 2, y - height / 2, width, height)
-            
+
+    def is_in_sight(self, target) -> bool:
+        """
+        判断目标（单位或子弹）是否在视野内。
+        根据 USE_TEAR_DROP_VISION 决定使用圆形还是水滴形判断。
+        """
+        dx = target.position[0] - self.position[0]
+        dy = target.position[1] - self.position[1]
+        distance = math.hypot(dx, dy)
+
+        if not USE_TEAR_DROP_VISION:
+            return distance <= self.sight_range
+
+        # 水滴形视野
+        target_angle = math.atan2(dy, dx)               # 返回 [-π, π]
+        forward_rad = math.radians(self.direction_angle - 90)
+        diff_angle = target_angle - forward_rad
+        diff_angle = (diff_angle + math.pi) % (2 * math.pi) - math.pi
+
+        a = (self.sight_range + self.min_sight_range) / 2
+        b = (self.sight_range - self.min_sight_range) / 2
+        max_dist_at_angle = a + b * math.cos(diff_angle)
+
+        return distance <= max_dist_at_angle
+
     def normalize_angle(self, angle) -> float:
         """将角度规范化到0-360度范围内"""
         angle %= 360
@@ -497,6 +522,12 @@ class BaseUnit:
         any_added = unit_added or bullet_added or map_added
         return unit_added, bullet_added, map_added, any_added
 
+    def get_visible_unit_ids(self) -> List[int]:
+        """
+        获取当前可见的所有单位ID列表。
+        """
+        return [unit.id for unit in self.visible_units.units]
+
     def get_info(self) -> dict:
         return {
             "id": self.id,
@@ -584,14 +615,40 @@ class BaseUnit:
         surface.blit(text_surface, text_rect)
     
     def _draw_sight_range(self, surface, camera_offset):
-        """绘制视野范围"""
         if not self.is_alive:
             return
         screen_x = self.position[0] - camera_offset[0]
         screen_y = self.position[1] - camera_offset[1]
-        pygame.draw.circle(surface, (0, 0, 0), 
-                          (int(screen_x), int(screen_y)), 
-                          int(self.sight_range), 1)
+        color = (0, 0, 0)
+
+        if not USE_TEAR_DROP_VISION:
+            # 圆形视野
+            pygame.draw.circle(surface, color,
+                            (int(screen_x), int(screen_y)),
+                            int(self.sight_range), 1)
+        else:
+            angle_rad = math.radians(self.direction_angle - 90)
+            forward_x = math.cos(angle_rad)
+            forward_y = math.sin(angle_rad)
+
+            points = []
+            num_segments = 60  # 轮廓平滑度
+            for i in range(num_segments + 1):
+                theta = 2 * math.pi * i / num_segments
+                a = (self.sight_range + self.min_sight_range) / 2
+                b = (self.sight_range - self.min_sight_range) / 2
+                r = a + b * math.cos(theta)
+                dir_x = forward_x * math.cos(theta) - forward_y * math.sin(theta)
+                dir_y = forward_x * math.sin(theta) + forward_y * math.cos(theta)
+
+                world_x = self.position[0] + r * dir_x
+                world_y = self.position[1] + r * dir_y
+                screen_pt = (world_x - camera_offset[0],
+                            world_y - camera_offset[1])
+                points.append(screen_pt)
+
+            if len(points) >= 3:
+                pygame.draw.polygon(surface, color, points, 1)
     
     def _draw_mouse_target_line(self, surface, camera_offset, mouse_pos):
         """绘制从坦克到鼠标位置的线段"""
@@ -602,7 +659,6 @@ class BaseUnit:
         pygame.draw.line(surface, (255, 0, 255), (screen_x, screen_y), (mouse_pos[0], mouse_pos[1]), 1)
         pygame.draw.circle(surface, (255, 0, 255), (int(mouse_pos[0]), int(mouse_pos[1])), 3)
                          
-    
     def take_damage(self, unit_manager, damage_source, damage_amount) -> float:
         """
         坦克承受伤害
@@ -631,7 +687,7 @@ class BaseUnit:
                 continue
             if unit.is_alive == False:
                 continue
-            if count_distance(self, unit) <= unit.sight_range:
+            if unit.is_in_sight(self):
                 unit.assist_damage_dealt += damage_amount
                 if destroy:
                     unit.assist_destroy_count += 1

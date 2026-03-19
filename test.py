@@ -18,10 +18,9 @@ from PCControl import *
 def init_game():
     game_manager = GameManager()
     game_manager.set_test_map()
-    # game_manager.add_player_tank(unit_id=0, position=(100,500), usingAI=False, visible=False)      # 添加一个玩家坦克
+    game_manager.add_player_tank(unit_id=0, position=(100,500), usingAI=False, visible=True)      # 添加一个玩家坦克
     
-    # game_manager.add_player_tank(unit_id=101, position = (256, 448), usingAI = True)
-    game_manager.add_player_tank(unit_id=0, position=(256, 448), usingAI=False, visible=True)      # 添加一个玩家坦克
+    game_manager.add_player_tank(unit_id=101, position = (256, 448), usingAI = True)
     game_manager.add_player_tank(unit_id=102, position = (480, 448), usingAI = True)
     game_manager.add_player_tank(unit_id=103, position = (768, 448), usingAI = True)
     game_manager.add_player_archie(unit_id=104, position = (256, 512), usingAI = True)
