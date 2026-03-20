@@ -41,8 +41,6 @@ def PCControl(game_manager: GameManager, action: Action, screen):
                     action.left = True
                 elif event.key == pygame.K_d:
                     action.right = True
-                elif event.key == pygame.K_F1:
-                    debug_mode = not debug_mode
                 elif event.key == pygame.K_p:
                     game_manager.save_map()
                 elif event.key == pygame.K_SPACE:

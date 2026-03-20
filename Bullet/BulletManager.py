@@ -1,6 +1,6 @@
 """子弹管理器，负责管理所有子弹的更新和绘制"""
 from Unit.Tank.Tank import *
-from Map.Map import *
+from Map.GameMap import *
 from GameMode import *
 from Bullet.NormalShell.NormalShell import *
 from Unit.EnemyAI import *

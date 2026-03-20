@@ -2,7 +2,7 @@
     用于游戏实体的总体控制，包括子弹、单位、地图的更新和绘制
 '''
 
-from Map.Map import *
+from Map.GameMap import *
 from Unit.UnitManager import *
 from Bullet.BulletManager import *
 from Unit.Tank.Tank import *
@@ -25,6 +25,7 @@ class GameManager:
     def update(self, delta_time):
         self.time += delta_time
         self.print_record_timer += delta_time
+        self.game_map.update(delta_time)
         self.unit_manager.update(delta_time, self.unit_manager, self.bullet_manager, self.game_map)
         self.bullet_manager.update(delta_time, self.unit_manager, self.game_map)
 
@@ -67,23 +68,38 @@ class GameManager:
             self.camera_offset[0] += self.camera_speed
         
     def set_unit_movement(self, unit_id, forward=False, backward=False):
-        return self.unit_manager.get_unit_by_id(unit_id).set_movement(forward, backward)
+        unit = self.unit_manager.get_unit_by_id(unit_id)
+        if unit is None:
+            return False
+        return unit.set_movement(forward, backward)
     
     def set_unit_turning(self, unit_id, left=False, right=False):
-        return self.unit_manager.get_unit_by_id(unit_id).set_turning(left, right)
+        unit = self.unit_manager.get_unit_by_id(unit_id)
+        if unit is None:
+            return False
+        return unit.set_turning(left, right)
     
     def set_unit_turret_target_to_mouse(self, unit_id, mouse_pos, camera_offset = None):
         if camera_offset is None:
             camera_offset = self.camera_offset
-        return self.unit_manager.get_unit_by_id(unit_id).set_turret_target_to_mouse(mouse_pos, camera_offset)
+        unit = self.unit_manager.get_unit_by_id(unit_id)
+        if unit is None:
+            return False
+        return unit.set_turret_target_to_mouse(mouse_pos, camera_offset)
     
     def set_unit_fire(self, unit_id):
-        bullet = self.unit_manager.get_unit_by_id(unit_id).fire()
+        unit = self.unit_manager.get_unit_by_id(unit_id)
+        if unit is None:
+            return None
+        bullet = unit.fire()
         self.add_bullet(bullet)
         return bullet
         
     def set_unit_switch_ammo(self, unit_id):
-        return self.unit_manager.get_unit_by_id(unit_id).switch_ammunition()
+        unit = self.unit_manager.get_unit_by_id(unit_id)
+        if unit is None:
+            return False
+        return unit.switch_ammunition()
         
     def set_unit_action(self, unit_id, action: Action):
         # 控制单位行为的七个基本动作：
@@ -95,16 +111,28 @@ class GameManager:
         if action.switch_ammo: self.set_unit_switch_ammo(unit_id)
         
     def set_unit_communicate_to(self, unit_id, target_unit_id):
-        self.unit_manager.get_unit_by_id(unit_id).set_communicate_to(target_unit_id)
+        unit = self.unit_manager.get_unit_by_id(unit_id)
+        if unit is None:
+            return False
+        unit.set_communicate_to(target_unit_id)
         
     def set_unit_broadcast(self, unit_id):
-        self.unit_manager.get_unit_by_id(unit_id).broadcast()
+        unit = self.unit_manager.get_unit_by_id(unit_id)
+        if unit is None:
+            return False
+        unit.broadcast()
     
     def set_unit_receive_from(self, unit_id, source_unit_id):
-        self.unit_manager.get_unit_by_id(unit_id).receive_from(source_unit_id)
+        unit = self.unit_manager.get_unit_by_id(unit_id)
+        if unit is None:
+            return False
+        unit.receive_from(source_unit_id)
         
     def set_unit_broadcast_receive(self, unit_id):
-        self.unit_manager.get_unit_by_id(unit_id).broadcast_receive()
+        unit = self.unit_manager.get_unit_by_id(unit_id)
+        if unit is None:
+            return False
+        unit.broadcast_receive()
     
     def add_unit(self, unit):
         self.unit_manager.add_unit(unit, self.bullet_manager, self.game_map)
@@ -173,13 +201,16 @@ class GameManager:
                     if unit is not None:
                         print(unit.get_record())
             if PRINT_VISIBLE_UNIT or DEBUG_MODE:
-                ids = self.unit_manager.get_unit_by_id(0).get_visible_unit_ids()
-                print(f"Unit 0 可见的单位ID: {ids}")
+                unit0 = self.unit_manager.get_unit_by_id(0)
+                if unit0 is not None:
+                    ids = unit0.get_visible_unit_ids()
+                    print(f"Unit 0 可见的单位ID: {ids}")
             
-                        
     def draw_mouse_target(self, unit_id, surface, mouse_pos):
         if self.unit_manager.is_in(unit_id):
-            self.unit_manager.get_unit_by_id(unit_id)._draw_mouse_target_line(surface, self.camera_offset, mouse_pos)
+            unit = self.unit_manager.get_unit_by_id(unit_id)
+            if unit is not None:
+                unit._draw_mouse_target_line(surface, self.camera_offset, mouse_pos)
                         
     def clear_bullets(self):
         self.bullet_manager.clear()
@@ -187,14 +218,14 @@ class GameManager:
     def clear_units(self):
         self.unit_manager.clear()
     
-    def save_map(self, file_name = None):
-        self.game_map.save(file_name)
+    def save_map(self):
+        self.game_map.save()
     
-    def save_unit(self, file_name = None):
-        self.unit_manager.save(file_name)
+    def save_unit(self):
+        self.unit_manager.save()
         
-    def save_bullet(self, file_name = None):
-        self.bullet_manager.save(file_name)
+    def save_bullet(self):
+        self.bullet_manager.save()
     
     def save(self):
         self.save_map()

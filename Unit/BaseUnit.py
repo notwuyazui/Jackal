@@ -60,7 +60,7 @@ class BaseUnit:
         self.communication_range = communication_range                                          # 通信范围, 此值应小于等于视野范围
         
         # 视野
-        from Map.Map import GameMap
+        from Map.GameMap import GameMap
         from Unit.UnitManager import UnitManager
         from Bullet.BulletManager import BulletManager
         self.visible_map = GameMap()
@@ -113,7 +113,7 @@ class BaseUnit:
     def update(self, delta_time, unit_manager = None, bullet_manager = None, game_map = None):
         from Unit.UnitManager import UnitManager
         from Bullet.BulletManager import BulletManager
-        from Map.Map import GameMap
+        from Map.GameMap import GameMap
         if unit_manager is None:
             unit_manager = UnitManager()
         if bullet_manager is None:
@@ -364,7 +364,7 @@ class BaseUnit:
             delattr(self, 'target_ammunition')
         self.is_switching_ammo = False
         
-    def set_movement(self, forward=False, backward=False) -> None:
+    def set_movement(self, forward=False, backward=False) -> bool:
         """
         设置坦克前进或后退
         """
@@ -374,8 +374,9 @@ class BaseUnit:
             self.acceleration = self.min_acceleration
         else:
             self.acceleration = 0
+        return True
     
-    def set_turning(self, left=False, right=False) -> None:
+    def set_turning(self, left=False, right=False) -> bool:
         """
         设置坦克转向
         """
@@ -385,8 +386,9 @@ class BaseUnit:
             self.angular_speed = self.max_angular_speed
         else:
             self.angular_speed = 0
+        return True
     
-    def set_turret_target_to_mouse(self, mouse_pos, camera_offset) -> None:
+    def set_turret_target_to_mouse(self, mouse_pos, camera_offset) -> bool:
         """
         设置炮塔目标指向鼠标位置
         """
@@ -407,6 +409,7 @@ class BaseUnit:
             target_angle += 360
         
         self.turret_target_angle = target_angle
+        return True
 
     def _merge_visible_info_from(self, source_unit):
         """

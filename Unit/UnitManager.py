@@ -2,7 +2,7 @@
     单位管理器，负责管理所有单位的更新和绘制，并自动管理 AI 单位
 """
 from Unit.Tank.Tank import *
-from Map.Map import *
+from Map.GameMap import *
 from GameMode import *
 
 class UnitManager:

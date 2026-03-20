@@ -4,7 +4,7 @@ from Unit.Tank.Tank import *
 from Unit.Archie.Archie import *
 from Unit.Plane.Plane import *
 from Unit.EnemyAI import *
-from Map.Map import *
+from Map.GameMap import *
 from GameMode import *
 from Bullet.NormalShell.NormalShell import *
 from Bullet.RocketShell.RocketShell import *
