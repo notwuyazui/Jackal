@@ -86,6 +86,12 @@ class EnemyAI:
             self.unit.set_turning(False, False)
             return
         target = self._get_closest_unit(enemy_units)
+        if target is None:
+            self.ai_state = "idle"
+            self.unit.set_movement(False, False)
+            self.unit.set_turning(False, False)
+            return
+            
         self.target_unit = target
 
         # 获取目标方向向量

@@ -25,7 +25,7 @@ class BaseBullet:
                  speed_rate: float = 1.0,
                  damage_rate: float = 1.0,
                  cooldown: float = 0.2,
-                 penetration: List[float] = None,
+                 penetration = None,
                  is_explosive: bool = False,
                  explosion_radius: float = 0.0,
                  explosion_damage_rate: float = 1.0,
@@ -367,6 +367,7 @@ class BaseBullet:
     def get_info(self) -> Dict[str, Any]:
         """获取子弹信息"""
         pass
+        return {}
     
     def save_to_file(self, file_name: str = "default_bullet.json") -> bool:
         """保存子弹配置到文件"""
@@ -400,7 +401,7 @@ class BaseBullet:
             print(f"保存子弹配置失败: {e}")
             return False
     
-    def save(self, file_name: str = None) -> bool:
+    def save(self, file_name = None) -> bool:
         """便捷保存方法"""
         if file_name is None:
             save_path = get_next_filename(DEFAULT_BULLET_PATH, 'default_bullet', '.json')
@@ -410,9 +411,9 @@ class BaseBullet:
     @classmethod
     def load_from_file(cls, file_name: str = "default_bullet.json") -> Optional[Dict[str, Any]]:
         """从文件加载子弹配置"""
+        filepath = os.path.join(DEFAULT_BULLET_PATH, file_name)
+
         try:
-            filepath = os.path.join(DEFAULT_BULLET_PATH, file_name)
-            
             with open(filepath, 'r', encoding='utf-8') as f:
                 config = json.load(f)
             

@@ -13,7 +13,7 @@ DRAW_ENEMY_STATE_MESSAGE = False    # 绘制敌方坦克状态信息
 DRAW_ENEMY_SEE_LINE = False         # 绘制敌方坦克视野线
 DRAW_BULLET_EXPLOSION_RANGE = True  # 绘制子弹爆炸范围
 DRAW_BULLET_BOUNDING_BOX = False    # 绘制子弹碰撞箱
-DRAW_OBSTACLE_BOUNDING_BOX = False  # 绘制障碍物碰撞箱
+DRAW_OBSTACLE_BOUNDING_BOX = False   # 绘制障碍物碰撞箱
 
 BULLET_INFO_TEXT = False            # 增加子弹发射和移除时的文本提示
 ENEMY_STATE_TEXT = False            # 增加敌方坦克状态信息文本提示

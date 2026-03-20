@@ -16,7 +16,7 @@ class GameManager:
         self.unit_manager = unit_manager
         self.bullet_manager = bullet_manager
         
-        self.camera_offset = [0, 0]
+        self.camera_offset = [0.0, 0.0]
         self.camera_speed = 5
         
         self.time = 0.0        # 游戏时间
@@ -25,14 +25,16 @@ class GameManager:
     def update(self, delta_time):
         self.time += delta_time
         self.print_record_timer += delta_time
-        self.game_map.update(delta_time)
+        self.game_map.update(delta_time) if self.game_map != None else None
         self.unit_manager.update(delta_time, self.unit_manager, self.bullet_manager, self.game_map)
         self.bullet_manager.update(delta_time, self.unit_manager, self.game_map)
 
     def draw(self, screen, camera_offset = None):
         if camera_offset == None:
             camera_offset = self.camera_offset
-        self.game_map.draw(screen, camera_offset)
+        if camera_offset == None:
+            return
+        self.game_map.draw(screen, camera_offset) if self.game_map != None else None
         self.unit_manager.draw(screen, camera_offset)
         self.bullet_manager.draw(screen, camera_offset)
         
@@ -219,7 +221,8 @@ class GameManager:
         self.unit_manager.clear()
     
     def save_map(self):
-        self.game_map.save()
+        if self.game_map is not None:
+            self.game_map.save()
     
     def save_unit(self):
         self.unit_manager.save()

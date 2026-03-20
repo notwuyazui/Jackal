@@ -101,7 +101,7 @@ class GameMap:
                 if tile.blocks_bullet:
                     self.bullet_obstacles.append(tile.rect)
 
-    def draw(self, surface: pygame.Surface, camera_offset: Tuple[float, float] = (0, 0)) -> None:
+    def draw(self, surface: pygame.Surface, camera_offset: List[float] = [0, 0]) -> None:
         """绘制地图"""
         for row in self.tiles:
             for tile in row:
@@ -218,7 +218,7 @@ class GameMap:
             return self.tiles[row][col].letter
         return None
 
-    def _draw_debug(self, surface: pygame.Surface, camera_offset: Tuple[float, float]) -> None:
+    def _draw_debug(self, surface: pygame.Surface, camera_offset: List[float]) -> None:
         """绘制调试信息（障碍物边框）"""
         # 单位障碍物（红色边框）
         for obs in self.unit_obstacles:

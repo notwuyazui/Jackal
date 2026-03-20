@@ -34,7 +34,7 @@ class BaseUnit:
         self.turret_image_path: str = turret_image_path
         self.body_image = load_image(self.body_image_path) if self.body_image_path else None
         self.turret_image = load_image(self.turret_image_path) if self.turret_image_path else None
-        self.size = self.body_image.get_size()
+        self.size = self.body_image.get_size() if self.body_image else (0, 0)
         self.usingAI = usingAI
         self.visible = visible
         
@@ -75,7 +75,7 @@ class BaseUnit:
         self.acceleration = 0.0
         self.angular_speed = 0.0
         self.health: float = self.max_health
-        self.bounding_box: pygame.Rect = None                # 碰撞箱，pygame.Rect对象
+        self.bounding_box = None                # 碰撞箱，pygame.Rect对象
         self.velocity: Tuple[float, float] = self.cal_velocity()     # 速度向量
         self.current_ammunition: str = ""            # 单位当前选中弹种
         self.fire_cooldown: float = 0.0              # 剩余开火冷却时间
@@ -279,6 +279,8 @@ class BaseUnit:
     def fire(self, bullet_class = None):
         if bullet_class is None:
             bullet_class = get_class_from_str(self.current_ammunition)
+        if not bullet_class:
+            return None
         
         if self.is_switching_ammo:
             # 坦克正在切换弹药
@@ -662,7 +664,7 @@ class BaseUnit:
         pygame.draw.line(surface, (255, 0, 255), (screen_x, screen_y), (mouse_pos[0], mouse_pos[1]), 1)
         pygame.draw.circle(surface, (255, 0, 255), (int(mouse_pos[0]), int(mouse_pos[1])), 3)
                          
-    def take_damage(self, unit_manager, damage_source, damage_amount) -> float:
+    def take_damage(self, unit_manager, damage_source, damage_amount):
         """
         坦克承受伤害
         """
@@ -710,15 +712,16 @@ class BaseUnit:
             "reward": self.reward
         }
 
-    def save_to_file(self, file_name="default_unit.json") -> bool:
+    def save_to_file(self, file_name="default_unit.json"):
         # 保存单位信息到文件, file_name包含后缀，但不包含路径
         # 当前BaseUnit类中的属性没有确定下来，该方法为TODO
         save_dir = DEFAULT_UNIT_PATH
         filepath = os.path.join(save_dir, file_name)
         
         pass
+        return True
         
-    def save(self, file_name = None) -> bool:
+    def save(self, file_name = None):
         # 提供一种直接的保存方法
         if file_name is None:
             save_path = get_next_filename(DEFAULT_UNIT_PATH, 'default_unit', '.json')
@@ -726,7 +729,7 @@ class BaseUnit:
         return self.save_to_file(file_name)
     
     @classmethod
-    def load_from_file(cls, file_name="default_unit.json") -> 'BaseUnit':
+    def load_from_file(cls, file_name="default_unit.json"):
         # 从JSON文件加载兵种单位信息并创建实例
         # 当前BaseUnit类中的属性没有确定下来，该方法为TODO
         filepath = os.path.join(DEFAULT_UNIT_PATH, file_name)
