@@ -56,8 +56,9 @@ if __name__ == "__main__":
     
     running = True
     while running:
-        delta_time = clock.tick(60) / 1000.0
-        
+        delta_time = 1.0 / FPS
+        clock.tick(FPS * ACC)
+
         # 应用键盘鼠标控制
         running, action = PCControl(game_manager, action, screen)
         game_manager.set_unit_action(0, action)

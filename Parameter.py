@@ -3,9 +3,10 @@
 '''
 import numpy as np
 import enum
+import pygame
 
 FPS = 60
-DELTA_TIME = 1.0 / FPS
+ACC = 1.0
 
 INF = 10000                # 当需要无视加速度/速度时，取此值
 
