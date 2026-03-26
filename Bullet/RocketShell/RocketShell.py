@@ -16,7 +16,7 @@ class RocketShell(BaseBullet):
                  velocity_direction: Tuple[float, float] = (1.0, 0.0)):
         
         self.bullet_image_path = "Bullet/RocketShell/RocketShell.png"
-        self.size = (32, 32)
+        self.size = (15, 15)
         self.lifetime = 1.5 
         self.speed_rate = 1.2 
         self.damage_rate = 0.75           # 被命中本体受伤=直接伤害+爆炸伤害
