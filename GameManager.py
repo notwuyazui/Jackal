@@ -52,6 +52,12 @@ class GameManager:
         
     def set_test_map(self):
         self.game_map = create_test_map()
+
+    def set_river_map(self):
+        self.game_map = create_river_map()
+    
+    def set_valley_map(self):
+        self.game_map = create_valley_map()
     
     def set_unit_manager(self, unit_manager:UnitManager):
         self.unit_manager = unit_manager

@@ -244,6 +244,14 @@ def create_test_map() -> Optional[GameMap]:
     """创建测试地图"""
     return GameMap.load_from_file("test_map.txt")
 
+def create_river_map() -> Optional[GameMap]:
+    """从saved/river_map.txt创建河流地图"""
+    return GameMap.load_from_file("river_map.txt")
+
+def create_valley_map() -> Optional[GameMap]:
+    """从saved/valley_map.txt创建河谷地图"""
+    return GameMap.load_from_file("valley_map.txt")
+
 def create_empty_map(width: int = 15, height: int = 10) -> GameMap:
     map_data = ["o" * width for _ in range(height)]
     return GameMap(map_data)
