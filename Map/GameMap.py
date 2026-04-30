@@ -3,6 +3,8 @@ from Map.BaseTile import BaseTile
 from Map.FlatTile.FlatTile import *
 from Map.BarrierTile.BarrierTile import *
 from Map.WaterTile.WaterTile import *
+from Map.SandTile.SandTile import *
+from Map.TrapTile.TrapTile import *
 from typing import List, Tuple, Optional
 import os
 from Parameter import *
@@ -14,6 +16,8 @@ CHAR_TO_TILE = {
     'o': FlatTile,
     'x': BarrierTile,
     'w': WaterTile,
+    's': SandTile,
+    't': TrapTile
 }
 
 class GameMap:
@@ -210,12 +214,20 @@ class GameMap:
         """获取地图总尺寸（像素）"""
         return self.width * self.tile_size, self.height * self.tile_size
 
-    def get_tile_at_position(self, x: float, y: float) -> Optional[str]:
+    def get_tile_char_at_position(self, x: float, y: float) -> Optional[str]:
         """获取指定位置的地块字符"""
         col = int(x // self.tile_size)
         row = int(y // self.tile_size)
         if 0 <= row < self.height and 0 <= col < self.width:
             return self.tiles[row][col].letter
+        return None
+
+    def get_tile_at_position(self, x: float, y: float) -> Optional[BaseTile]:
+        """获取指定位置的地块"""
+        col = int(x // self.tile_size)
+        row = int(y // self.tile_size)
+        if 0 <= row < self.height and 0 <= col < self.width:
+            return self.tiles[row][col]
         return None
 
     def _draw_debug(self, surface: pygame.Surface, camera_offset: List[float]) -> None:

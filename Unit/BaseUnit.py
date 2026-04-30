@@ -98,6 +98,10 @@ class BaseUnit:
         self.killed_by = None               # 击杀者
         self.living_time = 0.0              # 存活时间
         self.reward = 0.0
+
+        # buff
+        self.speed_slow_multiplier = 1.0                # 减速效果，应用到速度上限
+        self.conceal = False                             # 隐身效果
         
         # 初始化碰撞箱
         self._update_bounding_box()
@@ -132,7 +136,9 @@ class BaseUnit:
             return False
         
         self.living_time += delta_time
-        self._update_vision(unit_manager, bullet_manager, game_map)              # 更新视野
+        self._frame_init()                           # 每帧初始化
+        self._update_tile_buff(game_map)      # 根据所在地块更新单位
+        self._update_vision(unit_manager, bullet_manager, game_map)         # 更新视野
         self._update_ammo_switch(delta_time)         # 更新弹种切换计时器
         self._update_fire_cooldown(delta_time)       # 更新开火冷却时间
         self._update_speed(delta_time)               # 更新速度
@@ -157,13 +163,24 @@ class BaseUnit:
         
         return True
     
+    def _frame_init(self) -> None:
+        """每帧初始化"""
+        self.speed_slow_multiplier = 1.0        # 初始化减速buff
+        self.conceal = False
+
+    def _update_tile_buff(self, game_map) -> None:
+        """根据所在地块更新单位"""
+        tile = game_map.get_tile_at_position(self.position[0], self.position[1])
+        if tile:
+            self = tile.apply_buff(self)
+
     def _update_vision(self, unit_manager, bullet_manager, game_map) -> None:
         """更新视野"""
         self.visible_map = game_map
         self.visible_units.clear()
         self.visible_bullets.clear()
         for unit in unit_manager.units:
-            if self.is_in_sight(unit):
+            if self.is_in_sight(unit) and unit.visible == True and unit.conceal == False:
                 self.visible_units.add_unit(unit, bullet_manager, game_map)
         for bullet in bullet_manager.bullets:
             if self.is_in_sight(bullet):
@@ -188,14 +205,24 @@ class BaseUnit:
     
     def _update_speed(self, delta_time) -> None:
         """更新速度"""
+        real_acc = self.acceleration
+        sigma = 0.05        # 防止速度在buff后上限附近震荡的容差值，如果速度在 max_speed * slow_multiplier 的 (1±sigma) 范围内，则直接设置为 max_speed * slow_multiplier
+
+        # 如果速度大于buff后的最大速度，则强制减速
+        if self.speed > self.max_speed * self.speed_slow_multiplier * (1 + sigma):
+            real_acc = -self.max_acceleration
+        elif self.speed < -self.max_speed * self.speed_slow_multiplier * (1 + sigma):
+            real_acc = self.max_acceleration
+
         # 应用加速度
-        self.speed += self.acceleration * delta_time
-        
-        # 限制速度范围
-        if self.speed > self.max_speed:
-            self.speed = self.max_speed
-        elif self.speed < -self.max_speed:
-            self.speed = -self.max_speed
+        self.speed += real_acc * delta_time
+
+        if self.speed > self.max_speed * self.speed_slow_multiplier * (1) and \
+            self.speed < self.max_speed * self.speed_slow_multiplier * (1+sigma):
+            self.speed = self.max_speed * self.speed_slow_multiplier
+        if self.speed < -self.max_speed * self.speed_slow_multiplier * (1) and \
+            self.speed > -self.max_speed * self.speed_slow_multiplier * (1+sigma):
+            self.speed = -self.max_speed * self.speed_slow_multiplier
     
     def _update_direction(self, delta_time) -> None:
         """更新单位朝向角度"""
@@ -682,6 +709,15 @@ class BaseUnit:
             self.killed_by = damage_source.id
         self._handle_assistance(unit_manager, damage_source, destroyed, damage_amount)
         return destroyed, damage_amount
+
+    def take_damage_from_tile(self, damage_amount):
+        """坦克从地形受到伤害"""
+        self.health -= damage_amount
+        if self.health <= 0:
+            self.health = 0
+            self.is_alive = False
+            print(f"坦克 {self.id} 被摧毁")
+            self.killed_by = -1  # -1表示被地形摧毁
 
     def _handle_assistance(self, unit_manager, damage_source, destroy:bool , damage_amount:float) -> None:
         # 当自身受到伤害时，处理伤害来源的协助信息

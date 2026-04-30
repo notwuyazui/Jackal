@@ -21,7 +21,8 @@ class BaseTile:
                  explosion_damage=0,
                  crushable=False,
                  provides_invisibility=False,
-                 damage_per_step=0):
+                 damage_per_step=0.0,
+                 slow_multiplier=1.0):
         self.x = x                      # 世界坐标左上角 x
         self.y = y
         self.tile_size = tile_size
@@ -39,12 +40,12 @@ class BaseTile:
         self.max_health = max_health if destructible else 0                                 # 初始生命值（仅当可破坏时有效）
         self.destroyed_tile_type = destroyed_tile_type if destructible else None            # 被破坏后变成的地块类型（如 'flat'）
         self.explodes_on_destroy = explodes_on_destroy if destructible else False           # 被破坏时是否爆炸
-        self.explosion_range = explodes_on_destroy if explodes_on_destroy else None
         self.explosion_range = explosion_range if explodes_on_destroy else None
         self.explosion_damage = explosion_damage if explodes_on_destroy else None
         self.crushable = crushable if not blocks_unit else False                            # 是否可被碾压
         self.provides_invisibility = provides_invisibility if not blocks_unit else False    # 是否提供隐身
-        self.damage_per_step = damage_per_step if not blocks_unit else False                # 单位踏上时造成的伤害
+        self.damage_per_step = damage_per_step if not blocks_unit else 0                # 单位踏上时造成的伤害
+        self.slow_multiplier = slow_multiplier if not blocks_unit else 1.0           # 单位踏上时减速倍数
 
         # 实时属性
         self.id = id
@@ -101,6 +102,12 @@ class BaseTile:
             return self.destroyed_tile_type
         return None
 
-    def on_unit_step(self, unit):
-        """单位踏上时的效果（待实现）"""
-        pass
+    def apply_buff(self, unit):
+        """单位踏上时的效果"""
+        if self.damage_per_step > 0:
+            unit.take_damage_from_tile(self.damage_per_step)
+        if self.slow_multiplier < 1.0:
+            unit.speed_slow_multiplier *= self.slow_multiplier
+        if self.provides_invisibility:
+            unit.conceal = True
+        return unit

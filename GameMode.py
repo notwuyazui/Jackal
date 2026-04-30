@@ -6,7 +6,7 @@
 DEBUG_MODE = False                  # 一键开启调试模式
 
 DRAW_HEALTH_BAR = True              # 绘制坦克血条
-DRAW_SIGHT_RANGE = True             # 绘制坦克视野范围
+DRAW_SIGHT_RANGE = False             # 绘制坦克视野范围
 DRAW_MOUSE_TARGET_LINE = True       # 绘制鼠标瞄准线
 DRAW_STATUS_MESSAGE = False         # 绘制单位状态信息
 DRAW_ENEMY_STATE_MESSAGE = False    # 绘制敌方坦克状态信息
@@ -17,7 +17,7 @@ DRAW_OBSTACLE_BOUNDING_BOX = False   # 绘制障碍物碰撞箱
 
 BULLET_INFO_TEXT = False            # 增加子弹发射和移除时的文本提示
 ENEMY_STATE_TEXT = False            # 增加敌方坦克状态信息文本提示
-UNIT_RECORD_TEXT = False            # 单位记录文本
+UNIT_RECORD_TEXT = True            # 单位记录文本
 PRINT_VISIBLE_UNIT = False          # 打印unit_0的可见单位（包含视野与通过通信同步的单位）
 
 AUTO_COMMUNICATE = True             # 自动通信

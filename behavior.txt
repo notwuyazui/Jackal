@@ -17,3 +17,4 @@ todo:
     5. 保存完整的地图，包括地图（tiles和tile_size）和单位信息
     6. 训练的接口（PCControl -> AIControl）
     7. 添加减速地块
+    8. 添加检查assert：是否存在uid相同的单位
