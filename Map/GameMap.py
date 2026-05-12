@@ -1,3 +1,19 @@
+'''
+    预设地图：
+    1. valley_map:          溪谷地图。非常复杂的地图
+    2. river_map:           河流地图。河流将地图分为两部分，中间不可通行，双方只能在两侧活动
+    3. spindle_map:         纺锤形地图。地图中间部分宽敞，左右两端狭窄
+    4. corridor_map:        走廊地图。地图中间有一条狭长的走廊，连接左右两端的开阔区域
+    5. dual_corridor_map:   双走廊地图。地图中间有较长的障碍物，左右两侧开阔区域通过上下两条走廊连接
+    6. square_ring:         回字形。地图中间有一个方形的障碍物，形成一个环形的通路
+    7. four_blocks:         田字形。地图被四块障碍物分割成田字形走廊，类似于生死狙击中的《冰雪堡垒》
+
+    其他：
+    1. empty_map:           空地图。全是平地
+    2. border_map:          边界地图。地图边缘是障碍物，内部是平地
+    3. random_map:          随机地图。地图边缘是障碍物，内部随机生成障碍物
+'''
+
 import pygame
 from Map.BaseTile import BaseTile
 from Map.FlatTile.FlatTile import *
@@ -256,13 +272,33 @@ def create_test_map() -> Optional[GameMap]:
     """创建测试地图"""
     return GameMap.load_from_file("test_map.txt")
 
-def create_river_map() -> Optional[GameMap]:
-    """从saved/river_map.txt创建河流地图"""
-    return GameMap.load_from_file("river_map.txt")
-
 def create_valley_map() -> Optional[GameMap]:
     """从saved/valley_map.txt创建河谷地图"""
-    return GameMap.load_from_file("valley_map.txt")
+    return GameMap.load_from_file("01_valley_map.txt")
+
+def create_river_map() -> Optional[GameMap]:
+    """从saved/river_map.txt创建河流地图"""
+    return GameMap.load_from_file("02_river_map.txt")
+
+def create_spindle_map() -> Optional[GameMap]:
+    """从saved/spindle_map.txt创建纺锤形地图"""
+    return GameMap.load_from_file("03_spindle_map.txt")
+
+def create_corridor_map() -> Optional[GameMap]:
+    """从saved/corridor_map.txt创建走廊地图"""
+    return GameMap.load_from_file("04_corridor_map.txt")
+
+def create_dual_corridor_map() -> Optional[GameMap]:
+    """从saved/dual_corridor_map.txt创建双走廊地图"""
+    return GameMap.load_from_file("05_dual_corridor_map.txt")
+
+def create_square_ring_map() -> Optional[GameMap]:
+    """从saved/square_ring_map.txt创建回字形地图"""
+    return GameMap.load_from_file("06_square_ring_map.txt")
+
+def create_four_blocks_map() -> Optional[GameMap]:
+    """从saved/four_blocks_map.txt创建田字形地图"""
+    return GameMap.load_from_file("07_four_blocks_map.txt")
 
 def create_empty_map(width: int = 15, height: int = 10) -> GameMap:
     map_data = ["o" * width for _ in range(height)]

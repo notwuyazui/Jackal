@@ -52,13 +52,28 @@ class GameManager:
         
     def set_test_map(self):
         self.game_map = create_test_map()
+    
+    def set_valley_map(self):
+        self.game_map = create_valley_map()
 
     def set_river_map(self):
         self.game_map = create_river_map()
     
-    def set_valley_map(self):
-        self.game_map = create_valley_map()
+    def set_spindle_map(self):
+        self.game_map = create_spindle_map()
     
+    def set_corridor_map(self):
+        self.game_map = create_corridor_map()
+    
+    def set_dual_corridor_map(self):
+        self.game_map = create_dual_corridor_map()
+    
+    def set_square_ring_map(self):
+        self.game_map = create_square_ring_map()
+    
+    def set_four_blocks_map(self):
+        self.game_map = create_four_blocks_map()
+
     def set_unit_manager(self, unit_manager:UnitManager):
         self.unit_manager = unit_manager
     
