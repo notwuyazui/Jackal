@@ -38,16 +38,17 @@ def parse_args():
     parser.add_argument("--no-headless", action="store_false", dest="headless")
     parser.add_argument("--auto-aim", action="store_true", default=False)
     parser.add_argument("--save-prefix", type=str, default="drqn")
+    parser.add_argument("--device", type=str, default="auto", choices=["auto", "cpu", "cuda", "mps"])
     return parser.parse_args()
 
 def main():
     args = parse_args()
-    if torch.cuda.is_available():
-        torch.cuda.set_device(args.gpu_id)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"初始化 JackalEnv (DRQN 序列化架构) | 当前计算设备: {device.type.upper()}")
-    if device.type == "cuda":
-        print(f"使用 GPU: {torch.cuda.get_device_name(torch.cuda.current_device())} (id={args.gpu_id})")
+    from training.utils.device import (
+        get_device,
+        print_device_info
+    )
+    device = get_device(args.device)
+    print_device_info(device)
     
     # ==========================================
     # 1. 实例化环境 (你可以随时把 n_enemies 改为 2 开启 1v2 挑战)

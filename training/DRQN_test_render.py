@@ -14,6 +14,8 @@ from environment.jackal_env import JackalEnv
 from training.DRQN_Test.network import DRQNNetwork
 from training.DRQN_Test.action_factorization import compose_action
 
+from training.utils.device import get_device, print_device_info
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description="DRQN render evaluation")
@@ -31,6 +33,13 @@ def parse_args():
         type=float,
         default=None,
         help="覆盖测试环境 fixed_delta_time；若不传则优先读取 run_config.json",
+    )
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="auto",
+        choices=["auto", "cpu", "cuda", "mps"],
+        help="选择计算设备: auto/cpu/cuda/mps"
     )
     return parser.parse_args()
 
@@ -62,9 +71,18 @@ def resolve_run_config_path(model_path):
         return fallback_config
     return None
 
-def test_drqn_model(model_path, episodes=3, video_dir="artifacts/videos/drqn_eval", max_steps=None, fixed_delta_time=None):
+def test_drqn_model(
+    model_path,
+    episodes=3,
+    video_dir="artifacts/videos/drqn_eval",
+    max_steps=None,
+    fixed_delta_time=None,
+    device_name="auto"
+):
     print(f"正在加载 DRQN 模型并准备录制视频: {model_path}")
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    device = get_device(device_name)
+    print_device_info(device)
 
     config_path = resolve_run_config_path(model_path)
     run_config = {}
@@ -198,4 +216,5 @@ if __name__ == "__main__":
         video_dir=args.video_dir,
         max_steps=args.max_steps,
         fixed_delta_time=args.fixed_delta_time,
+        device_name=args.device,
     )

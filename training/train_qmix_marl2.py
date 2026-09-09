@@ -17,6 +17,8 @@ try:
 except ImportError:
     SummaryWriter = None
 
+from training.utils.device import get_device, print_device_info
+
 from training.marl2.components.replay_buffer import EpisodeReplayBuffer
 from training.marl2.controllers.basic_mac import BasicMAC
 from training.marl2.modules.mixers.dvd import DVDMixer
@@ -45,12 +47,12 @@ def parse_args():
     parser.add_argument("--save-dir", type=str, default="artifacts/checkpoints/marl2")
     parser.add_argument("--checkpoint", type=str, default=None, help="Optional checkpoint path to resume training")
     parser.add_argument("--resume-t-env", type=int, default=None, help="Optional resumed t_env when checkpoint has no metadata")
-    parser.add_argument("--device", type=str, default=None, help="Override device, e.g. cpu, cuda, cuda:7")
+    parser.add_argument("--device", type=str, default="auto", help="device: auto/cpu/cuda/mps")
     parser.add_argument("--tensorboard-dir", type=str, default=None, help="Override TensorBoard log directory")
     return parser.parse_args()
 
 
-def evaluate(runner, n_episodes, seed_base=None):
+def evaluate(runner, n_episodes, seed_base=None, device=None):
     returns = []
     wins = 0
     lengths = []
@@ -78,8 +80,10 @@ def evaluate(runner, n_episodes, seed_base=None):
                 random.seed(ep_seed)
                 np.random.seed(ep_seed)
                 torch.manual_seed(ep_seed)
-                if torch.cuda.is_available():
+                if device.type == "cuda":
                     torch.cuda.manual_seed_all(ep_seed)
+                elif device.type == "mps":
+                    torch.mps.manual_seed(ep_seed)
 
             _, stats = runner.run(test_mode=True, epsilon=0.0)
             returns.append(stats["episode_return"])
@@ -234,27 +238,10 @@ def main():
 
     t_max = int(args.t_max) if args.t_max is not None else int(train_cfg.get("t_max", 50000))
 
-    if args.device is None:
-        use_cuda = bool(train_cfg.get("use_cuda", True)) and torch.cuda.is_available()
-        gpu_id = train_cfg.get("gpu_id", None)
-        visible_cuda = os.environ.get("CUDA_VISIBLE_DEVICES", None)
-        if use_cuda and visible_cuda:
-            device = torch.device("cuda:0")
-            torch.cuda.set_device(0)
-            if gpu_id is not None:
-                print(
-                    f"[Train] CUDA_VISIBLE_DEVICES={visible_cuda}; "
-                    f"ignore config train.gpu_id={gpu_id} and use visible cuda:0."
-                )
-        elif use_cuda and gpu_id is not None:
-            device = torch.device(f"cuda:{int(gpu_id)}")
-            torch.cuda.set_device(device)
-        else:
-            device = torch.device("cuda" if use_cuda else "cpu")
-    else:
-        device = torch.device(args.device)
-        if device.type == "cuda" and device.index is not None:
-            torch.cuda.set_device(device)
+    device = get_device(args.device)
+    print_device_info(device)
+    if device.type == "cuda" and device.index is not None:
+        torch.cuda.set_device(device)
 
     env_name = cfg["env"].get("name", "jackal")
     env_cls = ENV_REGISTRY[env_name]
@@ -694,7 +681,7 @@ def main():
 
         if t_env >= next_test_t:
             _sync_eval_mac_params(mac, eval_mac)
-            eval_stats = evaluate(eval_runner, test_nepisode, seed_base=test_seed_base)
+            eval_stats = evaluate(eval_runner, test_nepisode, seed_base=test_seed_base, device=device)
             eval_count += 1
             last_eval_stats = eval_stats
             print(
@@ -712,7 +699,7 @@ def main():
             eval_extra_stats = eval_stats
             if eval_extra_nepisode != test_nepisode:
                 best_seed_base = None if test_seed_base is None else int(test_seed_base) + 1000000
-                eval_extra_stats = evaluate(eval_runner, eval_extra_nepisode, seed_base=best_seed_base)
+                eval_extra_stats = evaluate(eval_runner, eval_extra_nepisode, seed_base=best_seed_base, device=device)
                 print(
                     f"[Eval-Extra] t_env={t_env} "
                     f"test_battle_won_mean={eval_extra_stats['battle_won_mean']:.3f} "

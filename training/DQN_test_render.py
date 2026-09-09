@@ -1,3 +1,4 @@
+import argparse
 import torch
 import os
 import json
@@ -9,10 +10,22 @@ if _PROJECT_ROOT not in sys.path:
 
 from environment.jackal_env import JackalEnv
 from training.DQN_Test.network import QNetwork
+from training.utils.device import get_device, print_device_info
 
-def test_model(model_path, episodes=3):
+def parse_args():
+    parser = argparse.ArgumentParser(description="DQN render evaluation")
+
+    parser.add_argument("--model-path", type=str, default="artifacts/checkpoints/dqn/dqn_model_final.pth")
+    parser.add_argument("--episodes", type=int, default=5)
+    parser.add_argument("--device", type=str, default="auto", choices=["auto", "cpu", "cuda", "mps"], help="选择计算设备")
+
+    return parser.parse_args()
+
+def test_model(model_path, episodes=3, device_name="auto", video_dir="artifacts/videos/dqn_eval"):
     print(f"正在加载模型并准备录制视频: {model_path}")
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    device = get_device(device_name)
+    print_device_info(device)
 
     config_path = os.path.join(os.path.dirname(model_path), "dqn_run_config.json")
     run_config = {}
@@ -30,7 +43,7 @@ def test_model(model_path, episodes=3):
     env = JackalEnv(
         headless=True,
         use_video=True,
-        video_dir="artifacts/videos/dqn_eval",
+        video_dir=video_dir,
         auto_aim=run_config.get("auto_aim", True)
     )
     
@@ -97,8 +110,10 @@ def test_model(model_path, episodes=3):
     print(f"\n测试完成！录制的视频已保存在 {os.path.abspath('artifacts/videos/dqn_eval')} 目录下。")
 
 if __name__ == "__main__":
-    # 指定你要测试的权重文件路径。
-    # 如果你训练到一半保存了 checkpoint，也可以改成了 dqn_model_ep200.pth 看看前期多菜
-    target_model_path = "artifacts/checkpoints/dqn/dqn_model_final.pth" 
-    
-    test_model(target_model_path, episodes=5)
+    args = parse_args()
+
+    test_model(
+        args.model_path,
+        episodes=args.episodes,
+        device_name=args.device
+    )

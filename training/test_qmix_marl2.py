@@ -10,6 +10,8 @@ if _PROJECT_ROOT not in sys.path:
 import numpy as np
 import torch
 
+from training.utils.device import get_device, print_device_info
+
 from training.marl2.controllers.basic_mac import BasicMAC
 from training.marl2.modules.mixers.qmix import QMixer
 from training.marl2.registry import ENV_REGISTRY, LEARNER_REGISTRY
@@ -24,7 +26,7 @@ def parse_args():
     parser.add_argument("--episodes", type=int, default=10)
     parser.add_argument("--video-dir", type=str, default=None)
     parser.add_argument("--seed-base", type=int, default=None, help="Per-episode seed starts from this value")
-    parser.add_argument("--device", type=str, default=None, choices=[None, "cpu", "cuda"])
+    parser.add_argument("--device", type=str, default="auto", choices=["auto","cpu","cuda","mps"])
     return parser.parse_args()
 
 
@@ -32,11 +34,8 @@ def main():
     args = parse_args()
     cfg = load_config(args.config)
 
-    if args.device is None:
-        use_cuda = bool(cfg["train"].get("use_cuda", True)) and torch.cuda.is_available()
-        device = torch.device("cuda" if use_cuda else "cpu")
-    else:
-        device = torch.device(args.device)
+    device = get_device(args.device)
+    print_device_info(device)
 
     env_override = cfg.get("eval_env", cfg.get("train", {}).get("eval_env", {}))
     env_cfg = merge_dict(cfg["env"], env_override) if env_override else dict(cfg["env"])
@@ -79,8 +78,10 @@ def main():
         random.seed(ep_seed)
         np.random.seed(ep_seed)
         torch.manual_seed(ep_seed)
-        if torch.cuda.is_available():
+        if device.type == "cuda":
             torch.cuda.manual_seed_all(ep_seed)
+        elif device.type == "mps":
+            torch.mps.manual_seed(ep_seed)
 
         _, stats = runner.run(test_mode=True, epsilon=0.0)
         returns.append(stats["episode_return"])

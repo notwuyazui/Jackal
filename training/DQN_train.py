@@ -1,8 +1,9 @@
+import argparse
 import torch
 import json
 import os
 import sys
-from tqdm import tqdm  
+from tqdm import tqdm
 
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _PROJECT_ROOT not in sys.path:
@@ -10,14 +11,33 @@ if _PROJECT_ROOT not in sys.path:
 
 from environment.jackal_env import JackalEnv
 from training.DQN_Test.network import QNetwork
-from training.DQN_Test.buffer import EpisodeBuffer 
+from training.DQN_Test.buffer import EpisodeBuffer
 from training.DQN_Test.agent import DQNAgent
 from training.DQN_Test.learner import DQNLearner
+from training.utils.device import get_device, print_device_info
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="DQN 1v1 training")
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="auto",
+        choices=["auto", "cpu", "cuda", "mps"],
+    )
+    return parser.parse_args()
+
 
 def main():
-    # 明确打印出当前使用的是 CPU 还是 GPU
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"初始化 JackalEnv (解耦架构 1v1 DQN) | 当前计算设备: {device.type.upper()}")
+    args = parse_args()
+
+    device = get_device(args.device)
+    print_device_info(device)
+
+    print(
+        f"初始化 JackalEnv (解耦架构 1v1 DQN) | "
+        f"当前计算设备: {device.type.upper()}"
+    )
     
     # 1. 实例化环境
     env = JackalEnv(headless=True, use_video=False)
