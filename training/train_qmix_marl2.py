@@ -5,6 +5,7 @@ import os
 import random
 import re
 import sys
+from typing import Any, Optional
 
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _PROJECT_ROOT not in sys.path:
@@ -52,7 +53,12 @@ def parse_args():
     return parser.parse_args()
 
 
-def evaluate(runner, n_episodes, seed_base=None, device=None):
+def evaluate(
+    runner: Any,
+    n_episodes: int,
+    seed_base: Optional[int] = None,
+    device: Optional[torch.device] = None,
+):
     returns = []
     wins = 0
     lengths = []
@@ -60,29 +66,22 @@ def evaluate(runner, n_episodes, seed_base=None, device=None):
     no_kill_timeouts = 0
 
     use_seed = seed_base is not None
-    py_rng_state = None
-    np_rng_state = None
-    torch_rng_state = None
-    cuda_rng_states = None
-
-    if use_seed:
-        seed_base = int(seed_base)
-        py_rng_state = random.getstate()
-        np_rng_state = np.random.get_state()
-        torch_rng_state = torch.random.get_rng_state()
-        if torch.cuda.is_available():
-            cuda_rng_states = torch.cuda.get_rng_state_all()
+    resolved_seed_base = int(seed_base) if seed_base is not None else 0
+    py_rng_state = random.getstate()
+    np_rng_state = np.random.get_state()
+    torch_rng_state = torch.random.get_rng_state()
+    cuda_rng_states = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
 
     try:
         for idx in range(int(n_episodes)):
             if use_seed:
-                ep_seed = seed_base + idx
+                ep_seed = resolved_seed_base + idx
                 random.seed(ep_seed)
                 np.random.seed(ep_seed)
                 torch.manual_seed(ep_seed)
-                if device.type == "cuda":
+                if device is not None and device.type == "cuda":
                     torch.cuda.manual_seed_all(ep_seed)
-                elif device.type == "mps":
+                elif device is not None and device.type == "mps":
                     torch.mps.manual_seed(ep_seed)
 
             _, stats = runner.run(test_mode=True, epsilon=0.0)
@@ -245,7 +244,7 @@ def main():
 
     env_name = cfg["env"].get("name", "jackal")
     env_cls = ENV_REGISTRY[env_name]
-    train_env = env_cls(cfg["env"])
+    train_env: Any = env_cls(cfg["env"])
     env_info = train_env.get_env_info()
     eval_env_override = cfg.get("eval_env", train_cfg.get("eval_env", {}))
     eval_env_cfg = merge_dict(cfg["env"], eval_env_override) if eval_env_override else cfg["env"]
@@ -308,7 +307,7 @@ def main():
     parallel_start_method = str(train_cfg.get("parallel_start_method", "spawn"))
 
     if runner_type == "parallel" and parallel_envs > 1:
-        runner = ParallelEpisodeRunner(
+        runner: Any = ParallelEpisodeRunner(
             env_cls=env_cls,
             env_args=cfg["env"],
             mac=mac,
@@ -398,8 +397,8 @@ def main():
     if rollback_stabilization_stage is not None:
         rollback_stabilization_stage = int(rollback_stabilization_stage)
 
-    best_eval_win_hist = deque(maxlen=best_model_window)
-    best_eval_ret_hist = deque(maxlen=best_model_window)
+    best_eval_win_hist: deque[float] = deque(maxlen=best_model_window)
+    best_eval_ret_hist: deque[float] = deque(maxlen=best_model_window)
 
     stop_by_win = early_stop_win_rate is not None
     stable_eval_hits = 0
@@ -422,7 +421,7 @@ def main():
     next_save_t = save_interval
 
     recent_train_episode_stats = _new_episode_stat_buffer()
-    recent_learner_stats = {
+    recent_learner_stats: dict[str, list[float]] = {
         "loss_td": [],
         "q_taken_mean": [],
         "target_mean": [],
@@ -623,7 +622,7 @@ def main():
             t_env += collected_steps
 
             n_stats = max(1, len(rollout_stats_list))
-            rollout_stats = {
+            rollout_stats: dict[str, Any] = {
                 "episode_return": float(sum(stat["episode_return"] for stat in rollout_stats_list) / n_stats),
                 "episode_length": float(sum(stat["episode_length"] for stat in rollout_stats_list) / n_stats),
                 "battle_won": float(sum(int(stat["battle_won"]) for stat in rollout_stats_list) / n_stats),
@@ -632,7 +631,8 @@ def main():
                 "n_collected": collected_episodes,
             }
         else:
-            episode_batch, rollout_stats = runner.run(test_mode=False, epsilon=epsilon)
+            episode_batch, episode_stats = runner.run(test_mode=False, epsilon=epsilon)
+            rollout_stats = episode_stats
             buffer.insert_episode_batch(episode_batch)
             _append_episode_stat(recent_train_episode_stats, rollout_stats)
 
@@ -1050,6 +1050,7 @@ def main():
                 recent_learner_stats[key].clear()
 
             if next_log_episode is not None:
+                assert log_interval_episodes is not None
                 while episode >= next_log_episode:
                     next_log_episode += log_interval_episodes
             else:

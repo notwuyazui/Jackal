@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from typing import Union
 
 from training.DRQN_Test.action_factorization import CHASSIS_DIM, TURRET_DIM, FIRE_DIM
 
@@ -24,7 +25,11 @@ class DRQNNetwork(nn.Module):
         self.turret_head = nn.Linear(hidden_dim, self.turret_dim)
         self.fire_head = nn.Linear(hidden_dim, self.fire_dim)
 
-    def init_hidden(self, batch_size=1, device="cpu"):
+    def init_hidden(
+        self,
+        batch_size: int = 1,
+        device: Union[str, torch.device] = "cpu",
+    ):
         """
         初始化全零的隐状态 (Hidden State)。
         在每次新开一局游戏 (Episode) 时，或者在 Learner 开始处理一个新 Batch 时调用。

@@ -1,6 +1,7 @@
 import numpy as np
 import random
 from collections import deque
+from typing import Any, Deque
 
 class EpisodeBuffer:
     def __init__(self, capacity=2000):
@@ -8,7 +9,7 @@ class EpisodeBuffer:
         容量限制：这里存放的是 2000 '局' 完整的游戏轨迹，
         而不是 2000 '帧' 散乱的画面。
         """
-        self.buffer = deque(maxlen=capacity)
+        self.buffer: Deque[Any] = deque(maxlen=capacity)
 
     def push_episode(self, episode):
         """

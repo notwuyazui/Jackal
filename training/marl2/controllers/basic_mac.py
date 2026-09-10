@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from typing import Optional
 
 from training.marl2.modules.agents.etd_rnn_agent import ETDRNNAgent
 from training.marl2.modules.agents.rnn_agent import RNNAgent
@@ -56,8 +57,8 @@ class BasicMAC:
         else:
             raise ValueError(f"Unsupported agent name={agent_name!r}. Expected 'rnn' or 'etd_rnn'.")
 
-        self.hidden_states = None
-        self.prev_actions = None
+        self.hidden_states: Optional[torch.Tensor] = None
+        self.prev_actions: Optional[torch.Tensor] = None
 
     def init_hidden(self, batch_size):
         # Hidden state is stored per (batch, agent).
@@ -114,9 +115,11 @@ class BasicMAC:
         batch_size = obs_tensor.shape[0]
         if self.prev_actions is None or self.prev_actions.shape[0] != batch_size:
             self.init_hidden(batch_size=batch_size)
+        assert self.hidden_states is not None
+        assert self.prev_actions is not None
 
         if active_envs is None:
-            active_idx = np.arange(batch_size, dtype=np.int64)
+            active_idx: np.ndarray = np.arange(batch_size, dtype=np.int64)
         else:
             active_idx = np.array(list(active_envs), dtype=np.int64)
 

@@ -86,6 +86,7 @@ def test_model(model_path, episodes=3, device_name="auto", video_dir="artifacts/
         episode_reward = 0
         step_count = 0
         done = False
+        info = {}
         
         while not done:
             # 【核心差异】：完全抛弃探索，执行纯粹的最优策略 (Greedy)

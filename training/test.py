@@ -6,19 +6,9 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
-from game.Unit.Tank.Tank import *
-from game.Unit.Archie.Archie import *
-from game.Unit.Plane.Plane import *
-from game.Unit.EnemyAI import *
-from game.Map.GameMap import *
-from game.GameMode import *
-from game.Bullet.NormalShell.NormalShell import *
-from game.Bullet.RocketShell.RocketShell import *
-from game.Bullet.HeavyShell.HeavyShell import *
-from game.Bullet.BulletManager import *
-from game.Unit.UnitManager import *
-from game.GameManager import *
-from game.PCControl import *
+from game.GameManager import GameManager
+from game.PCControl import PCControl
+from game.utils import Action, set_font
 
 
 def init_game():

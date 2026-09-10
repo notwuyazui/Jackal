@@ -79,6 +79,9 @@ class BaseUnit:
         self.velocity: Tuple[float, float] = self.cal_velocity()     # 速度向量
         self.current_ammunition: str = ""            # 单位当前选中弹种
         self.fire_cooldown: float = 0.0              # 剩余开火冷却时间
+        # 敌方 AI 可由环境覆盖的开火参数。提前声明，供所有单位子类共享。
+        self.ai_fire_cooldown_max: float = 0.5
+        self.ai_fire_angle_tolerance: float = 10.0
         
         self.is_alive = True
         self.reload_timer = 0.0         # 切换弹种剩余时间计时器

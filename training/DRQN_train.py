@@ -170,6 +170,7 @@ def main():
         episode_loss = 0
         step_count = 0
         done = False
+        info = {}
         
         current_episode_trajectory = [] 
         

@@ -1,5 +1,6 @@
 import multiprocessing as mp
 import random
+from typing import Any
 
 import numpy as np
 import torch
@@ -112,7 +113,7 @@ class ParallelEpisodeRunner:
         episode_batches = [self._new_episode_batch() for _ in range(self.n_envs)]
         episode_returns = [0.0 for _ in range(self.n_envs)]
         episode_lengths = [0 for _ in range(self.n_envs)]
-        final_infos = [{} for _ in range(self.n_envs)]
+        final_infos: list[dict[str, Any]] = [{} for _ in range(self.n_envs)]
         terminated = [False for _ in range(self.n_envs)]
 
         for t in range(self.episode_limit):
@@ -127,7 +128,9 @@ class ParallelEpisodeRunner:
                 active_avail_map[env_idx] = self.parent_conns[env_idx].recv()
 
             obs_batch = np.array(obs_list, dtype=np.float32)
-            avail_batch = np.zeros((self.n_envs, self.n_agents, self.n_actions), dtype=np.float32)
+            avail_batch: np.ndarray = np.zeros(
+                (self.n_envs, self.n_agents, self.n_actions), dtype=np.float32
+            )
             for env_idx in active_envs:
                 avail_batch[env_idx] = np.array(active_avail_map[env_idx], dtype=np.float32)
 
@@ -161,7 +164,10 @@ class ParallelEpisodeRunner:
                 state_list[env_idx] = next_state
                 terminated[env_idx] = bool(done)
 
-        avail_actions_last = [None for _ in range(self.n_envs)]
+        avail_actions_last: list[np.ndarray] = [
+            np.zeros((self.n_agents, self.n_actions), dtype=np.float32)
+            for _ in range(self.n_envs)
+        ]
         active_last_envs = [idx for idx in range(self.n_envs) if not terminated[idx]]
         for env_idx in active_last_envs:
             self.parent_conns[env_idx].send(("get_avail_actions", None))
@@ -169,7 +175,9 @@ class ParallelEpisodeRunner:
             avail_actions_last[env_idx] = self.parent_conns[env_idx].recv()
         for env_idx in range(self.n_envs):
             if terminated[env_idx]:
-                terminal_avail = np.zeros((self.n_agents, self.n_actions), dtype=np.float32)
+                terminal_avail: np.ndarray = np.zeros(
+                    (self.n_agents, self.n_actions), dtype=np.float32
+                )
                 terminal_avail[:, 0] = 1.0
                 avail_actions_last[env_idx] = terminal_avail
 

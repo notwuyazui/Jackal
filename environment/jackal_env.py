@@ -6,7 +6,7 @@ import math
 import cv2
 import datetime
 
-from game.Parameter import *
+from game.Parameter import BULLET_DAMAGE, BULLET_SPEED, Team, UNIT_MIN_SIGHT_RATIO
 from game.Unit.Tank.Tank import create_tank, create_enemy_tank
 from game.Unit.Archie.Archie import create_archie, create_enemy_archie
 from game.Map.GameMap import (
@@ -481,7 +481,7 @@ class JackalEnv:
                 self.video_writer.release()
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             video_path = os.path.join(self.video_dir, f"episode_{timestamp}.mp4")
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            fourcc = cv2.VideoWriter.fourcc(*"mp4v")
             fps = int(1.0 / self.delta_time)
             self.video_writer = cv2.VideoWriter(video_path, fourcc, fps, (self.screen_width, self.screen_height))
             self._render_to_video()
@@ -1188,8 +1188,10 @@ class JackalEnv:
         return np.array(state_features, dtype=np.float32)
 
     def _render_to_video(self):
+        if self.video_writer is None:
+            return
         self.screen.fill((50, 50, 70))
-        camera_offset = [0, 0]
+        camera_offset = [0.0, 0.0]
         
         # 渲染逻辑适配：交由 UnitManager 统一绘制
         self.game_map.draw(self.screen, camera_offset)

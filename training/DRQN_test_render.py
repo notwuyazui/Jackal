@@ -168,6 +168,7 @@ def test_drqn_model(
         episode_reward = 0
         step_count = 0
         done = False
+        info = {}
         
         # 【DRQN 测试核心】：开局获取全零的空白记忆
         hidden_state = policy_net.init_hidden(batch_size=1, device=device)

@@ -78,3 +78,6 @@ class EpisodeRunner:
             "no_kill_timeout": bool(final_info.get("no_kill_timeout", False)),
         }
         return episode_batch, stats
+
+    def close(self):
+        self.env.close()
