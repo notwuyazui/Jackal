@@ -54,7 +54,7 @@ class LocalObservationEncoder:
                 math.sin(math.radians(agent.direction_angle)),
                 math.cos(math.radians(agent.turret_direction_angle)),
                 math.sin(math.radians(agent.turret_direction_angle)),
-                env._cooldown_ratio(agent, env.agent_fire_cooldowns[agent_id]),
+                agent.fire_cooldown_ratio(),
                 normalize_speed(agent),
                 normalize_angular_speed(agent),
             ])
@@ -66,7 +66,6 @@ class LocalObservationEncoder:
                 if other_id != agent_id
             ]
             for ally in allies:
-                ally_id = env.agents.index(ally)
                 alive = bool(ally.is_alive)
                 visible = alive and env.is_visible_to_agent(agent, ally)
                 if visible:
@@ -83,7 +82,7 @@ class LocalObservationEncoder:
                         math.cos(math.radians(ally.direction_angle)),
                         math.sin(math.radians(ally.direction_angle)),
                         normalize_speed(ally),
-                        env._cooldown_ratio(ally, env.agent_fire_cooldowns[ally_id]),
+                        ally.fire_cooldown_ratio(),
                         1.0 if env.check_raycast_unblocked(agent, ally) else 0.0,
                     ])
                     features.extend(env._unit_type_onehot(ally))

@@ -9,7 +9,9 @@ import os
 from game.Parameter import *
 from game.utils import *
 from game.GameMode import *
-from typing import List, Tuple
+from typing import Any, List, Mapping, Optional, Tuple
+
+from game.Bullet.weapon_specs import PROJECTILE_SPECS, ProjectileSpec, get_projectile_spec
 
 class BaseUnit:
     def __init__(self, unit_id, unit_team, usingAI, unit_type, body_image_path, turret_image_path,
@@ -23,7 +25,7 @@ class BaseUnit:
                  sight_range=INF,
                  communication_range=INF,
                  armor_type=ArmorType.NONE, 
-                 ammunition_types=[], 
+                 ammunition_types=None,
                  ammo_switch_time=UNIT_AMMO_SWITCH_TIME):
         
         # 基本信息
@@ -46,7 +48,7 @@ class BaseUnit:
         self.turret_angular_speed_rate: float = turret_angular_speed_rate
         self.max_health_rate: float = max_health_rate
         self.armor_type: ArmorType = armor_type                                                        # 护甲类型
-        self.ammunition_types: List[str] = ammunition_types                                            # 单位拥有弹种
+        self.ammunition_types: List[str] = list(ammunition_types or [])                                # 单位拥有弹种
         self.ammo_switch_time: float =  ammo_switch_time                                               # 单位切换弹种时间
         
         self.max_speed = UNIT_SPEED * self.max_speed_rate                                       # 最大速度  
@@ -79,12 +81,14 @@ class BaseUnit:
         self.velocity: Tuple[float, float] = self.cal_velocity()     # 速度向量
         self.current_ammunition: str = ""            # 单位当前选中弹种
         self.fire_cooldown: float = 0.0              # 剩余开火冷却时间
-        # 敌方 AI 可由环境覆盖的开火参数。提前声明，供所有单位子类共享。
-        self.ai_fire_cooldown_max: float = 0.5
+        self.fire_cooldown_override: Optional[float] = None
+        self.projectile_overrides: Mapping[str, Any] = {}
+        # 敌方 AI 可由环境覆盖瞄准容差；冷却统一由单位武器状态管理。
         self.ai_fire_angle_tolerance: float = 10.0
         
         self.is_alive = True
         self.reload_timer = 0.0         # 切换弹种剩余时间计时器
+        self.target_ammunition: str = ""
         self.turret_target_angle = 0.0          # 炮塔目标角度
         self.is_switching_ammo = False          # 是否正在切换弹药
         
@@ -212,6 +216,76 @@ class BaseUnit:
             self.fire_cooldown -= delta_time
             if self.fire_cooldown < 0:
                 self.fire_cooldown = 0
+
+    def configure_weapon(
+        self,
+        *,
+        fire_cooldown: Optional[float] = None,
+        projectile_overrides: Optional[Mapping[str, Any]] = None,
+    ) -> None:
+        """Configure effective weapon parameters for this unit.
+
+        The unit remains the single owner of its firing cooldown. Environment
+        configuration is converted into an override here instead of creating a
+        second timer outside the game engine.
+        """
+
+        if fire_cooldown is not None and float(fire_cooldown) < 0:
+            raise ValueError("fire_cooldown must be >= 0")
+        self.fire_cooldown_override = (
+            None if fire_cooldown is None else float(fire_cooldown)
+        )
+        self.projectile_overrides = dict(projectile_overrides or {})
+        # Validate every available ammunition eagerly so configuration errors fail
+        # during reset rather than in the middle of a training episode.
+        for ammunition in self.ammunition_types:
+            self.get_weapon_spec(ammunition)
+
+    def _current_projectile_overrides(self, ammunition: str) -> Mapping[str, Any]:
+        overrides = self.projectile_overrides
+        if ammunition in overrides:
+            selected = overrides[ammunition]
+        elif "default" in overrides:
+            selected = overrides["default"]
+        elif any(name in PROJECTILE_SPECS for name in overrides):
+            # This is an ammunition-keyed mapping with no entry for the
+            # requested ammunition.
+            return {}
+        else:
+            # A flat mapping applies to all ammunition for compatibility with
+            # the original environment configuration format.
+            selected = overrides
+        return selected if isinstance(selected, Mapping) else {}
+
+    def get_weapon_spec(self, ammunition: Optional[str] = None) -> ProjectileSpec:
+        """Return the effective, validated spec for this unit's ammunition."""
+
+        ammo_name = str(ammunition or self.current_ammunition).lower()
+        spec = get_projectile_spec(
+            ammo_name,
+            self._current_projectile_overrides(ammo_name),
+        )
+        if self.fire_cooldown_override is not None:
+            spec = spec.with_overrides({"cooldown": self.fire_cooldown_override})
+        return spec
+
+    def weapon_range(self) -> float:
+        return self.get_weapon_spec().max_range if self.current_ammunition else 0.0
+
+    def fire_cooldown_duration(self) -> float:
+        return self.get_weapon_spec().cooldown if self.current_ammunition else 0.0
+
+    def fire_cooldown_ratio(self) -> float:
+        duration = max(1e-6, self.fire_cooldown_duration())
+        return max(0.0, min(1.0, self.fire_cooldown / duration))
+
+    def can_fire(self) -> bool:
+        return bool(
+            self.is_alive
+            and self.current_ammunition
+            and not self.is_switching_ammo
+            and self.fire_cooldown <= 0.0
+        )
     
     def _update_speed(self, delta_time) -> None:
         """更新速度"""
@@ -313,21 +387,13 @@ class BaseUnit:
         return diff
     
     def fire(self, bullet_class = None):
+        registered_bullet_class = get_class_from_str(self.current_ammunition)
         if bullet_class is None:
-            bullet_class = get_class_from_str(self.current_ammunition)
+            bullet_class = registered_bullet_class
         if not bullet_class:
             return None
-        
-        if self.is_switching_ammo:
-            # 坦克正在切换弹药
-            return None
-        
-        if not self.current_ammunition:
-            # 当前弹药类型没有弹药
-            return None
-        
-        if self.fire_cooldown > 0:
-            # 坦克开火冷却中
+
+        if not self.can_fire():
             return None
         
         turret_angle_rad = math.radians(self.turret_direction_angle - 90)
@@ -338,16 +404,16 @@ class BaseUnit:
         bullet_direction = (math.cos(turret_angle_rad), math.sin(turret_angle_rad))
         
         try:
-            bullet = bullet_class(
+            bullet_kwargs = dict(
                 projectile_id=f"bullet_{self.id}_{pygame.time.get_ticks()}",  # 使用时间戳确保唯一性
                 shooter=self,
                 shooter_team=self.team,
                 position=(bullet_start_x, bullet_start_y),
-                velocity_direction=bullet_direction
+                velocity_direction=bullet_direction,
             )
-            
-            # 根据当前弹药类型设置子弹属性
-            self._configure_bullet_for_ammo(bullet)
+            if bullet_class is registered_bullet_class:
+                bullet_kwargs["spec"] = self.get_weapon_spec()
+            bullet = bullet_class(**bullet_kwargs)
             self.fire_cooldown = bullet.cooldown        # 设置开火冷却时间
                 
             return bullet
@@ -356,40 +422,6 @@ class BaseUnit:
             print(f"创建子弹时出错: {e}")
             return None 
         
-    def _configure_bullet_for_ammo(self, bullet) -> None:
-        """
-        根据当前弹药类型配置子弹属性
-        """
-        if self.current_ammunition == "normal_shell":
-            from game.Bullet.NormalShell.NormalShell import NormalShell
-            if isinstance(bullet, NormalShell):
-                # 可以在这里调整特定属性
-                pass
-        elif self.current_ammunition == "rocket_shell":
-            from game.Bullet.RocketShell.RocketShell import RocketShell
-            if isinstance(bullet, RocketShell):
-                # 可以在这里调整特定属性
-                pass
-        elif self.current_ammunition == "bullet":
-            bullet.damage_rate = 1.0
-            bullet.penetration = [1.0, 1.0, 1.0]
-            bullet.speed_rate = 1.0
-            bullet.is_explosive = False
-
-        overrides = getattr(self, "bullet_overrides", None)
-        if isinstance(overrides, dict):
-            ammo_overrides = overrides.get(
-                self.current_ammunition,
-                overrides.get("default", overrides),
-            )
-            if isinstance(ammo_overrides, dict):
-                for key, value in ammo_overrides.items():
-                    if key in ("speed_rate", "speed"):
-                        continue
-                    setattr(bullet, key, value)
-                if "damage_rate" in ammo_overrides:
-                    bullet.base_damage = BULLET_DAMAGE * float(bullet.damage_rate)
-            
     def switch_ammunition(self, ammo_type = None) -> bool:
         if ammo_type == None:
             idx = self.ammunition_types.index(self.current_ammunition)

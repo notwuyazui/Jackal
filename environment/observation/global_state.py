@@ -47,7 +47,7 @@ class GlobalStateEncoder:
                     math.sin(math.radians(agent.direction_angle)),
                     math.cos(math.radians(agent.turret_direction_angle)),
                     math.sin(math.radians(agent.turret_direction_angle)),
-                    env._cooldown_ratio(agent, env.agent_fire_cooldowns[agent_id]),
+                    agent.fire_cooldown_ratio(),
                     normalize_speed(agent),
                     normalize_angular_speed(agent),
                 ])

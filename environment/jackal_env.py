@@ -6,7 +6,7 @@ import math
 import datetime
 from typing import Callable, Optional
 
-from game.Parameter import BULLET_DAMAGE, BULLET_SPEED, Team, UNIT_MIN_SIGHT_RATIO
+from game.Parameter import BULLET_SPEED, Team, UNIT_MIN_SIGHT_RATIO
 from game.Unit.Tank.Tank import create_tank, create_enemy_tank
 from game.Unit.Archie.Archie import create_archie, create_enemy_archie
 from game.Map.GameMap import (
@@ -172,12 +172,10 @@ class JackalEnv:
             if agent_fire_cooldown_max is not None
             else 1.5
         )
-        self.agent_fire_cooldowns = {i: 0.0 for i in range(self.n_agents)}
         self.max_obs_bullets = 3
         self.max_state_bullets = 10
         self.obs_sight_range = self.unit_sight_range
         self.bullet_norm_speed = max(1.0, float(BULLET_SPEED))
-        self.normal_shell_range = float(BULLET_SPEED) * 1.2
 
         self.observation_manager = ObservationManager(self)
         self.reward_manager = RewardManager(self, self.reward_config)
@@ -346,58 +344,30 @@ class JackalEnv:
             return float(self.enemy_ai_fire_cooldown_max)
         return None
 
-    def _cooldown_ratio(self, unit, cooldown):
-        denom = max(1e-6, self._agent_fire_cooldown_max(unit))
-        return float(cooldown) / denom
-
-    def _apply_bullet_overrides(self, shooter, bullet):
-        if bullet is None:
-            return
-        unit_type = str(getattr(shooter, "unit_type", "tank")).lower()
-        overrides = self.bullet_overrides_by_unit_type.get(unit_type, {})
-        if not overrides:
-            return
-        ammo_name = str(getattr(shooter, "current_ammunition", "")).lower()
-        ammo_overrides = overrides.get(ammo_name, overrides.get("default", overrides))
-        if not isinstance(ammo_overrides, dict):
-            return
-        for key, value in ammo_overrides.items():
-            if key in ("speed_rate", "speed"):
-                continue
-            setattr(bullet, key, value)
-        if "damage_rate" in ammo_overrides:
-            bullet.base_damage = BULLET_DAMAGE * float(bullet.damage_rate)
-
-    def _attach_unit_bullet_overrides(self, unit):
+    def _configure_unit_weapon(self, unit, *, is_enemy):
         unit_type = str(getattr(unit, "unit_type", "tank")).lower()
         overrides = self.bullet_overrides_by_unit_type.get(unit_type, {})
-        if overrides:
-            unit.bullet_overrides = overrides
+        cooldown = (
+            self._enemy_ai_fire_cooldown_max(unit)
+            if is_enemy
+            else self._agent_fire_cooldown_max(unit)
+        )
+        unit.configure_weapon(
+            fire_cooldown=cooldown,
+            projectile_overrides=overrides,
+        )
 
-    def _fire_agent_weapon(self, agent_id, agent):
+    def _fire_agent_weapon(self, agent):
         bullet = agent.fire()
         if not bullet:
             return None
-        self._apply_bullet_overrides(agent, bullet)
         self.bullet_manager.add_bullet(bullet)
-        cooldown = self._agent_fire_cooldown_max(agent)
-        agent.fire_cooldown = cooldown
-        self.agent_fire_cooldowns[agent_id] = cooldown
         return bullet
-
-    def _unit_weapon_range(self, unit):
-        ammo_name = str(getattr(unit, "current_ammunition", "")).lower()
-        if ammo_name == "rocket_shell":
-            return float(BULLET_SPEED) * 1.2 * 1.5
-        if ammo_name == "heavy_shell":
-            return float(BULLET_SPEED) * 0.8 * 1.8
-        return self.normal_shell_range
 
     def reset(self):
         self.steps = 0
         self.has_enemy_kill = False
         self.episode_reward_so_far = 0.0
-        self.agent_fire_cooldowns = {i: 0.0 for i in range(self.n_agents)}
         self.game_map = self._create_game_map()
         self.bullet_manager = BulletManager()
         self.unit_manager = UnitManager()  # 实例化新的 UnitManager
@@ -413,7 +383,7 @@ class JackalEnv:
             self._apply_unit_sight_range(player)
             self._apply_unit_scales(player, self.ally_unit_scales)
             self._apply_unit_scales(player, self._unit_type_scale_cfg(self.ally_unit_type_scales, unit_type))
-            self._attach_unit_bullet_overrides(player)
+            self._configure_unit_weapon(player, is_enemy=False)
             initial_heading = self._initial_heading(self.ally_initial_headings, i)
             if initial_heading is not None:
                 self._set_unit_heading(player, initial_heading)
@@ -434,15 +404,12 @@ class JackalEnv:
             self._apply_unit_sight_range(enemy)
             self._apply_unit_scales(enemy, self.enemy_unit_scales)
             self._apply_unit_scales(enemy, self._unit_type_scale_cfg(self.enemy_unit_type_scales, unit_type))
-            self._attach_unit_bullet_overrides(enemy)
+            self._configure_unit_weapon(enemy, is_enemy=True)
             initial_heading = self._initial_heading(self.enemy_initial_headings, i)
             if initial_heading is not None:
                 self._set_unit_heading(enemy, initial_heading)
             self._apply_initial_heading_jitter(enemy)
 
-            enemy_ai_fire_cooldown = self._enemy_ai_fire_cooldown_max(enemy)
-            if enemy_ai_fire_cooldown is not None:
-                enemy.ai_fire_cooldown_max = float(enemy_ai_fire_cooldown)
             if self.enemy_ai_fire_angle_tolerance is not None:
                 enemy.ai_fire_angle_tolerance = float(self.enemy_ai_fire_angle_tolerance)
 
@@ -503,7 +470,7 @@ class JackalEnv:
         turret_diff = abs(observer.get_angle_difference(observer.turret_direction_angle, target_angle))
         turret_alignment = 1.0 - min(turret_diff, 180.0) / 180.0
         line_of_fire = 1.0 if self.check_raycast_unblocked(observer, target) else 0.0
-        in_range = 1.0 if dist <= self._unit_weapon_range(observer) else 0.0
+        in_range = 1.0 if dist <= observer.weapon_range() else 0.0
         return line_of_fire, in_range, turret_alignment
 
     @property
@@ -524,7 +491,7 @@ class JackalEnv:
         if self.auto_aim:
             # auto_aim: 0~8 为机动，9 为开火
             avail_actions[0:9] = [1] * 9
-            if self.agent_fire_cooldowns[agent_id] <= 0 and self._has_auto_aim_fire_target(agent):
+            if agent.can_fire() and self._has_auto_aim_fire_target(agent):
                 avail_actions[9] = 1
         else:
             # manual_aim: 0~26 为机动+炮塔，27 为开火
@@ -537,10 +504,6 @@ class JackalEnv:
     def step(self, actions):
         self.steps += 1
         
-        for i in range(self.n_agents):
-            if self.agent_fire_cooldowns[i] > 0:
-                self.agent_fire_cooldowns[i] -= self.delta_time
-
        # --- 1. 动作解析与执行 ---
         for agent_id, agent in enumerate(self.agents):
             if not agent.is_alive: continue
@@ -553,9 +516,9 @@ class JackalEnv:
             
             # 根据当前的瞄准模式，将动作分发给对应的成员函数处理
             if self.auto_aim:
-                self._parse_action_auto_aim(agent_id, agent, action)
+                self._parse_action_auto_aim(agent, action)
             else:
-                self._parse_action_manual(agent_id, agent, action)
+                self._parse_action_manual(agent, action)
 
         # ==========================================
         # 1. 物理步进前：采集环境快照
@@ -640,7 +603,7 @@ class JackalEnv:
         frame = rgb_to_bgr(frame)
         self.video_writer.write(frame)
 
-    def _parse_action_auto_aim(self, agent_id, agent, action):
+    def _parse_action_auto_aim(self, agent, action):
         """
         模式 A: 开启辅助瞄准时的动作解析 (10 维)
         """
@@ -666,8 +629,8 @@ class JackalEnv:
                 
         elif action == 9:
             # 停步开火
-            if self.agent_fire_cooldowns[agent_id] <= 0 and self._has_auto_aim_fire_target(agent):
-                self._fire_agent_weapon(agent_id, agent)
+            if agent.can_fire() and self._has_auto_aim_fire_target(agent):
+                self._fire_agent_weapon(agent)
 
         # 2. 环境层接管炮塔的“辅助瞄准”
         closest_enemy = None
@@ -694,12 +657,12 @@ class JackalEnv:
         if (
             self.auto_aim_auto_fire_when_ready
             and action < 9
-            and self.agent_fire_cooldowns[agent_id] <= 0
+            and agent.can_fire()
             and self._has_auto_aim_fire_target(agent)
         ):
-            self._fire_agent_weapon(agent_id, agent)
+            self._fire_agent_weapon(agent)
 
-    def _parse_action_manual(self, agent_id, agent, action):
+    def _parse_action_manual(self, agent, action):
         """
         模式 B: 关闭辅助瞄准，完全手动操作时的动作解析 (28 维)
         """
@@ -735,8 +698,8 @@ class JackalEnv:
         elif action == 27:
             # 停步锁定并开火
             agent.turret_target_angle = agent.turret_direction_angle
-            if self.agent_fire_cooldowns[agent_id] <= 0:
-                self._fire_agent_weapon(agent_id, agent)
+            if agent.can_fire():
+                self._fire_agent_weapon(agent)
 
     def close(self):
         if self.use_video and self.video_writer is not None:

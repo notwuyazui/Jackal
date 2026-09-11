@@ -67,10 +67,7 @@ class EnemyAI:
         # 缓存单位碰撞箱对角线一半（用于安全范围计算）
         self._update_unit_radius()
         
-        # 开火冷却（与外部一致）
-        self.fire_cooldown = 0.0
-        # 允许环境通过单位属性覆写 AI 开火强度
-        self.fire_cooldown_max = float(getattr(self.unit, "ai_fire_cooldown_max", 0.5))
+        # 开火冷却由 unit 统一维护，AI 只负责决定何时尝试开火。
         self.fire_angle_tolerance = float(getattr(self.unit, "ai_fire_angle_tolerance", 10.0))
 
         # 固定侧向机动方向，避免所有 AI 使用同一环绕方向而拥堵。
@@ -88,10 +85,6 @@ class EnemyAI:
         self.bullet_manager = bullet_manager
         self.game_map = game_map
         self._update_unit_radius()  # 单位大小可能变化，重新计算
-
-        # 更新开火冷却
-        if self.fire_cooldown > 0:
-            self.fire_cooldown -= delta_time
 
         # 获取目标（最近的敌方单位）
         enemy_units = self._get_enemy_units()
@@ -597,7 +590,7 @@ class EnemyAI:
 
     def _try_fire(self, target: BaseUnit):
         """尝试开火，检查视线和冷却"""
-        if self.fire_cooldown <= 0 and self._can_see_target(target):
+        if self.unit.can_fire() and self._can_see_target(target):
             angle_diff = self.unit.get_angle_difference(
                 self.unit.turret_direction_angle, self.unit.turret_target_angle
             )
@@ -605,7 +598,6 @@ class EnemyAI:
                 bullet = self.unit.fire()
                 if bullet:
                     self.bullet_manager.add_bullet(bullet)
-                    self.fire_cooldown = self.fire_cooldown_max
 
     def _can_see_target(self, target: BaseUnit) -> bool:
         """视线检测：使用 bullet_obstacles（只被实心障碍阻挡，水不阻挡）"""
