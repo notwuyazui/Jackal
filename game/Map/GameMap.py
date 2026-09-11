@@ -5,7 +5,7 @@ from game.Map.BarrierTile.BarrierTile import *
 from game.Map.WaterTile.WaterTile import *
 from game.Map.SandTile.SandTile import SandTile
 from game.Map.TrapTile.TrapTile import TrapTile
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Callable, Dict, List, Optional, Set, Tuple
 import os
 from game.Parameter import *
 from game.GameMode import *
@@ -154,6 +154,14 @@ class GameMap:
     def get_candidate_bullet_obstacles(self, rect: pygame.Rect) -> List[pygame.Rect]:
         """子弹碰撞 broad-phase 候选障碍。"""
         return self._query_obstacles(self._bullet_obstacle_index, rect)
+
+    def has_line_of_sight(
+        self,
+        start: Tuple[float, float],
+        end: Tuple[float, float],
+    ) -> bool:
+        """判断两点之间是否被可阻挡子弹的地块遮挡。"""
+        return not any(obstacle.clipline(start, end) for obstacle in self.bullet_obstacles)
 
     def draw(self, surface: pygame.Surface, camera_offset: List[float] = [0, 0]) -> None:
         """绘制地图"""
@@ -375,3 +383,32 @@ def create_random_map(width: int = 15, height: int = 10, density: float = 0.3) -
                 row.append('x' if random.random() < density else 'o')
         map_data.append(''.join(row))
     return GameMap(map_data)
+
+
+def create_builtin_map(name: str) -> GameMap:
+    """按稳定名称创建项目内置地图。"""
+    factories: Dict[str, Callable[[], Optional[GameMap]]] = {
+        "border": create_border_map,
+        "empty": create_empty_map,
+        "maze": create_maze_map,
+        "random": create_random_map,
+        "test": create_test_map,
+        "valley": create_valley_map,
+        "river": create_river_map,
+        "spindle": create_spindle_map,
+        "corridor": create_corridor_map,
+        "dual_corridor": create_dual_corridor_map,
+        "square_ring": create_square_ring_map,
+        "four_blocks": create_four_blocks_map,
+    }
+    normalized_name = str(name).lower().removesuffix("_map")
+    try:
+        game_map = factories[normalized_name]()
+    except KeyError as exc:
+        available = ", ".join(sorted(factories))
+        raise ValueError(
+            f"Unknown built-in map {name!r}; available maps: {available}"
+        ) from exc
+    if game_map is None:
+        raise ValueError(f"Failed to load built-in map: {name}")
+    return game_map

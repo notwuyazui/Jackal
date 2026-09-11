@@ -4,29 +4,17 @@ import random
 import numpy as np
 import math
 import datetime
-from typing import Callable, Optional
+from typing import Optional
 
 from game.Parameter import BULLET_SPEED, Team, UNIT_MIN_SIGHT_RATIO
-from game.Unit.Tank.Tank import create_tank, create_enemy_tank
-from game.Unit.Archie.Archie import create_archie, create_enemy_archie
 from game.Map.GameMap import (
     GameMap,
-    create_border_map,
-    create_corridor_map,
-    create_dual_corridor_map,
-    create_empty_map,
-    create_four_blocks_map,
-    create_maze_map,
-    create_random_map,
-    create_river_map,
-    create_spindle_map,
-    create_square_ring_map,
-    create_valley_map,
+    create_builtin_map,
     create_map_from_file,
     create_map_from_strings,
 )
 from game.Bullet.BulletManager import BulletManager
-from game.core import BattleWorld
+from game.BattleWorld import BattleWorld
 from game.Unit.UnitManager import UnitManager
 from environment.observation import ObservationManager
 from environment.rendering import create_video_writer, rgb_to_bgr
@@ -163,7 +151,7 @@ class JackalEnv:
         self.unit_sight_range = float(unit_sight_range)
         self.position_jitter = float(position_jitter)
         self.heading_jitter = float(heading_jitter)
-        self.world: Optional[BattleWorld] = None
+        self._world: Optional[BattleWorld] = None
         
         self.fire_cooldown_max = (
             float(agent_fire_cooldown_max)
@@ -181,22 +169,23 @@ class JackalEnv:
         if self.use_video:
             os.makedirs(self.video_dir, exist_ok=True)
 
-    def _require_world(self) -> BattleWorld:
-        if self.world is None:
+    @property
+    def world(self) -> BattleWorld:
+        if self._world is None:
             raise RuntimeError("Environment must be reset before accessing the battle world")
-        return self.world
+        return self._world
 
     @property
     def game_map(self) -> GameMap:
-        return self._require_world().game_map
+        return self.world.game_map
 
     @property
     def unit_manager(self) -> UnitManager:
-        return self._require_world().unit_manager
+        return self.world.unit_manager
 
     @property
     def bullet_manager(self) -> BulletManager:
-        return self._require_world().bullet_manager
+        return self.world.bullet_manager
 
     def _create_game_map(self) -> GameMap:
         if self.map_data:
@@ -207,34 +196,7 @@ class JackalEnv:
                 raise ValueError(f"Failed to load map_file: {self.map_file}")
             return game_map
 
-        map_factories: dict[str, Callable[[], Optional[GameMap]]] = {
-            "border": create_border_map,
-            "empty": create_empty_map,
-            "maze": create_maze_map,
-            "random": create_random_map,
-            "valley": create_valley_map,
-            "valley_map": create_valley_map,
-            "river": create_river_map,
-            "river_map": create_river_map,
-            "spindle": create_spindle_map,
-            "spindle_map": create_spindle_map,
-            "corridor": create_corridor_map,
-            "corridor_map": create_corridor_map,
-            "dual_corridor": create_dual_corridor_map,
-            "dual_corridor_map": create_dual_corridor_map,
-            "square_ring": create_square_ring_map,
-            "square_ring_map": create_square_ring_map,
-            "four_blocks": create_four_blocks_map,
-            "four_blocks_map": create_four_blocks_map,
-        }
-        factory = map_factories.get(self.map_name)
-        if factory is None:
-            raise ValueError(f"Unknown map_name: {self.map_name}")
-
-        game_map = factory()
-        if game_map is None:
-            raise ValueError(f"Failed to load bundled map: {self.map_name}")
-        return game_map
+        return create_builtin_map(self.map_name)
 
     def set_reward_config(self, reward_config):
         if reward_config:
@@ -270,18 +232,6 @@ class JackalEnv:
         if unit_type in self.unit_type_names:
             onehot[self.unit_type_names.index(unit_type)] = 1.0
         return onehot
-
-    def _create_unit_by_type(self, unit_type, unit_id, team, position, using_ai):
-        unit_type = str(unit_type).lower()
-        if unit_type == "tank":
-            if team == Team.ENEMY:
-                return create_enemy_tank(unit_id, position=position, usingAI=using_ai)
-            return create_tank(unit_id, team, position=position, usingAI=using_ai)
-        if unit_type == "archie":
-            if team == Team.ENEMY:
-                return create_enemy_archie(unit_id, position=position, usingAI=using_ai)
-            return create_archie(unit_id, team, position=position, usingAI=using_ai)
-        raise ValueError(f"Unsupported unit_type={unit_type!r}")
 
     def _unit_type_scale_cfg(self, side_cfg, unit_type):
         if not side_cfg:
@@ -372,19 +322,12 @@ class JackalEnv:
             projectile_overrides=overrides,
         )
 
-    def _fire_agent_weapon(self, agent):
-        bullet = agent.fire()
-        if not bullet:
-            return None
-        self._require_world().add_bullet(bullet)
-        return bullet
-
     def reset(self):
         self.steps = 0
         self.has_enemy_kill = False
         self.episode_reward_so_far = 0.0
         world = BattleWorld(self._create_game_map())
-        self.world = world
+        self._world = world
         
         self.agents = []
         # 创建玩家: RL网络控制，不使用内置AI (usingAI=False)
@@ -392,7 +335,13 @@ class JackalEnv:
             pos = self.ally_positions[i] if i < len(self.ally_positions) else (220, 220 + i * 100)
             pos = self._jitter_position(pos)
             unit_type = self.ally_unit_types[i]
-            player = self._create_unit_by_type(unit_type, i + 1, Team.PLAYER, pos, using_ai=False)
+            player = UnitManager.create_unit(
+                unit_type,
+                i + 1,
+                Team.PLAYER,
+                pos,
+                using_ai=False,
+            )
             player.usingAI = False
             self._apply_unit_sight_range(player)
             self._apply_unit_scales(player, self.ally_unit_scales)
@@ -413,7 +362,13 @@ class JackalEnv:
 
             # 创建敌人: 开启内置AI控制
             unit_type = self.enemy_unit_types[i]
-            enemy = self._create_unit_by_type(unit_type, 100 + i, Team.ENEMY, pos, using_ai=self.enemy_use_ai)
+            enemy = UnitManager.create_unit(
+                unit_type,
+                100 + i,
+                Team.ENEMY,
+                pos,
+                using_ai=self.enemy_use_ai,
+            )
             enemy.usingAI = self.enemy_use_ai
             self._apply_unit_sight_range(enemy)
             self._apply_unit_scales(enemy, self.enemy_unit_scales)
@@ -456,7 +411,7 @@ class JackalEnv:
     def _has_auto_aim_fire_target(self, agent):
         fire_angle_tolerance = self.auto_aim_fire_angle_tolerance
         for enemy in self.enemies:
-            if not enemy.is_alive or not self.is_visible_to_agent(agent, enemy):
+            if not enemy.is_alive or not self.world.is_visible(agent, enemy):
                 continue
             dist = self._distance_between(agent, enemy)
             line_of_fire, in_range, _ = self._target_geometry_features(agent, enemy, dist)
@@ -477,7 +432,7 @@ class JackalEnv:
         target_angle = (math.degrees(math.atan2(dy, dx)) + 90) % 360
         turret_diff = abs(observer.get_angle_difference(observer.turret_direction_angle, target_angle))
         turret_alignment = 1.0 - min(turret_diff, 180.0) / 180.0
-        line_of_fire = 1.0 if self.check_raycast_unblocked(observer, target) else 0.0
+        line_of_fire = 1.0 if self.world.has_line_of_sight(observer, target) else 0.0
         in_range = 1.0 if dist <= observer.weapon_range() else 0.0
         return line_of_fire, in_range, turret_alignment
 
@@ -534,7 +489,7 @@ class JackalEnv:
         # ==========================================
 
         # --- 2. 物理更新：由游戏层统一编排地图、AI/单位、子弹和视野 ---
-        self._require_world().step(self.delta_time)
+        self.world.step(self.delta_time)
         
         # --- 3. 视频录制 ---
         if self.use_video:
@@ -561,28 +516,6 @@ class JackalEnv:
         if all(not agent.is_alive for agent in self.agents): return True
         if all(not enemy.is_alive for enemy in self.enemies): return True
         return False
-
-    def check_raycast_unblocked(self, observer, target):
-        """仅做纯粹的物理射线遮挡检测 (Raycasting)"""
-        line_start = observer.position
-        line_end = target.position
-        for obstacle_rect in self.game_map.bullet_obstacles:
-            if obstacle_rect.clipline(line_start, line_end):
-                return False
-        return True
-
-    def is_visible_to_agent(self, agent, target):
-        """
-        结合底层水滴视野与环境层物理遮挡的综合判定
-        """
-        if not agent.is_alive or not target.is_alive:
-            return False
-        # 1. 底层查表：检查目标是否在原作者实现的可见列表中（包含水滴视野和距离限制）
-        in_underlying_vision = any(u.id == target.id for u in agent.visible_units.units)
-        if not in_underlying_vision:
-            return False
-        # 2. 环境层过滤：如果底层认为可见，叠加一次严格的物理防透视遮挡检测
-        return self.check_raycast_unblocked(agent, target)
 
     def get_obs(self):
         """Return local observations through the stable environment API."""
@@ -635,13 +568,13 @@ class JackalEnv:
         elif action == 9:
             # 停步开火
             if agent.can_fire() and self._has_auto_aim_fire_target(agent):
-                self._fire_agent_weapon(agent)
+                self.world.fire_weapon(agent)
 
         # 2. 环境层接管炮塔的“辅助瞄准”
         closest_enemy = None
         min_dist = float('inf')
         for enemy in self.enemies:
-            if enemy.is_alive and self.is_visible_to_agent(agent, enemy):
+            if enemy.is_alive and self.world.is_visible(agent, enemy):
                 dx = enemy.position[0] - agent.position[0]
                 dy = enemy.position[1] - agent.position[1]
                 dist = math.hypot(dx, dy)
@@ -665,7 +598,7 @@ class JackalEnv:
             and agent.can_fire()
             and self._has_auto_aim_fire_target(agent)
         ):
-            self._fire_agent_weapon(agent)
+            self.world.fire_weapon(agent)
 
     def _parse_action_manual(self, agent, action):
         """
@@ -704,7 +637,7 @@ class JackalEnv:
             # 停步锁定并开火
             agent.turret_target_angle = agent.turret_direction_angle
             if agent.can_fire():
-                self._fire_agent_weapon(agent)
+                self.world.fire_weapon(agent)
 
     def close(self):
         if self.use_video and self.video_writer is not None:

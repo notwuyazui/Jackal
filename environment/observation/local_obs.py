@@ -39,6 +39,7 @@ class LocalObservationEncoder:
         observations: List[np.ndarray] = []
         sight_range = env.obs_sight_range
         time_ratio = env.steps / env.max_steps
+        world = env.world
 
         for agent_id, agent in enumerate(env.agents):
             if not agent.is_alive:
@@ -67,7 +68,7 @@ class LocalObservationEncoder:
             ]
             for ally in allies:
                 alive = bool(ally.is_alive)
-                visible = alive and env.is_visible_to_agent(agent, ally)
+                visible = alive and world.is_visible(agent, ally)
                 if visible:
                     rel_x = ally.position[0] - agent.position[0]
                     rel_y = ally.position[1] - agent.position[1]
@@ -83,7 +84,7 @@ class LocalObservationEncoder:
                         math.sin(math.radians(ally.direction_angle)),
                         normalize_speed(ally),
                         ally.fire_cooldown_ratio(),
-                        1.0 if env.check_raycast_unblocked(agent, ally) else 0.0,
+                        1.0 if world.has_line_of_sight(agent, ally) else 0.0,
                     ])
                     features.extend(env._unit_type_onehot(ally))
                 else:
@@ -92,7 +93,7 @@ class LocalObservationEncoder:
 
             for enemy in env.enemies:
                 alive = bool(enemy.is_alive)
-                visible = alive and env.is_visible_to_agent(agent, enemy)
+                visible = alive and world.is_visible(agent, enemy)
                 if visible:
                     rel_x = enemy.position[0] - agent.position[0]
                     rel_y = enemy.position[1] - agent.position[1]
@@ -123,8 +124,8 @@ class LocalObservationEncoder:
                     features.extend(env._unit_type_onehot(enemy))
 
             visible_bullets = []
-            for bullet in agent.visible_bullets.bullets:
-                if not env.check_raycast_unblocked(agent, bullet):
+            for bullet in env.bullet_manager.bullets:
+                if not world.is_visible(agent, bullet):
                     continue
                 dx = bullet.position[0] - agent.position[0]
                 dy = bullet.position[1] - agent.position[1]

@@ -3,8 +3,10 @@
 The project is split into three code areas:
 
 - `game/`: Pygame battle engine, units, bullets, maps, constants, and art assets.
-  - `core/`: headless battle orchestration. `BattleWorld` owns the current map,
-    unit manager, and bullet manager and defines their update order.
+  - `BattleWorld.py`: common battle entry point for interactive play and RL;
+    owns the map, unit manager, bullet manager, update order, and controls.
+  - `Map/`, `Unit/`, `Bullet/`: map queries, unit creation/perception, and
+    projectile registration remain with their existing managers.
 - `environment/`: RL-facing Jackal environment built on top of the game engine.
   - `jackal_env.py`: episode lifecycle, action execution, rendering, and the stable environment API.
   - `observation/`: local observations, centralized state, map features, and feature normalization.

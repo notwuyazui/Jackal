@@ -38,7 +38,7 @@ def calculate_manual_aim_reward(
         visible_enemies = [
             enemy
             for enemy in env.enemies
-            if enemy.is_alive and env.is_visible_to_agent(agent, enemy)
+            if enemy.is_alive and env.world.is_visible(agent, enemy)
         ]
         if not visible_enemies:
             continue

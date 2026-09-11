@@ -18,3 +18,4 @@
     4. 引入 WorldSnapshot、CombatEvent，让观测和奖励不再直接访问整个 JackalEnv。
     5. 使用空间索引和每帧感知缓存。
     6. 最后解耦 Pygame 渲染，并重构训练入口。
+    7. 完全删除GameManager，所涉及的调用改为调用BattleWorld。

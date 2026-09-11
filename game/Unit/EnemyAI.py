@@ -80,10 +80,7 @@ class EnemyAI:
         self.safe_radius = self.unit_radius + self.SAFE_MARGIN
 
     # ----------------- 公开更新接口 -----------------
-    def update(self, delta_time: float, unit_manager, bullet_manager, game_map):
-        self.unit_manager = unit_manager
-        self.bullet_manager = bullet_manager
-        self.game_map = game_map
+    def update(self):
         self._update_unit_radius()  # 单位大小可能变化，重新计算
 
         # 获取目标（最近的敌方单位）
@@ -590,20 +587,13 @@ class EnemyAI:
 
     def _try_fire(self, target: BaseUnit):
         """尝试开火，检查视线和冷却"""
-        if self.unit.can_fire() and self._can_see_target(target):
+        if self.unit.can_fire() and self.unit_manager.is_visible(
+            self.game_map,
+            self.unit,
+            target,
+        ):
             angle_diff = self.unit.get_angle_difference(
                 self.unit.turret_direction_angle, self.unit.turret_target_angle
             )
             if abs(angle_diff) < self.fire_angle_tolerance:
-                bullet = self.unit.fire()
-                if bullet:
-                    self.bullet_manager.add_bullet(bullet)
-
-    def _can_see_target(self, target: BaseUnit) -> bool:
-        """视线检测：使用 bullet_obstacles（只被实心障碍阻挡，水不阻挡）"""
-        start = self.unit.position
-        end = target.position
-        for obs in self.game_map.bullet_obstacles:
-            if obs.clipline(start, end):
-                return False
-        return True
+                self.bullet_manager.fire(self.unit)

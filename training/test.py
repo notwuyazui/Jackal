@@ -6,29 +6,39 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
-from game.GameManager import GameManager
+from game.BattleWorld import BattleWorld
+from game.Parameter import Team, FPS, ACC
 from game.PCControl import PCControl
 from game.utils import Action, set_font
 
 
 def init_game():
-    game_manager = GameManager()
-    game_manager.set_test_map()
-    game_manager.add_player_tank(unit_id=0, position=(100,500), usingAI=False, visible=True)      # 添加一个玩家坦克
-    
-    game_manager.add_player_tank(unit_id=101, position = (256, 448), usingAI = True)
-    game_manager.add_player_tank(unit_id=102, position = (480, 448), usingAI = True)
-    game_manager.add_player_tank(unit_id=103, position = (768, 448), usingAI = True)
-    game_manager.add_player_archie(unit_id=104, position = (256, 512), usingAI = True)
-    game_manager.add_player_plane(unit_id=105, position = (480, 512), usingAI = True)
-    game_manager.add_player_archie(unit_id=106, position = (768, 512), usingAI = True)
-    game_manager.add_enemy_archie(unit_id=201, position = (256, 192), usingAI = True)
-    game_manager.add_enemy_archie(unit_id=202, position = (480, 192), usingAI = True)
-    game_manager.add_enemy_archie(unit_id=203, position = (768, 192), usingAI = True)
-    game_manager.add_enemy_tank(unit_id=204, position = (256, 128), usingAI = True)
-    game_manager.add_enemy_plane(unit_id=205, position = (480, 128), usingAI = True)
-    game_manager.add_enemy_tank(unit_id=206, position = (768, 128), usingAI = True)
-    return game_manager
+    world = BattleWorld()
+    world.load_builtin_map("test")
+    units = [
+        ("tank", 0, Team.PLAYER, (100, 500), False),
+        ("tank", 101, Team.PLAYER, (256, 448), True),
+        ("tank", 102, Team.PLAYER, (480, 448), True),
+        ("tank", 103, Team.PLAYER, (768, 448), True),
+        ("archie", 104, Team.PLAYER, (256, 512), True),
+        ("plane", 105, Team.PLAYER, (480, 512), True),
+        ("archie", 106, Team.PLAYER, (768, 512), True),
+        ("archie", 201, Team.ENEMY, (256, 192), True),
+        ("archie", 202, Team.ENEMY, (480, 192), True),
+        ("archie", 203, Team.ENEMY, (768, 192), True),
+        ("tank", 204, Team.ENEMY, (256, 128), True),
+        ("plane", 205, Team.ENEMY, (480, 128), True),
+        ("tank", 206, Team.ENEMY, (768, 128), True),
+    ]
+    for unit_type, unit_id, team, position, using_ai in units:
+        world.create_unit(
+            unit_type,
+            team,
+            position,
+            unit_id=unit_id,
+            using_ai=using_ai,
+        )
+    return world
 
 if __name__ == "__main__":
     pygame.init()
@@ -41,7 +51,6 @@ if __name__ == "__main__":
     font = set_font()
     
     # 添加地图和单位
-    game_manager = GameManager()
     game_manager = init_game()
     
     # 用于显示信息的表面
@@ -52,7 +61,8 @@ if __name__ == "__main__":
     
     running = True
     while running:
-        delta_time = clock.tick(60) / 1000.0
+        delta_time = 1.0 / FPS
+        clock.tick(FPS * ACC)
         
         # 应用键盘鼠标控制
         running, action = PCControl(game_manager, action, screen)
