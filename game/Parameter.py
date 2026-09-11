@@ -5,9 +5,10 @@ import numpy as np
 import enum
 
 FPS = 60
+ACC = 1.0
 DELTA_TIME = 1.0 / FPS
 
-INF = 10000                # 当需要无视加速度/速度时，取此值
+INF = 10000.0              # 当需要无视加速度/速度时，取此值
 
 UNIT_SPEED = 50.0                       # 单位的基础速度
 UNIT_ACC = 100.0                        # 单位的基础加速度

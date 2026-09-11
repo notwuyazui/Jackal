@@ -101,6 +101,10 @@ class BaseUnit:
         self.killed_by = None               # 击杀者
         self.living_time = 0.0              # 存活时间
         self.reward = 0.0
+
+        # 地块效果会在每一帧开始时重置并重新计算。
+        self.speed_slow_multiplier = 1.0
+        self.conceal = False
         
         # 初始化碰撞箱
         self._update_bounding_box()
@@ -135,6 +139,8 @@ class BaseUnit:
             return False
         
         self.living_time += delta_time
+        self._frame_init()                            # 重置上一帧地块效果
+        self._update_tile_buff(game_map)              # 应用当前位置的地块效果
         self._update_vision(unit_manager, bullet_manager, game_map)              # 更新视野
         self._update_ammo_switch(delta_time)         # 更新弹种切换计时器
         self._update_fire_cooldown(delta_time)       # 更新开火冷却时间
@@ -159,6 +165,17 @@ class BaseUnit:
                     return True
         
         return True
+
+    def _frame_init(self) -> None:
+        """重置仅在当前帧生效的地块效果。"""
+        self.speed_slow_multiplier = 1.0
+        self.conceal = False
+
+    def _update_tile_buff(self, game_map) -> None:
+        """应用单位当前位置的地块效果。"""
+        tile = game_map.get_tile_at_position(self.position[0], self.position[1])
+        if tile is not None:
+            tile.apply_buff(self)
     
     def _update_vision(self, unit_manager, bullet_manager, game_map) -> None:
         """更新视野"""
@@ -171,7 +188,7 @@ class BaseUnit:
         # 构造 EnemyAI，导致每帧视野刷新时产生大量不必要对象分配与逻辑开销。
         # 直接写入 units 列表即可满足后续所有读取逻辑（广播/观测都只遍历 units）。
         for unit in unit_manager.units:
-            if self.is_in_sight(unit):
+            if self.is_in_sight(unit) and unit.visible and not unit.conceal:
                 self.visible_units.units.append(unit)
 
         # 同理，visible_bullets 只需保存可见子弹引用，不需要走 add_bullet 的调试分支。
@@ -198,14 +215,23 @@ class BaseUnit:
     
     def _update_speed(self, delta_time) -> None:
         """更新速度"""
+        effective_max_speed = self.max_speed * self.speed_slow_multiplier
+        real_acceleration = self.acceleration
+
+        # 已超过地块限制时逐步减速，防止速度在新上限附近震荡。
+        if self.speed > effective_max_speed:
+            real_acceleration = -self.max_acceleration
+        elif self.speed < -effective_max_speed:
+            real_acceleration = self.max_acceleration
+
         # 应用加速度
-        self.speed += self.acceleration * delta_time
+        self.speed += real_acceleration * delta_time
         
-        # 限制速度范围
-        if self.speed > self.max_speed:
-            self.speed = self.max_speed
-        elif self.speed < -self.max_speed:
-            self.speed = -self.max_speed
+        # 穿过有效速度上限时直接钳制，避免反复越界。
+        if real_acceleration >= 0 and self.speed > effective_max_speed:
+            self.speed = effective_max_speed
+        elif real_acceleration <= 0 and self.speed < -effective_max_speed:
+            self.speed = -effective_max_speed
     
     def _update_direction(self, delta_time) -> None:
         """更新单位朝向角度"""
@@ -706,6 +732,14 @@ class BaseUnit:
             self.killed_by = damage_source.id
         self._handle_assistance(unit_manager, damage_source, destroyed, damage_amount)
         return destroyed, damage_amount
+
+    def take_damage_from_tile(self, damage_amount):
+        """承受地形伤害；地形击杀使用 -1 作为来源标记。"""
+        self.health -= damage_amount
+        if self.health <= 0:
+            self.health = 0
+            self.is_alive = False
+            self.killed_by = -1
 
     def _handle_assistance(self, unit_manager, damage_source, destroy:bool , damage_amount:float) -> None:
         # 当自身受到伤害时，处理伤害来源的协助信息

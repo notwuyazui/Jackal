@@ -3,6 +3,8 @@ from game.Map.BaseTile import BaseTile
 from game.Map.FlatTile.FlatTile import *
 from game.Map.BarrierTile.BarrierTile import *
 from game.Map.WaterTile.WaterTile import *
+from game.Map.SandTile.SandTile import SandTile
+from game.Map.TrapTile.TrapTile import TrapTile
 from typing import Dict, List, Optional, Set, Tuple
 import os
 from game.Parameter import *
@@ -14,6 +16,8 @@ CHAR_TO_TILE = {
     'o': FlatTile,
     'x': BarrierTile,
     'w': WaterTile,
+    's': SandTile,
+    't': TrapTile,
 }
 
 class GameMap:
@@ -260,12 +264,20 @@ class GameMap:
         """获取地图总尺寸（像素）"""
         return self.width * self.tile_size, self.height * self.tile_size
 
-    def get_tile_at_position(self, x: float, y: float) -> Optional[str]:
+    def get_tile_char_at_position(self, x: float, y: float) -> Optional[str]:
         """获取指定位置的地块字符"""
         col = int(x // self.tile_size)
         row = int(y // self.tile_size)
         if 0 <= row < self.height and 0 <= col < self.width:
             return self.tiles[row][col].letter
+        return None
+
+    def get_tile_at_position(self, x: float, y: float) -> Optional[BaseTile]:
+        """获取指定位置的地块对象。"""
+        col = int(x // self.tile_size)
+        row = int(y // self.tile_size)
+        if 0 <= row < self.height and 0 <= col < self.width:
+            return self.tiles[row][col]
         return None
 
     def _draw_debug(self, surface: pygame.Surface, camera_offset: List[float]) -> None:
@@ -323,57 +335,33 @@ def create_maze_map() -> GameMap:
     ]
     return GameMap(map_data)
 
-def create_valley_map() -> GameMap:
-    """15x10 valley map.
+def create_valley_map() -> Optional[GameMap]:
+    """从 saved/01_valley_map.txt 创建溪谷地图。"""
+    return GameMap.load_from_file("01_valley_map.txt")
 
-    Water blocks units but not bullets, producing a river/valley geometry while
-    keeping line-of-fire interactions different from solid walls.
-    """
-    map_data = [
-        "xxxxxxxxxxxxxxx",
-        "xooooooooooooox",
-        "xooooooooooooox",
-        "xwwwooooooowwwx",
-        "xwwwwooooowwwwx",
-        "xooowooooowooox",
-        "xwwwooooooowwwx",
-        "xooooooooooooox",
-        "xooooooooooooox",
-        "xxxxxxxxxxxxxxx",
-    ]
-    return GameMap(map_data)
+def create_river_map() -> Optional[GameMap]:
+    """从 saved/02_river_map.txt 创建河流地图。"""
+    return GameMap.load_from_file("02_river_map.txt")
 
-def create_spindle_map() -> GameMap:
-    """15x10 spindle-shaped map."""
-    map_data = [
-        "xxxxxxxxxxxxxxx",
-        "xxxxoooooooxxxx",
-        "xxxoooooooooxxx",
-        "xxoooooooooooxx",
-        "xooooooooooooox",
-        "xooooooooooooox",
-        "xxoooooooooooxx",
-        "xxxoooooooooxxx",
-        "xxxxoooooooxxxx",
-        "xxxxxxxxxxxxxxx",
-    ]
-    return GameMap(map_data)
+def create_spindle_map() -> Optional[GameMap]:
+    """从 saved/03_spindle_map.txt 创建纺锤形地图。"""
+    return GameMap.load_from_file("03_spindle_map.txt")
 
-def create_corridor_map() -> GameMap:
-    """15x10 corridor map with central vertical blockers."""
-    map_data = [
-        "xxxxxxxxxxxxxxx",
-        "xoooooxxxooooox",
-        "xoooooxxxooooox",
-        "xoooooxxxooooox",
-        "xooooooooooooox",
-        "xooooooooooooox",
-        "xoooooxxxooooox",
-        "xoooooxxxooooox",
-        "xoooooxxxooooox",
-        "xxxxxxxxxxxxxxx",
-    ]
-    return GameMap(map_data)
+def create_corridor_map() -> Optional[GameMap]:
+    """从 saved/04_corridor_map.txt 创建走廊地图。"""
+    return GameMap.load_from_file("04_corridor_map.txt")
+
+def create_dual_corridor_map() -> Optional[GameMap]:
+    """从 saved/05_dual_corridor_map.txt 创建双走廊地图。"""
+    return GameMap.load_from_file("05_dual_corridor_map.txt")
+
+def create_square_ring_map() -> Optional[GameMap]:
+    """从 saved/06_square_ring_map.txt 创建回字形地图。"""
+    return GameMap.load_from_file("06_square_ring_map.txt")
+
+def create_four_blocks_map() -> Optional[GameMap]:
+    """从 saved/07_four_blocks_map.txt 创建田字形地图。"""
+    return GameMap.load_from_file("07_four_blocks_map.txt")
 
 def create_random_map(width: int = 15, height: int = 10, density: float = 0.3) -> GameMap:
     map_data = []
