@@ -9,25 +9,53 @@ from game.Unit.Tank.Tank import *
 from game.Unit.Archie.Archie import *
 from game.Unit.Plane.Plane import *
 from game.GameMode import *
+from game.core import BattleWorld
 
 class GameManager:
     def __init__ (self, game_map:GameMap = None, unit_manager = None, bullet_manager = None):
-        self.game_map = game_map if game_map is not None else create_empty_map()
-        self.unit_manager = unit_manager if unit_manager is not None else UnitManager()
-        self.bullet_manager = bullet_manager if bullet_manager is not None else BulletManager()
+        resolved_map = game_map if game_map is not None else create_empty_map()
+        if resolved_map is None:
+            raise ValueError("Failed to create the initial game map")
+        self.world = BattleWorld(resolved_map, unit_manager, bullet_manager)
         
         self.camera_offset = [0.0, 0.0]
         self.camera_speed = 5
         
-        self.time = 0.0        # 游戏时间
         self.print_record_timer = 0.0
 
+    @property
+    def game_map(self):
+        return self.world.game_map
+
+    @game_map.setter
+    def game_map(self, game_map):
+        if game_map is None:
+            raise ValueError("Game map cannot be None")
+        self.world.game_map = game_map
+
+    @property
+    def unit_manager(self):
+        return self.world.unit_manager
+
+    @unit_manager.setter
+    def unit_manager(self, unit_manager):
+        self.world.unit_manager = unit_manager
+
+    @property
+    def bullet_manager(self):
+        return self.world.bullet_manager
+
+    @bullet_manager.setter
+    def bullet_manager(self, bullet_manager):
+        self.world.bullet_manager = bullet_manager
+
+    @property
+    def time(self):
+        return self.world.elapsed_time
+
     def update(self, delta_time):
-        self.time += delta_time
         self.print_record_timer += delta_time
-        self.game_map.update(delta_time) if self.game_map != None else None
-        self.unit_manager.update(delta_time, self.unit_manager, self.bullet_manager, self.game_map)
-        self.bullet_manager.update(delta_time, self.unit_manager, self.game_map)
+        self.world.step(delta_time)
 
     def draw(self, screen, camera_offset = None):
         if camera_offset == None:
@@ -158,7 +186,7 @@ class GameManager:
         unit.broadcast_receive()
     
     def add_unit(self, unit):
-        self.unit_manager.add_unit(unit, self.bullet_manager, self.game_map)
+        self.world.add_unit(unit)
         
     def add_player_tank(self, position=(0,0), unit_id = None, usingAI = False, visible = True):
         if unit_id is None:
@@ -203,7 +231,7 @@ class GameManager:
         return plane
     
     def add_bullet(self, bullet):
-        self.bullet_manager.add_bullet(bullet)
+        self.world.add_bullet(bullet)
         
     def get_unit(self, unit_id):
         # 通过id定位unit

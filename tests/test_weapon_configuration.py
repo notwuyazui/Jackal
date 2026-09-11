@@ -76,6 +76,7 @@ class EnvironmentWeaponIntegrationTests(unittest.TestCase):
 
     def test_environment_step_advances_the_unit_cooldown_once(self) -> None:
         agent = self.env.agents[0]
+        assert self.env.world is not None
 
         self.env.step([27])
 
@@ -87,6 +88,11 @@ class EnvironmentWeaponIntegrationTests(unittest.TestCase):
         self.assertEqual(len(player_bullets), 1)
         self.assertEqual(player_bullets[0].cooldown, 0.35)
         self.assertAlmostEqual(agent.fire_cooldown, 0.32)
+        self.assertEqual(self.env.world.tick, 1)
+        self.assertAlmostEqual(self.env.world.elapsed_time, 0.03)
+        self.assertIs(self.env.game_map, self.env.world.game_map)
+        self.assertIs(self.env.unit_manager, self.env.world.unit_manager)
+        self.assertIs(self.env.bullet_manager, self.env.world.bullet_manager)
 
         self.env.step([0])
         self.assertAlmostEqual(agent.fire_cooldown, 0.29)

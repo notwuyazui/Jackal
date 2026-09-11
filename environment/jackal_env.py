@@ -26,14 +26,11 @@ from game.Map.GameMap import (
     create_map_from_strings,
 )
 from game.Bullet.BulletManager import BulletManager
+from game.core import BattleWorld
+from game.Unit.UnitManager import UnitManager
 from environment.observation import ObservationManager
 from environment.rendering import create_video_writer, rgb_to_bgr
 from environment.reward import RewardManager, default_reward_config, merge_reward_config
-
-# 引入单位管理器
-from game.Unit.UnitManager import UnitManager
-# from game.GameMode import Team
-
 
 class JackalEnv:
     def __init__(
@@ -166,6 +163,7 @@ class JackalEnv:
         self.unit_sight_range = float(unit_sight_range)
         self.position_jitter = float(position_jitter)
         self.heading_jitter = float(heading_jitter)
+        self.world: Optional[BattleWorld] = None
         
         self.fire_cooldown_max = (
             float(agent_fire_cooldown_max)
@@ -182,6 +180,23 @@ class JackalEnv:
         
         if self.use_video:
             os.makedirs(self.video_dir, exist_ok=True)
+
+    def _require_world(self) -> BattleWorld:
+        if self.world is None:
+            raise RuntimeError("Environment must be reset before accessing the battle world")
+        return self.world
+
+    @property
+    def game_map(self) -> GameMap:
+        return self._require_world().game_map
+
+    @property
+    def unit_manager(self) -> UnitManager:
+        return self._require_world().unit_manager
+
+    @property
+    def bullet_manager(self) -> BulletManager:
+        return self._require_world().bullet_manager
 
     def _create_game_map(self) -> GameMap:
         if self.map_data:
@@ -361,16 +376,15 @@ class JackalEnv:
         bullet = agent.fire()
         if not bullet:
             return None
-        self.bullet_manager.add_bullet(bullet)
+        self._require_world().add_bullet(bullet)
         return bullet
 
     def reset(self):
         self.steps = 0
         self.has_enemy_kill = False
         self.episode_reward_so_far = 0.0
-        self.game_map = self._create_game_map()
-        self.bullet_manager = BulletManager()
-        self.unit_manager = UnitManager()  # 实例化新的 UnitManager
+        world = BattleWorld(self._create_game_map())
+        self.world = world
         
         self.agents = []
         # 创建玩家: RL网络控制，不使用内置AI (usingAI=False)
@@ -388,7 +402,7 @@ class JackalEnv:
             if initial_heading is not None:
                 self._set_unit_heading(player, initial_heading)
             self._apply_initial_heading_jitter(player)
-            self.unit_manager.add_unit(player, self.bullet_manager, self.game_map)
+            world.add_unit(player)
             self.agents.append(player)
         
         self.enemies = []
@@ -413,10 +427,10 @@ class JackalEnv:
             if self.enemy_ai_fire_angle_tolerance is not None:
                 enemy.ai_fire_angle_tolerance = float(self.enemy_ai_fire_angle_tolerance)
 
-            self.unit_manager.add_unit(enemy, self.bullet_manager, self.game_map)
+            world.add_unit(enemy)
             self.enemies.append(enemy)
 
-        self._refresh_all_vision()
+        world.refresh_vision()
             
         if self.use_video:
             if self.video_writer is not None:
@@ -435,12 +449,6 @@ class JackalEnv:
             self.observation_manager.get_observations(),
             self.observation_manager.get_state(),
         )
-
-    def _refresh_all_vision(self):
-        """刷新所有单位的初始/当前视野，不推进物理和 AI。"""
-        for unit in self.unit_manager.units:
-            if unit is not None and unit.is_alive:
-                unit._update_vision(self.unit_manager, self.bullet_manager, self.game_map)
 
     def _distance_between(self, src, dst):
         return math.hypot(dst.position[0] - src.position[0], dst.position[1] - src.position[1])
@@ -525,11 +533,8 @@ class JackalEnv:
         pre_stats = self.reward_manager.battle_stats()
         # ==========================================
 
-        # --- 2. 物理更新 (完全适配新的 UnitManager 架构) ---
-        # 现在所有单位更新和AI结算全部由 UnitManager 自动在内部循环完成
-        self.unit_manager.update(self.delta_time, self.unit_manager, self.bullet_manager, self.game_map)
-        self.bullet_manager.update(self.delta_time, self.unit_manager, self.game_map)
-        self._refresh_all_vision()
+        # --- 2. 物理更新：由游戏层统一编排地图、AI/单位、子弹和视野 ---
+        self._require_world().step(self.delta_time)
         
         # --- 3. 视频录制 ---
         if self.use_video:
