@@ -4,6 +4,10 @@ The project is split into three code areas:
 
 - `game/`: Pygame battle engine, units, bullets, maps, constants, and art assets.
 - `environment/`: RL-facing Jackal environment built on top of the game engine.
+  - `jackal_env.py`: episode lifecycle, action execution, rendering, and the stable environment API.
+  - `observation/`: local observations, centralized state, map features, and feature normalization.
+  - `rendering/`: optional video helpers and lazily loaded rendering dependencies.
+  - `reward/`: reward defaults, shared battle statistics, and aim-mode reward functions.
 - `training/`: training and evaluation code, configs, MARL framework, DQN, and DRQN modules.
 - `artifacts/`: generated outputs such as checkpoints, TensorBoard events, plots, logs, videos, and temporary runs.
 

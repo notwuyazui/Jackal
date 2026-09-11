@@ -47,8 +47,8 @@ class JackalMultiAgentEnv:
             "episode_limit": self.episode_limit,
             "env_name": self.env_name,
             "unit_type_dim": getattr(self.env, "unit_type_dim", 0),
-            "obs_map_dim": getattr(self.env, "_obs_map_dim", lambda: 0)(),
-            "state_map_dim": getattr(self.env, "_state_map_dim", lambda: 0)(),
+            "obs_map_dim": self.env.observation_manager.observation_map_dim(),
+            "state_map_dim": self.env.observation_manager.state_map_dim(),
         }
 
     def close(self):
