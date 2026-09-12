@@ -1,44 +1,42 @@
 """Reward function for the manual turret-control action space."""
 
 import math
-from typing import TYPE_CHECKING, Any, Dict, Mapping, Sequence, Tuple
+from typing import Any, Dict, Mapping, Sequence, Tuple
 
-from environment.reward.common import BattleStats, fast_win_bonus, timeout_return_penalty
-
-if TYPE_CHECKING:
-    from environment.jackal_env import JackalEnv
+from environment.reward.common import (
+    BattleStats,
+    CombatSummary,
+    RewardContext,
+    fast_win_bonus,
+    timeout_return_penalty,
+)
+from game.BattleState import WorldSnapshot
 
 
 def calculate_manual_aim_reward(
-    env: "JackalEnv",
     config: Mapping[str, Any],
     before: BattleStats,
     after: BattleStats,
+    combat: CombatSummary,
+    context: RewardContext,
+    snapshot: WorldSnapshot,
     actions: Sequence[int],
 ) -> Tuple[float, Dict[str, Any]]:
-    enemy_damage = before["enemy_health"] - after["enemy_health"]
-    agent_damage = before["agent_health"] - after["agent_health"]
-    enemies_killed = before["enemy_alive"] - after["enemy_alive"]
-    agents_killed = before["agent_alive"] - after["agent_alive"]
-    if enemies_killed > 0:
-        env.has_enemy_kill = True
-
     reward = 0.0
-    reward += enemy_damage * config["enemy_limit_scale"]
-    reward -= agent_damage * config["agent_limit_scale"]
-    reward += enemies_killed * config["enemy_kill_bonus"]
-    reward -= agents_killed * config["agent_killed_penalty"]
+    reward += combat.enemy_damage * config["enemy_limit_scale"]
+    reward -= combat.agent_damage * config["agent_limit_scale"]
+    reward += combat.enemies_destroyed * config["enemy_kill_bonus"]
+    reward -= combat.agents_destroyed * config["agent_killed_penalty"]
 
     aim_shaping = 0.0
     fire_shaping = 0.0
-    for agent_id, agent in enumerate(env.agents):
-        if not agent.is_alive:
+    for agent_id, agent in enumerate(snapshot.allies):
+        if not agent.alive:
             continue
-
         visible_enemies = [
             enemy
-            for enemy in env.enemies
-            if enemy.is_alive and env.world.is_visible(agent, enemy)
+            for enemy in snapshot.enemies
+            if enemy.alive and agent.can_see_unit(enemy.unit_id)
         ]
         if not visible_enemies:
             continue
@@ -52,9 +50,10 @@ def calculate_manual_aim_reward(
         )
         dx = closest_enemy.position[0] - agent.position[0]
         dy = closest_enemy.position[1] - agent.position[1]
-        target_angle = (math.degrees(math.atan2(dy, dx)) + 90) % 360
+        target_angle = (math.degrees(math.atan2(dy, dx)) + 90.0) % 360.0
         angle_difference = abs(
-            agent.get_angle_difference(agent.turret_direction_angle, target_angle)
+            (target_angle - agent.turret_direction_angle + 180.0) % 360.0
+            - 180.0
         )
 
         if angle_difference <= config["aim_good_angle"]:
@@ -84,16 +83,18 @@ def calculate_manual_aim_reward(
     }
     if after["enemy_alive"] == 0:
         reward += config["win_bonus"]
-        reward += fast_win_bonus(env, config)
+        reward += fast_win_bonus(context.step, context.max_steps, config)
         info["battle_won"] = True
     elif after["agent_alive"] == 0:
         reward -= config["lose_penalty"]
-    elif env.steps >= env.max_steps:
+    elif context.step >= context.max_steps:
         reward -= config["timeout_penalty"]
-        if not env.has_enemy_kill:
+        if not context.has_enemy_kill:
             reward -= config.get("no_kill_timeout_penalty", 0.0)
             info["no_kill_timeout"] = True
-        return_penalty = timeout_return_penalty(env, reward, config)
+        return_penalty = timeout_return_penalty(
+            context.episode_return, reward, config
+        )
         if return_penalty > 0.0:
             reward -= return_penalty
             info["timeout_return_penalty"] = round(float(return_penalty), 5)

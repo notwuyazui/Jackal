@@ -4,6 +4,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from game.BattleState import (
+    BulletSnapshot,
+    MapSnapshot,
+    TerrainFeature,
+    UnitSnapshot,
+    WorldSnapshot,
+)
 from game.Bullet.BulletManager import BulletManager
 from game.GameMode import DEBUG_MODE, PRINT_VISIBLE_UNIT, UNIT_RECORD_TEXT
 from game.Map.GameMap import GameMap, create_builtin_map, create_empty_map
@@ -35,6 +42,7 @@ class BattleWorld:
         self.tick = 0
         self.elapsed_time = 0.0
         self.print_record_timer = 0.0
+        self._map_snapshot: MapSnapshot | None = None
 
     def step(self, delta_time: float) -> None:
         """按地图、单位/AI、子弹、最终视野的顺序推进一帧。"""
@@ -46,6 +54,7 @@ class BattleWorld:
             raise ValueError("ACC must be >= 0")
         delta_time = real_delta_time * ACC
 
+        self.unit_manager.begin_step(self.tick + 1)
         self.game_map.update(delta_time)
         self.unit_manager.update(delta_time, self.bullet_manager, self.game_map)
         self.bullet_manager.update(delta_time, self.unit_manager, self.game_map)
@@ -66,6 +75,7 @@ class BattleWorld:
         if game_map is None:
             raise ValueError("Game map cannot be None")
         self.game_map = game_map
+        self._map_snapshot = None
         for ai in self.unit_manager.enemy_ais:
             ai.game_map = game_map
         self.refresh_vision()
@@ -119,6 +129,85 @@ class BattleWorld:
             self.bullet_manager,
             self.game_map,
             rebuild_units=rebuild_units,
+        )
+
+    @staticmethod
+    def _terrain_feature(tile) -> TerrainFeature:
+        return (
+            1.0,
+            1.0 if getattr(tile, "blocks_unit", False) else 0.0,
+            1.0 if getattr(tile, "blocks_bullet", False) else 0.0,
+            1.0 if getattr(tile, "letter", "") == "w" else 0.0,
+        )
+
+    def snapshot(self) -> WorldSnapshot:
+        """Capture the immutable state exposed beyond the game engine."""
+
+        bullets = tuple(
+            BulletSnapshot(
+                index=index,
+                projectile_id=str(bullet.id),
+                shooter_team=bullet.shooter_team,
+                position=(float(bullet.position[0]), float(bullet.position[1])),
+                velocity=(float(bullet.velocity[0]), float(bullet.velocity[1])),
+                active=bool(bullet.is_active),
+            )
+            for index, bullet in enumerate(self.bullet_manager.bullets)
+        )
+
+        units = []
+        for unit in self.unit_manager.units:
+            visible_unit_ids = frozenset(
+                target.id
+                for target in self.unit_manager.units
+                if target is not unit and self.is_visible(unit, target)
+            )
+            visible_bullet_indices = frozenset(
+                index
+                for index, bullet in enumerate(self.bullet_manager.bullets)
+                if self.is_visible(unit, bullet)
+            )
+            units.append(
+                UnitSnapshot(
+                    unit_id=int(unit.id),
+                    team=unit.team,
+                    unit_type=str(unit.unit_type),
+                    position=(float(unit.position[0]), float(unit.position[1])),
+                    size=(float(unit.size[0]), float(unit.size[1])),
+                    health=float(unit.health),
+                    max_health=float(unit.max_health),
+                    alive=bool(unit.is_alive),
+                    direction_angle=float(unit.direction_angle),
+                    turret_direction_angle=float(unit.turret_direction_angle),
+                    fire_cooldown_ratio=float(unit.fire_cooldown_ratio()),
+                    speed=float(unit.speed),
+                    max_speed=float(unit.max_speed),
+                    angular_speed=float(unit.angular_speed),
+                    max_angular_speed=float(unit.max_angular_speed),
+                    weapon_range=float(unit.weapon_range()),
+                    visible_unit_ids=visible_unit_ids,
+                    visible_bullet_indices=visible_bullet_indices,
+                )
+            )
+
+        if self._map_snapshot is None:
+            terrain = tuple(
+                tuple(self._terrain_feature(tile) for tile in row)
+                for row in self.game_map.tiles
+            )
+            self._map_snapshot = MapSnapshot(
+                tile_size=int(self.game_map.tile_size),
+                width=int(self.game_map.width),
+                height=int(self.game_map.height),
+                terrain=terrain,
+            )
+        return WorldSnapshot(
+            tick=self.tick,
+            elapsed_time=self.elapsed_time,
+            units=tuple(units),
+            bullets=bullets,
+            game_map=self._map_snapshot,
+            combat_events=tuple(self.unit_manager.combat_events),
         )
 
     def get_unit(self, unit_id: int) -> BaseUnit | None:

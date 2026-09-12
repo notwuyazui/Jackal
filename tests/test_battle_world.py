@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import pygame
 
 from game.BattleWorld import BattleWorld
+from game.BattleState import CombatEvent, WorldSnapshot
 from game.Bullet.BulletManager import BulletManager
 from game.Map.GameMap import GameMap
 from game.Parameter import Team
@@ -34,6 +35,10 @@ class _RecordingUnitManager:
         self.calls = calls
         self.units = []
         self.enemy_ais = []
+        self.combat_events = []
+
+    def begin_step(self, tick: int) -> None:
+        self.combat_events.clear()
 
     def update(self, delta_time, bullet_manager, game_map) -> None:
         self.calls.append(f"units:{delta_time}")
@@ -198,6 +203,32 @@ class BattleWorldTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             UnitManager.create_unit("unknown", 1, Team.PLAYER)
+
+    def test_snapshot_is_read_only_and_contains_no_live_entities(self) -> None:
+        world = BattleWorld(GameMap())
+        unit = world.create_unit("tank", Team.PLAYER, (100.0, 100.0), unit_id=1)
+        snapshot = world.snapshot()
+
+        self.assertIsInstance(snapshot, WorldSnapshot)
+        self.assertEqual(snapshot.allies[0].position, (100.0, 100.0))
+        self.assertIsNot(snapshot.allies[0], unit)
+        with self.assertRaises(AttributeError):
+            snapshot.allies[0].health = 0.0  # type: ignore[misc]
+
+    def test_damage_emits_structured_combat_events(self) -> None:
+        world = BattleWorld(GameMap())
+        attacker = world.create_unit("tank", Team.PLAYER, unit_id=1)
+        target = world.create_unit("tank", Team.ENEMY, unit_id=2)
+        world.unit_manager.begin_step(1)
+
+        target.take_damage(world.unit_manager, attacker, target.health)
+        events = world.snapshot().combat_events
+
+        self.assertEqual([event.event_type for event in events], ["damage", "destroyed"])
+        self.assertTrue(all(isinstance(event, CombatEvent) for event in events))
+        self.assertEqual(events[0].amount, target.max_health)
+        self.assertEqual(events[0].source_id, attacker.id)
+        self.assertEqual(events[0].target_id, target.id)
 
 
 if __name__ == "__main__":

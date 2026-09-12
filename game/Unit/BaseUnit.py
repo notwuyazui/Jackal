@@ -144,7 +144,7 @@ class BaseUnit:
         
         self.living_time += delta_time
         self._frame_init()                            # 重置上一帧地块效果
-        self._update_tile_buff(game_map)              # 应用当前位置的地块效果
+        self._update_tile_buff(game_map, unit_manager)  # 应用当前位置的地块效果
         self._update_ammo_switch(delta_time)         # 更新弹种切换计时器
         self._update_fire_cooldown(delta_time)       # 更新开火冷却时间
         self._update_speed(delta_time)               # 更新速度
@@ -174,11 +174,11 @@ class BaseUnit:
         self.speed_slow_multiplier = 1.0
         self.conceal = False
 
-    def _update_tile_buff(self, game_map) -> None:
+    def _update_tile_buff(self, game_map, unit_manager) -> None:
         """应用单位当前位置的地块效果。"""
         tile = game_map.get_tile_at_position(self.position[0], self.position[1])
         if tile is not None:
-            tile.apply_buff(self)
+            tile.apply_buff(self, unit_manager)
     
     def _update_ammo_switch(self, delta_time) -> None:
         """更新弹药切换状态"""
@@ -730,6 +730,7 @@ class BaseUnit:
         """
         坦克承受伤害
         """
+        actual_damage = min(self.health, max(0.0, float(damage_amount)))
         self.health -= damage_amount
         self.damage_received += damage_amount
         damage_source.damage_dealt += damage_amount
@@ -743,15 +744,21 @@ class BaseUnit:
             damage_source.destroy_enemy_count += 1
             self.killed_by = damage_source.id
         self._handle_assistance(unit_manager, damage_source, destroyed, damage_amount)
+        unit_manager.record_damage(damage_source, self, actual_damage, destroyed)
         return destroyed, damage_amount
 
-    def take_damage_from_tile(self, damage_amount):
+    def take_damage_from_tile(self, damage_amount, unit_manager=None):
         """承受地形伤害；地形击杀使用 -1 作为来源标记。"""
+        actual_damage = min(self.health, max(0.0, float(damage_amount)))
         self.health -= damage_amount
+        destroyed = False
         if self.health <= 0:
             self.health = 0
             self.is_alive = False
             self.killed_by = -1
+            destroyed = True
+        if unit_manager is not None:
+            unit_manager.record_damage(None, self, actual_damage, destroyed)
 
     def _handle_assistance(self, unit_manager, damage_source, destroy:bool , damage_amount:float) -> None:
         # 当自身受到伤害时，处理伤害来源的协助信息

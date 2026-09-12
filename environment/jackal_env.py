@@ -14,9 +14,10 @@ from game.Map.GameMap import (
     create_map_from_strings,
 )
 from game.Bullet.BulletManager import BulletManager
+from game.BattleState import WorldSnapshot
 from game.BattleWorld import BattleWorld
 from game.Unit.UnitManager import UnitManager
-from environment.observation import ObservationManager
+from environment.observation import ObservationConfig, ObservationManager
 from environment.rendering import create_video_writer, rgb_to_bgr
 from environment.reward import RewardManager, default_reward_config, merge_reward_config
 
@@ -73,9 +74,6 @@ class JackalEnv:
         self.use_video = use_video
         self.video_dir = video_dir
         self.video_writer = None
-        self.has_enemy_kill = False
-        self.episode_reward_so_far = 0.0
-
         self.auto_aim = auto_aim
         self.map_name = str(map_name or "border").lower()
         self.map_file = map_file
@@ -152,6 +150,7 @@ class JackalEnv:
         self.position_jitter = float(position_jitter)
         self.heading_jitter = float(heading_jitter)
         self._world: Optional[BattleWorld] = None
+        self._snapshot: Optional[WorldSnapshot] = None
         
         self.fire_cooldown_max = (
             float(agent_fire_cooldown_max)
@@ -163,8 +162,32 @@ class JackalEnv:
         self.obs_sight_range = self.unit_sight_range
         self.bullet_norm_speed = max(1.0, float(BULLET_SPEED))
 
-        self.observation_manager = ObservationManager(self)
-        self.reward_manager = RewardManager(self, self.reward_config)
+        observation_config = ObservationConfig(
+            screen_width=float(self.screen_width),
+            screen_height=float(self.screen_height),
+            n_agents=self.n_agents,
+            n_enemies=self.n_enemies,
+            unit_type_names=tuple(self.unit_type_names),
+            include_unit_type_onehot=self.include_unit_type_onehot,
+            max_obs_bullets=self.max_obs_bullets,
+            max_state_bullets=self.max_state_bullets,
+            sight_range=self.obs_sight_range,
+            bullet_norm_speed=self.bullet_norm_speed,
+            max_steps=self.max_steps,
+            include_obs_map_features=self.include_obs_map_features,
+            include_state_map_features=self.include_state_map_features,
+            obs_map_grid_size=self.obs_map_grid_size,
+            obs_map_cell_size=self.obs_map_cell_size,
+            state_map_grid_size=self.state_map_grid_size,
+            map_feature_dim=self.map_feature_dim,
+        )
+        self.observation_manager = ObservationManager(observation_config)
+        self.reward_manager = RewardManager(
+            auto_aim=self.auto_aim,
+            max_steps=self.max_steps,
+            arena_size=(float(self.screen_width), float(self.screen_height)),
+            config=self.reward_config,
+        )
         
         if self.use_video:
             os.makedirs(self.video_dir, exist_ok=True)
@@ -186,6 +209,12 @@ class JackalEnv:
     @property
     def bullet_manager(self) -> BulletManager:
         return self.world.bullet_manager
+
+    @property
+    def snapshot(self) -> WorldSnapshot:
+        if self._snapshot is None:
+            raise RuntimeError("Environment must be reset before accessing a snapshot")
+        return self._snapshot
 
     def _create_game_map(self) -> GameMap:
         if self.map_data:
@@ -223,15 +252,6 @@ class JackalEnv:
                     f"Unknown unit_type={unit_type!r}; expected one of {self.unit_type_names}"
                 )
         return types
-
-    def _unit_type_onehot(self, unit_or_type):
-        if not self.include_unit_type_onehot:
-            return []
-        unit_type = unit_or_type if isinstance(unit_or_type, str) else getattr(unit_or_type, "unit_type", "tank")
-        onehot = [0.0] * self.unit_type_dim
-        if unit_type in self.unit_type_names:
-            onehot[self.unit_type_names.index(unit_type)] = 1.0
-        return onehot
 
     def _unit_type_scale_cfg(self, side_cfg, unit_type):
         if not side_cfg:
@@ -324,8 +344,7 @@ class JackalEnv:
 
     def reset(self):
         self.steps = 0
-        self.has_enemy_kill = False
-        self.episode_reward_so_far = 0.0
+        self.reward_manager.reset()
         world = BattleWorld(self._create_game_map())
         self._world = world
         
@@ -386,6 +405,7 @@ class JackalEnv:
             self.enemies.append(enemy)
 
         world.refresh_vision()
+        self._snapshot = world.snapshot()
             
         if self.use_video:
             if self.video_writer is not None:
@@ -401,8 +421,8 @@ class JackalEnv:
             self._render_to_video()
             
         return (
-            self.observation_manager.get_observations(),
-            self.observation_manager.get_state(),
+            self.observation_manager.get_observations(self.snapshot),
+            self.observation_manager.get_state(self.snapshot),
         )
 
     def _distance_between(self, src, dst):
@@ -483,10 +503,7 @@ class JackalEnv:
             else:
                 self._parse_action_manual(agent, action)
 
-        # ==========================================
-        # 1. 物理步进前：采集环境快照
-        pre_stats = self.reward_manager.battle_stats()
-        # ==========================================
+        pre_snapshot = self.snapshot
 
         # --- 2. 物理更新：由游戏层统一编排地图、AI/单位、子弹和视野 ---
         self.world.step(self.delta_time)
@@ -495,17 +512,17 @@ class JackalEnv:
         if self.use_video:
             self._render_to_video()
 
-        # ==========================================
-        # 2. 物理步进后：采集新快照并结算奖励
-        post_stats = self.reward_manager.battle_stats()
-        reward, info = self.reward_manager.calculate(pre_stats, post_stats, actions)
+        self._snapshot = self.world.snapshot()
+        reward, info = self.reward_manager.calculate(
+            pre_snapshot,
+            self.snapshot,
+            actions,
+        )
         done = self._check_done()
-        self.episode_reward_so_far += float(reward)
-        # ==========================================
         
         return (
-            self.observation_manager.get_observations(),
-            self.observation_manager.get_state(),
+            self.observation_manager.get_observations(self.snapshot),
+            self.observation_manager.get_state(self.snapshot),
             reward,
             done,
             info,
@@ -519,11 +536,11 @@ class JackalEnv:
 
     def get_obs(self):
         """Return local observations through the stable environment API."""
-        return self.observation_manager.get_observations()
+        return self.observation_manager.get_observations(self.snapshot)
 
     def get_state(self):
         """Return centralized state through the stable environment API."""
-        return self.observation_manager.get_state()
+        return self.observation_manager.get_state(self.snapshot)
 
     def _render_to_video(self):
         if self.video_writer is None:

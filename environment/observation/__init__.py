@@ -1,5 +1,5 @@
-"""Observation encoding components for :class:`environment.JackalEnv`."""
+"""Observation encoders for immutable battle-world snapshots."""
 
-from environment.observation.manager import ObservationManager
+from environment.observation.manager import ObservationConfig, ObservationManager
 
-__all__ = ["ObservationManager"]
+__all__ = ["ObservationConfig", "ObservationManager"]

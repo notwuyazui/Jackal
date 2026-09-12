@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 import pygame
 
 from game.GameMode import AUTO_COMMUNICATE
+from game.BattleState import CombatEvent
 from game.Parameter import Team
 from game.utils import SpatialIndex
 
@@ -24,6 +25,42 @@ class UnitManager:
         self._unit_index_valid = False
         self._visibility_cache: dict[tuple[int, int], bool] = {}
         self._line_of_sight_cache: dict[tuple[int, int], bool] = {}
+        self.combat_events: list[CombatEvent] = []
+        self.current_tick = 0
+
+    def begin_step(self, tick: int) -> None:
+        """Start a new event batch for one authoritative world step."""
+
+        self.current_tick = int(tick)
+        self.combat_events.clear()
+
+    def record_damage(self, source, target: BaseUnit, amount: float, destroyed: bool) -> None:
+        """Record damage where it is applied so reward code need not infer it."""
+
+        source_id = getattr(source, "id", None)
+        source_team = getattr(source, "team", None)
+        self.combat_events.append(
+            CombatEvent(
+                event_type="damage",
+                tick=self.current_tick,
+                source_id=source_id,
+                source_team=source_team,
+                target_id=target.id,
+                target_team=target.team,
+                amount=float(amount),
+            )
+        )
+        if destroyed:
+            self.combat_events.append(
+                CombatEvent(
+                    event_type="destroyed",
+                    tick=self.current_tick,
+                    source_id=source_id,
+                    source_team=source_team,
+                    target_id=target.id,
+                    target_team=target.team,
+                )
+            )
 
     @staticmethod
     def create_unit(
@@ -248,6 +285,7 @@ class UnitManager:
         self._unit_spatial_index.buckets.clear()
         self._unit_index_valid = False
         self.invalidate_perception_cache()
+        self.combat_events.clear()
 
     def save(self) -> list[bool]:
         return [unit.save() for unit in self.units]

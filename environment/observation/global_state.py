@@ -1,5 +1,7 @@
 """Centralized global-state encoder for value mixing and critics."""
 
+from __future__ import annotations
+
 import math
 from typing import TYPE_CHECKING, List
 
@@ -10,58 +12,62 @@ from environment.observation.feature_normalizer import (
     normalize_speed,
 )
 from environment.observation.map_encoder import MapFeatureEncoder
+from game.BattleState import WorldSnapshot
 
 if TYPE_CHECKING:
-    from environment.jackal_env import JackalEnv
+    from environment.observation.manager import ObservationConfig
 
 
 class GlobalStateEncoder:
-    """Build the fixed-size centralized state used during training."""
+    """Build the fixed-size centralized state from an immutable snapshot."""
 
-    def __init__(self, env: "JackalEnv", map_encoder: MapFeatureEncoder) -> None:
-        self.env = env
+    def __init__(
+        self,
+        config: ObservationConfig,
+        map_encoder: MapFeatureEncoder,
+    ) -> None:
+        self.config = config
         self.map_encoder = map_encoder
 
     def dimension(self) -> int:
-        env = self.env
+        config = self.config
         return (
-            env.n_agents * (11 + env.unit_type_dim)
-            + env.n_enemies * (10 + env.unit_type_dim)
-            + env.max_state_bullets * 6
+            config.n_agents * (11 + config.unit_type_dim)
+            + config.n_enemies * (10 + config.unit_type_dim)
+            + config.max_state_bullets * 6
             + self.map_encoder.state_dim()
             + 1
         )
 
-    def encode(self) -> np.ndarray:
-        env = self.env
+    def encode(self, snapshot: WorldSnapshot) -> np.ndarray:
+        config = self.config
         features: List[float] = []
 
-        for agent_id, agent in enumerate(env.agents):
-            if agent.is_alive:
+        for agent in snapshot.allies:
+            if agent.alive:
                 features.extend([
                     1.0,
-                    agent.position[0] / env.screen_width,
-                    agent.position[1] / env.screen_height,
+                    agent.position[0] / config.screen_width,
+                    agent.position[1] / config.screen_height,
                     agent.health / agent.max_health,
                     math.cos(math.radians(agent.direction_angle)),
                     math.sin(math.radians(agent.direction_angle)),
                     math.cos(math.radians(agent.turret_direction_angle)),
                     math.sin(math.radians(agent.turret_direction_angle)),
-                    agent.fire_cooldown_ratio(),
+                    agent.fire_cooldown_ratio,
                     normalize_speed(agent),
                     normalize_angular_speed(agent),
                 ])
-                features.extend(env._unit_type_onehot(agent))
             else:
                 features.extend([0.0] * 11)
-                features.extend(env._unit_type_onehot(agent))
+            features.extend(config.unit_type_onehot(agent.unit_type))
 
-        for enemy in env.enemies:
-            if enemy.is_alive:
+        for enemy in snapshot.enemies:
+            if enemy.alive:
                 features.extend([
                     1.0,
-                    enemy.position[0] / env.screen_width,
-                    enemy.position[1] / env.screen_height,
+                    enemy.position[0] / config.screen_width,
+                    enemy.position[1] / config.screen_height,
                     enemy.health / enemy.max_health,
                     math.cos(math.radians(enemy.direction_angle)),
                     math.sin(math.radians(enemy.direction_angle)),
@@ -70,32 +76,24 @@ class GlobalStateEncoder:
                     normalize_speed(enemy),
                     normalize_angular_speed(enemy),
                 ])
-                features.extend(env._unit_type_onehot(enemy))
             else:
                 features.extend([0.0] * 10)
-                features.extend(env._unit_type_onehot(enemy))
+            features.extend(config.unit_type_onehot(enemy.unit_type))
 
-        bullets = env.bullet_manager.bullets
-        for index in range(env.max_state_bullets):
-            if index >= len(bullets):
+        for index in range(config.max_state_bullets):
+            if index >= len(snapshot.bullets):
                 features.extend([0.0] * 6)
                 continue
-
-            bullet = bullets[index]
-            vel_x, vel_y = getattr(bullet, "velocity", (0.0, 0.0))
-            player_team = (
-                hasattr(bullet, "shooter_team")
-                and bullet.shooter_team.name == "PLAYER"
-            )
+            bullet = snapshot.bullets[index]
             features.extend([
-                1.0 if getattr(bullet, "is_active", True) else 0.0,
-                bullet.position[0] / env.screen_width,
-                bullet.position[1] / env.screen_height,
-                vel_x / env.bullet_norm_speed,
-                vel_y / env.bullet_norm_speed,
-                1.0 if player_team else -1.0,
+                1.0 if bullet.active else 0.0,
+                bullet.position[0] / config.screen_width,
+                bullet.position[1] / config.screen_height,
+                bullet.velocity[0] / config.bullet_norm_speed,
+                bullet.velocity[1] / config.bullet_norm_speed,
+                1.0 if bullet.shooter_team.name == "PLAYER" else -1.0,
             ])
 
-        features.extend(self.map_encoder.global_features())
-        features.append(env.steps / env.max_steps)
-        return np.array(features, dtype=np.float32)
+        features.extend(self.map_encoder.global_features(snapshot.game_map))
+        features.append(snapshot.tick / config.max_steps)
+        return np.asarray(features, dtype=np.float32)

@@ -102,10 +102,10 @@ class BaseTile:
             return self.destroyed_tile_type
         return None
 
-    def apply_buff(self, unit):
+    def apply_buff(self, unit, unit_manager=None):
         """将地块的伤害、减速和隐蔽效果应用到单位。"""
         if self.damage_per_step > 0:
-            unit.take_damage_from_tile(self.damage_per_step)
+            unit.take_damage_from_tile(self.damage_per_step, unit_manager)
         if self.slow_multiplier < 1.0:
             unit.speed_slow_multiplier *= self.slow_multiplier
         if self.provides_invisibility:
