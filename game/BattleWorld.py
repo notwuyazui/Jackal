@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 from game.Bullet.BulletManager import BulletManager
 from game.GameMode import DEBUG_MODE, PRINT_VISIBLE_UNIT, UNIT_RECORD_TEXT
 from game.Map.GameMap import GameMap, create_builtin_map, create_empty_map
-from game.Parameter import Direction, Team
+from game.Parameter import ACC, Direction, Team
 from game.Unit.UnitManager import UnitManager
 
 if TYPE_CHECKING:
@@ -39,14 +39,17 @@ class BattleWorld:
     def step(self, delta_time: float) -> None:
         """按地图、单位/AI、子弹、最终视野的顺序推进一帧。"""
 
-        delta_time = float(delta_time)
-        if delta_time <= 0.0:
+        real_delta_time = float(delta_time)
+        if real_delta_time <= 0.0:
             raise ValueError("delta_time must be > 0")
+        if ACC < 0.0:
+            raise ValueError("ACC must be >= 0")
+        delta_time = real_delta_time * ACC
 
         self.game_map.update(delta_time)
         self.unit_manager.update(delta_time, self.bullet_manager, self.game_map)
         self.bullet_manager.update(delta_time, self.unit_manager, self.game_map)
-        self.refresh_vision()
+        self.refresh_vision(rebuild_units=False)
         self.tick += 1
         self.elapsed_time += delta_time
         self.print_record_timer += delta_time
@@ -102,13 +105,21 @@ class BattleWorld:
         return self.bullet_manager.fire(shooter)
 
     def has_line_of_sight(self, observer: BaseUnit, target: Any) -> bool:
-        return self.game_map.has_line_of_sight(observer.position, target.position)
+        return self.unit_manager.has_line_of_sight(
+            self.game_map,
+            observer,
+            target,
+        )
 
     def is_visible(self, observer: BaseUnit, target: Any) -> bool:
         return self.unit_manager.is_visible(self.game_map, observer, target)
 
-    def refresh_vision(self) -> None:
-        self.unit_manager.refresh_vision(self.bullet_manager, self.game_map)
+    def refresh_vision(self, *, rebuild_units: bool = True) -> None:
+        self.unit_manager.refresh_vision(
+            self.bullet_manager,
+            self.game_map,
+            rebuild_units=rebuild_units,
+        )
 
     def get_unit(self, unit_id: int) -> BaseUnit | None:
         return self.unit_manager.get_unit_by_id(unit_id)

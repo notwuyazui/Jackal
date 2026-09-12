@@ -152,7 +152,7 @@ class BaseBullet:
             return self.is_active
         
         # 检查与单位的碰撞
-        unit_collision = self._check_unit_collision(unit_manager)
+        unit_collision = self._check_unit_collision(unit_manager, game_map)
         if unit_collision:
             unit = unit_collision
             self._handle_unit_collision(unit, unit_manager)
@@ -181,9 +181,9 @@ class BaseBullet:
                 return obstacle
         return None
     
-    def _check_unit_collision(self, unit_manager):
+    def _check_unit_collision(self, unit_manager, game_map):
         """检查与单位的碰撞"""
-        for unit in unit_manager.units:
+        for unit in unit_manager.get_candidate_units(self.bounding_box):
             # 跳过无效单位
             if not hasattr(unit, 'is_alive') or not unit.is_alive:
                 continue

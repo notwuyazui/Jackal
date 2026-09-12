@@ -4,9 +4,52 @@
 import pygame
 import os
 import re
+from collections.abc import Callable, Iterable
+from typing import Generic, TypeVar
 
 _GAME_ROOT = os.path.dirname(os.path.abspath(__file__))
 _PROJECT_ROOT = os.path.dirname(_GAME_ROOT)
+
+T = TypeVar("T")
+
+
+class SpatialIndex(Generic[T]):
+    """按矩形覆盖的网格单元索引对象。"""
+
+    def __init__(self, cell_size: int) -> None:
+        self.cell_size = max(1, int(cell_size))
+        self.buckets: dict[tuple[int, int], list[T]] = {}
+
+    def cells_for_rect(self, rect: pygame.Rect):
+        max_x = rect.right - 1 if rect.width else rect.left
+        max_y = rect.bottom - 1 if rect.height else rect.top
+        for cell_x in range(rect.left // self.cell_size, max_x // self.cell_size + 1):
+            for cell_y in range(rect.top // self.cell_size, max_y // self.cell_size + 1):
+                yield cell_x, cell_y
+
+    def rebuild(
+        self,
+        objects: Iterable[T],
+        get_rect: Callable[[T], pygame.Rect],
+    ) -> None:
+        self.buckets.clear()
+        for obj in objects:
+            for key in self.cells_for_rect(get_rect(obj)):
+                self.buckets.setdefault(key, []).append(obj)
+
+    def query_rect(self, rect: pygame.Rect) -> list[T]:
+        return self.query_cells(self.cells_for_rect(rect))
+
+    def query_cells(self, cells: Iterable[tuple[int, int]]) -> list[T]:
+        candidates: list[T] = []
+        seen: set[int] = set()
+        for key in cells:
+            for obj in self.buckets.get(key, []):
+                object_id = id(obj)
+                if object_id not in seen:
+                    seen.add(object_id)
+                    candidates.append(obj)
+        return candidates
 
 
 def load_image(image_path):

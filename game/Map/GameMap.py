@@ -5,7 +5,7 @@ from game.Map.BarrierTile.BarrierTile import *
 from game.Map.WaterTile.WaterTile import *
 from game.Map.SandTile.SandTile import SandTile
 from game.Map.TrapTile.TrapTile import TrapTile
-from typing import Callable, Dict, List, Optional, Set, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 import os
 from game.Parameter import *
 from game.GameMode import *
@@ -28,8 +28,10 @@ class GameMap:
         self.bullet_obstacles = []           # 阻挡子弹的矩形列表
         # 空间哈希索引：将静态障碍按网格分桶，减少碰撞时的全量遍历。
         self._spatial_cell_size = max(1, tile_size)
-        self._unit_obstacle_index: Dict[Tuple[int, int], List[pygame.Rect]] = {}
-        self._bullet_obstacle_index: Dict[Tuple[int, int], List[pygame.Rect]] = {}
+        self._unit_obstacle_index = SpatialIndex[pygame.Rect](self._spatial_cell_size)
+        self._bullet_obstacle_index = SpatialIndex[pygame.Rect](self._spatial_cell_size)
+        self._indexed_unit_obstacle_count = 0
+        self._indexed_bullet_obstacle_count = 0
         self.width = 0
         self.height = 0
         self.map_surface = None              # 地图表面（用于快速绘制）
@@ -111,49 +113,51 @@ class GameMap:
                     self.bullet_obstacles.append(tile.rect)
         self._rebuild_spatial_indices()
 
-    def _iter_cells_for_rect(self, rect: pygame.Rect):
+    def iter_spatial_cells(self, rect: pygame.Rect):
         """枚举 rect 覆盖到的空间哈希网格坐标。"""
-        cell = self._spatial_cell_size
-        min_cx = rect.left // cell
-        max_cx = rect.right // cell
-        min_cy = rect.top // cell
-        max_cy = rect.bottom // cell
-        for cx in range(min_cx, max_cx + 1):
-            for cy in range(min_cy, max_cy + 1):
-                yield (cx, cy)
-
-    def _build_spatial_index(self, obstacles: List[pygame.Rect]) -> Dict[Tuple[int, int], List[pygame.Rect]]:
-        """将障碍按网格分桶，供碰撞 broad-phase 查询。"""
-        index: Dict[Tuple[int, int], List[pygame.Rect]] = {}
-        for obs in obstacles:
-            for key in self._iter_cells_for_rect(obs):
-                index.setdefault(key, []).append(obs)
-        return index
+        yield from self._unit_obstacle_index.cells_for_rect(rect)
 
     def _rebuild_spatial_indices(self) -> None:
         """重建静态障碍空间索引。地图构建后障碍通常不变，只需少量重建。"""
-        self._unit_obstacle_index = self._build_spatial_index(self.unit_obstacles)
-        self._bullet_obstacle_index = self._build_spatial_index(self.bullet_obstacles)
+        self._unit_obstacle_index.rebuild(self.unit_obstacles, lambda rect: rect)
+        self._bullet_obstacle_index.rebuild(self.bullet_obstacles, lambda rect: rect)
+        self._indexed_unit_obstacle_count = len(self.unit_obstacles)
+        self._indexed_bullet_obstacle_count = len(self.bullet_obstacles)
 
-    def _query_obstacles(self, index: Dict[Tuple[int, int], List[pygame.Rect]], rect: pygame.Rect) -> List[pygame.Rect]:
-        """返回与 rect 同网格桶的候选障碍集合（未做精确碰撞判定）。"""
-        candidates: List[pygame.Rect] = []
-        seen: Set[int] = set()
-        for key in self._iter_cells_for_rect(rect):
-            for obs in index.get(key, []):
-                oid = id(obs)
-                if oid not in seen:
-                    seen.add(oid)
-                    candidates.append(obs)
-        return candidates
+    def _ensure_spatial_indices(self) -> None:
+        """兼容直接修改障碍列表的调用方。"""
+        if (
+            len(self.unit_obstacles) != self._indexed_unit_obstacle_count
+            or len(self.bullet_obstacles) != self._indexed_bullet_obstacle_count
+        ):
+            self._rebuild_spatial_indices()
 
     def get_candidate_unit_obstacles(self, rect: pygame.Rect) -> List[pygame.Rect]:
         """单位碰撞 broad-phase 候选障碍。"""
-        return self._query_obstacles(self._unit_obstacle_index, rect)
+        self._ensure_spatial_indices()
+        return self._unit_obstacle_index.query_rect(rect)
 
     def get_candidate_bullet_obstacles(self, rect: pygame.Rect) -> List[pygame.Rect]:
         """子弹碰撞 broad-phase 候选障碍。"""
-        return self._query_obstacles(self._bullet_obstacle_index, rect)
+        self._ensure_spatial_indices()
+        return self._bullet_obstacle_index.query_rect(rect)
+
+    def get_candidate_line_obstacles(
+        self,
+        start: Tuple[float, float],
+        end: Tuple[float, float],
+    ) -> List[pygame.Rect]:
+        """返回射线穿过网格中的障碍候选。"""
+        self._ensure_spatial_indices()
+        x0, y0 = int(start[0]), int(start[1])
+        x1, y1 = int(end[0]), int(end[1])
+        line_bounds = pygame.Rect(
+            min(x0, x1),
+            min(y0, y1),
+            abs(x1 - x0) + 1,
+            abs(y1 - y0) + 1,
+        )
+        return self._bullet_obstacle_index.query_rect(line_bounds)
 
     def has_line_of_sight(
         self,
@@ -161,7 +165,10 @@ class GameMap:
         end: Tuple[float, float],
     ) -> bool:
         """判断两点之间是否被可阻挡子弹的地块遮挡。"""
-        return not any(obstacle.clipline(start, end) for obstacle in self.bullet_obstacles)
+        return not any(
+            obstacle.clipline(start, end)
+            for obstacle in self.get_candidate_line_obstacles(start, end)
+        )
 
     def draw(self, surface: pygame.Surface, camera_offset: List[float] = [0, 0]) -> None:
         """绘制地图"""

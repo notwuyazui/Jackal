@@ -159,7 +159,7 @@ class BaseUnit:
 
         # 检查与障碍物的碰撞
         if self.bounding_box:
-            for obstacle in game_map.unit_obstacles: 
+            for obstacle in game_map.get_candidate_unit_obstacles(self.bounding_box):
                 if self.bounding_box.colliderect(obstacle):
                     # 发生碰撞，恢复到之前的位置
                     self.position = old_position

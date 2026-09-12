@@ -4,8 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+import pygame
+
 from game.GameMode import AUTO_COMMUNICATE
 from game.Parameter import Team
+from game.utils import SpatialIndex
 
 if TYPE_CHECKING:
     from game.Bullet.BulletManager import BulletManager
@@ -17,6 +20,10 @@ class UnitManager:
     def __init__(self) -> None:
         self.units: list[BaseUnit] = []
         self.enemy_ais: list[Any] = []
+        self._unit_spatial_index = SpatialIndex[Any](64)
+        self._unit_index_valid = False
+        self._visibility_cache: dict[tuple[int, int], bool] = {}
+        self._line_of_sight_cache: dict[tuple[int, int], bool] = {}
 
     @staticmethod
     def create_unit(
@@ -74,6 +81,8 @@ class UnitManager:
         if unit is None:
             return
         self.units.append(unit)
+        self._unit_index_valid = False
+        self.invalidate_perception_cache()
         if unit.usingAI:
             self.enemy_ais.append(EnemyAI(unit, self, bullet_manager, game_map))
 
@@ -94,6 +103,38 @@ class UnitManager:
         dead_units = {unit for unit in self.units if not unit.is_alive}
         if dead_units:
             self.enemy_ais = [ai for ai in self.enemy_ais if ai.unit not in dead_units]
+        self.rebuild_unit_spatial_index(game_map)
+
+    @staticmethod
+    def _entity_rect(entity) -> pygame.Rect:
+        if entity.bounding_box is not None:
+            return entity.bounding_box
+        x, y = entity.position
+        return pygame.Rect(int(x), int(y), 1, 1)
+
+    def rebuild_unit_spatial_index(self, game_map: GameMap) -> None:
+        if self._unit_spatial_index.cell_size != game_map.tile_size:
+            self._unit_spatial_index = SpatialIndex[Any](game_map.tile_size)
+        self._unit_spatial_index.rebuild(self.units, self._entity_rect)
+        self._unit_index_valid = True
+
+    def get_candidate_units(self, rect: pygame.Rect):
+        if not self._unit_index_valid:
+            return self.units
+        return self._unit_spatial_index.query_rect(rect)
+
+    def get_units_in_radius(
+        self,
+        position: tuple[float, float],
+        radius: float,
+    ):
+        x, y = position
+        rect = pygame.Rect(x - radius, y - radius, radius * 2, radius * 2)
+        return self.get_candidate_units(rect)
+
+    def invalidate_perception_cache(self) -> None:
+        self._visibility_cache.clear()
+        self._line_of_sight_cache.clear()
 
     @staticmethod
     def is_in_view(observer: BaseUnit, target: Any) -> bool:
@@ -114,10 +155,27 @@ class UnitManager:
         observer: BaseUnit,
         target: Any,
     ) -> bool:
-        return self.is_in_view(observer, target) and game_map.has_line_of_sight(
-            observer.position,
-            target.position,
-        )
+        key = (id(observer), id(target))
+        if key not in self._visibility_cache:
+            self._visibility_cache[key] = self.is_in_view(
+                observer,
+                target,
+            ) and self.has_line_of_sight(game_map, observer, target)
+        return self._visibility_cache[key]
+
+    def has_line_of_sight(
+        self,
+        game_map: GameMap,
+        observer: BaseUnit,
+        target: Any,
+    ) -> bool:
+        key = (id(observer), id(target))
+        if key not in self._line_of_sight_cache:
+            self._line_of_sight_cache[key] = game_map.has_line_of_sight(
+                observer.position,
+                target.position,
+            )
+        return self._line_of_sight_cache[key]
 
     def refresh_unit_vision(
         self,
@@ -128,12 +186,22 @@ class UnitManager:
         unit.visible_map = game_map
         unit.visible_units.clear()
         unit.visible_bullets.clear()
+        sight_range = float(unit.sight_range)
+        unit_candidates = self.get_units_in_radius(
+            unit.position,
+            sight_range,
+        )
+        bullet_candidates = bullet_manager.get_bullets_in_radius(
+            unit.position,
+            sight_range,
+            game_map,
+        )
         unit.visible_units.units.extend(
-            target for target in self.units if self.is_in_view(unit, target)
+            target for target in unit_candidates if self.is_in_view(unit, target)
         )
         unit.visible_bullets.bullets.extend(
             bullet
-            for bullet in bullet_manager.bullets
+            for bullet in bullet_candidates
             if self.is_in_view(unit, bullet)
         )
 
@@ -141,7 +209,12 @@ class UnitManager:
         self,
         bullet_manager: BulletManager,
         game_map: GameMap,
+        *,
+        rebuild_units: bool = True,
     ) -> None:
+        if rebuild_units:
+            self.rebuild_unit_spatial_index(game_map)
+        self.invalidate_perception_cache()
         for unit in self.units:
             if unit.is_alive:
                 self.refresh_unit_vision(unit, bullet_manager, game_map)
@@ -172,6 +245,9 @@ class UnitManager:
     def clear(self) -> None:
         self.units.clear()
         self.enemy_ais.clear()
+        self._unit_spatial_index.buckets.clear()
+        self._unit_index_valid = False
+        self.invalidate_perception_cache()
 
     def save(self) -> list[bool]:
         return [unit.save() for unit in self.units]

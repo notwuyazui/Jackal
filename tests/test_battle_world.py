@@ -4,6 +4,7 @@ import sys
 import unittest
 from pathlib import Path
 from typing import Any, cast
+from unittest.mock import patch
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
@@ -37,7 +38,7 @@ class _RecordingUnitManager:
     def update(self, delta_time, bullet_manager, game_map) -> None:
         self.calls.append(f"units:{delta_time}")
 
-    def refresh_vision(self, bullet_manager, game_map) -> None:
+    def refresh_vision(self, bullet_manager, game_map, **kwargs) -> None:
         self.calls.append("vision")
 
 
@@ -53,6 +54,7 @@ class _RecordingBulletManager:
 class _Target:
     def __init__(self, position=(100.0, 0.0)) -> None:
         self.position = position
+        self.bounding_box = pygame.Rect(position[0] - 5, position[1] - 5, 10, 10)
         self.is_alive = True
         self.is_active = True
         self.visible = True
@@ -91,6 +93,23 @@ class BattleWorldTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             world.step(0.0)
 
+    def test_acc_scales_all_simulation_time(self) -> None:
+        calls: list[str] = []
+        world = BattleWorld(
+            cast(Any, _RecordingMap(calls)),
+            cast(Any, _RecordingUnitManager(calls)),
+            cast(Any, _RecordingBulletManager(calls)),
+        )
+
+        with patch("game.BattleWorld.ACC", 2.0):
+            world.step(0.25)
+
+        self.assertEqual(
+            calls,
+            ["map:0.5", "units:0.5", "bullets:0.5", "vision"],
+        )
+        self.assertEqual(world.elapsed_time, 0.5)
+
     def test_visibility_combines_range_and_map_line_of_sight(self) -> None:
         observer = cast(Any, _Observer())
         target = cast(Any, _Target())
@@ -99,11 +118,58 @@ class BattleWorldTests(unittest.TestCase):
 
         self.assertTrue(manager.is_visible(game_map, observer, target))
         game_map.bullet_obstacles.append(pygame.Rect(45, -5, 10, 10))
+        manager.invalidate_perception_cache()
         self.assertFalse(manager.is_visible(game_map, observer, target))
 
         target.conceal = True
         game_map.bullet_obstacles.clear()
+        manager.invalidate_perception_cache()
         self.assertFalse(manager.is_visible(game_map, observer, target))
+
+    def test_visibility_raycast_is_cached_for_one_perception_frame(self) -> None:
+        class CountingMap(GameMap):
+            def __init__(self) -> None:
+                super().__init__()
+                self.raycast_calls = 0
+
+            def has_line_of_sight(self, start, end) -> bool:
+                self.raycast_calls += 1
+                return True
+
+        observer = cast(Any, _Observer())
+        target = cast(Any, _Target())
+        manager = UnitManager()
+        game_map = CountingMap()
+
+        self.assertTrue(manager.is_visible(game_map, observer, target))
+        self.assertTrue(manager.is_visible(game_map, observer, target))
+        self.assertEqual(game_map.raycast_calls, 1)
+
+        manager.invalidate_perception_cache()
+        self.assertTrue(manager.is_visible(game_map, observer, target))
+        self.assertEqual(game_map.raycast_calls, 2)
+
+    def test_spatial_indices_reject_distant_candidates(self) -> None:
+        game_map = GameMap()
+        near = cast(Any, _Target((20.0, 20.0)))
+        far = cast(Any, _Target((500.0, 500.0)))
+        manager = UnitManager()
+        manager.units = [near, far]
+        manager.rebuild_unit_spatial_index(game_map)
+
+        candidates = manager.get_units_in_radius((20.0, 20.0), 50.0)
+        self.assertIn(near, candidates)
+        self.assertNotIn(far, candidates)
+
+        near_obstacle = pygame.Rect(64, 0, 64, 64)
+        far_obstacle = pygame.Rect(64, 640, 64, 64)
+        game_map.bullet_obstacles = [near_obstacle, far_obstacle]
+        line_candidates = game_map.get_candidate_line_obstacles(
+            (0.0, 32.0),
+            (200.0, 32.0),
+        )
+        self.assertIn(near_obstacle, line_candidates)
+        self.assertNotIn(far_obstacle, line_candidates)
 
     def test_fire_registers_created_projectile_once(self) -> None:
         projectile = cast(Any, object())

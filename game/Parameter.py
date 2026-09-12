@@ -5,7 +5,7 @@ import numpy as np
 import enum
 
 FPS = 60
-ACC = 1.0
+ACC = 1.0                     # 全局模拟时间倍率；2.0 表示两倍速
 DELTA_TIME = 1.0 / FPS
 
 INF = 10000.0              # 当需要无视加速度/速度时，取此值

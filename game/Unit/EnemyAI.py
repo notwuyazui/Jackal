@@ -181,7 +181,11 @@ class EnemyAI:
         repel_x, repel_y = 0.0, 0.0
         my_x, my_y = self.unit.position
 
-        for other in self.unit_manager.units:
+        nearby_units = self.unit_manager.get_units_in_radius(
+            self.unit.position,
+            self.SEPARATION_DISTANCE,
+        )
+        for other in nearby_units:
             if other.id == self.unit.id or not other.is_alive:
                 continue
 
@@ -247,7 +251,7 @@ class EnemyAI:
         """检测单位当前是否与任何单位障碍物碰撞"""
         if not self.unit.bounding_box:
             return False
-        for obs in self.game_map.unit_obstacles:
+        for obs in self.game_map.get_candidate_unit_obstacles(self.unit.bounding_box):
             if self.unit.bounding_box.colliderect(obs):
                 return True
         return False
@@ -265,7 +269,7 @@ class EnemyAI:
             self.safe_radius * 2,
             self.safe_radius * 2
         )
-        for obs in self.game_map.unit_obstacles:
+        for obs in self.game_map.get_candidate_unit_obstacles(safe_rect):
             if safe_rect.colliderect(obs):
                 return False
         return True
@@ -474,7 +478,12 @@ class EnemyAI:
         my_pos = self.unit.position
         my_radius = self.unit_radius  # 单位近似半径
 
-        for bullet in self.bullet_manager.bullets:
+        nearby_bullets = self.bullet_manager.get_bullets_in_radius(
+            self.unit.position,
+            self.BULLET_THREAT_DISTANCE,
+            self.game_map,
+        )
+        for bullet in nearby_bullets:
             if bullet.shooter_team == self.unit.team:
                 continue  # 忽略友军子弹
             if not bullet.is_active:
