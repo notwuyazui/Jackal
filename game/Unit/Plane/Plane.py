@@ -3,8 +3,6 @@
     无机动，极高生命值，较高侦察范围，装备重炮弹
 '''
 
-import pygame
-import math
 from game.Unit.BaseUnit import BaseUnit
 from game.Parameter import *
 
@@ -35,7 +33,8 @@ class Plane(BaseUnit):
         super().__init__(unit_id, unit_team, usingAI,
                          unit_type=self.unit_type,
                          body_image_path=self.body_image_path, 
-                         turret_image_path=self.turret_image_path, 
+                         turret_image_path=self.turret_image_path,
+                         size=(32.0, 32.0) if unit_team == Team.ENEMY else (30.0, 31.0),
                          visible=self.visible,
                          max_speed_rate=self.max_speed_rate, 
                          max_acceleration_rate=self.max_acceleration_rate, 

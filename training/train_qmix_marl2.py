@@ -41,8 +41,11 @@ class LinearEpsilonSchedule:
         return self.start + frac * (self.finish - self.start)
 
 
-def parse_args():
-    parser = argparse.ArgumentParser(description="Train QMIX in a PyMARL2-style framework on Jackal")
+def parse_args(argv=None, *, prog=None):
+    parser = argparse.ArgumentParser(
+        prog=prog,
+        description="Train QMIX in a PyMARL2-style framework on Jackal",
+    )
     parser.add_argument("--config", type=str, default="training/configs/marl2/jackal_autoaim_3v3_qmix.json")
     parser.add_argument("--t-max", type=int, default=None, help="Override total environment steps")
     parser.add_argument("--save-dir", type=str, default="artifacts/checkpoints/marl2")
@@ -50,7 +53,7 @@ def parse_args():
     parser.add_argument("--resume-t-env", type=int, default=None, help="Optional resumed t_env when checkpoint has no metadata")
     parser.add_argument("--device", type=str, default="auto", help="device: auto/cpu/cuda/mps")
     parser.add_argument("--tensorboard-dir", type=str, default=None, help="Override TensorBoard log directory")
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def evaluate(
@@ -224,8 +227,8 @@ def _build_mixer(algo_cfg, env_info, mac, device):
     return mixer.to(device)
 
 
-def main():
-    args = parse_args()
+def main(argv=None, *, prog=None):
+    args = parse_args(argv, prog=prog)
     cfg = load_config(args.config)
 
     seed = int(cfg.get("seed", 42))

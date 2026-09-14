@@ -2,22 +2,24 @@
 
 The project is split into three code areas:
 
-- `game/`: Pygame battle engine, units, bullets, maps, constants, and art assets.
+- `game/`: battle simulation, units, bullets, maps, constants, and art assets.
   - `BattleWorld.py`: common battle entry point for interactive play and RL;
     owns the map, unit manager, bullet manager, update order, and controls.
   - `Map/`, `Unit/`, `Bullet/`: map queries, unit creation/perception, and
     projectile registration remain with their existing managers.
 - `environment/`: RL-facing Jackal environment built on top of the game engine.
-  - `jackal_env.py`: episode lifecycle, action execution, rendering, and the stable environment API.
+  - `jackal_env.py`: episode lifecycle, action execution, and the stable environment API.
   - `observation/`: local observations, centralized state, map features, and feature normalization.
-  - `rendering/`: optional video helpers and lazily loaded rendering dependencies.
+  - `rendering/`: the optional Pygame renderer and video helpers; headless training does not create them.
   - `reward/`: reward defaults, shared battle statistics, and aim-mode reward functions.
 - `training/`: training and evaluation code, configs, MARL framework, DQN, and DRQN modules.
 - `artifacts/`: generated outputs such as checkpoints, TensorBoard events, plots, logs, videos, and temporary runs.
 
 Common entry points:
 
-- Train QMIX or EDT-QMIX: `python train_qmix_marl2.py --config training/configs/marl2/<config>.json`
+- Train DQN: `python -m training dqn [options]`
+- Train DRQN: `python -m training drqn [options]`
+- Train QMIX or EDT-QMIX: `python -m training qmix --config training/configs/marl2/<config>.json`
 - Evaluate QMIX checkpoint: `python test_qmix_marl2.py --config training/configs/marl2/<config>.json --checkpoint <path>`
 - Import the environment: `from environment import JackalEnv`
 

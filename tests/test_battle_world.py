@@ -198,6 +198,8 @@ class BattleWorldTests(unittest.TestCase):
                 )
                 self.assertEqual(unit.unit_type, unit_type)
                 self.assertEqual(unit.position, (123.0, 234.0))
+                self.assertFalse(hasattr(unit, "body_image"))
+                self.assertFalse(hasattr(unit, "turret_image"))
                 self.assertLessEqual(abs(unit.bounding_box.centerx - 123), 1)
                 self.assertLessEqual(abs(unit.bounding_box.centery - 234), 1)
 

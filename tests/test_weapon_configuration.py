@@ -57,6 +57,7 @@ class EnvironmentWeaponIntegrationTests(unittest.TestCase):
         agent = self.env.agents[0]
         enemy = self.env.enemies[0]
 
+        self.assertIsNone(self.env.renderer)
         self.assertEqual(agent.fire_cooldown_duration(), 0.35)
         self.assertEqual(enemy.fire_cooldown_duration(), 0.45)
         self.assertEqual(agent.weapon_range(), 720.0)

@@ -128,7 +128,7 @@ PROJECTILE_SPECS: dict[str, ProjectileSpec] = {
     ),
     "heavy_shell": ProjectileSpec(
         name="heavy_shell",
-        image_path="Bullet/HeavyShell/heavyshell.png",
+        image_path="Bullet/HeavyShell/heavyShell.png",
         size=(10.0, 10.0),
         lifetime=8.0,
         speed_rate=0.5,

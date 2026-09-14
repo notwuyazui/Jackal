@@ -65,12 +65,6 @@ class BattleWorld:
 
     update = step
 
-    def draw(self, screen, camera_offset=None) -> None:
-        offset = self.camera_offset if camera_offset is None else camera_offset
-        self.game_map.draw(screen, offset)
-        self.unit_manager.draw(screen, offset)
-        self.bullet_manager.draw(screen, offset)
-
     def set_game_map(self, game_map: GameMap) -> None:
         if game_map is None:
             raise ValueError("Game map cannot be None")
@@ -294,11 +288,6 @@ class BattleWorld:
         dx, dy = offsets[direction]
         self.camera_offset[0] += dx
         self.camera_offset[1] += dy
-
-    def draw_mouse_target(self, unit_id: int, surface, mouse_pos) -> None:
-        unit = self.get_unit(unit_id)
-        if unit is not None:
-            unit._draw_mouse_target_line(surface, self.camera_offset, mouse_pos)
 
     def get_active_units_counts(self) -> int:
         return self.unit_manager.get_active_count()

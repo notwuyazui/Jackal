@@ -7,7 +7,6 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
-import pygame
 import random
 import numpy as np
 from environment.jackal_env import JackalEnv

@@ -17,19 +17,24 @@ from training.DQN_Test.learner import DQNLearner
 from training.utils.device import get_device, print_device_info
 
 
-def parse_args():
-    parser = argparse.ArgumentParser(description="DQN 1v1 training")
+def parse_args(argv=None, *, prog=None):
+    parser = argparse.ArgumentParser(prog=prog, description="DQN 1v1 training")
     parser.add_argument(
         "--device",
         type=str,
         default="auto",
         choices=["auto", "cpu", "cuda", "mps"],
     )
-    return parser.parse_args()
+    parser.add_argument("--episodes", type=int, default=2000)
+    parser.add_argument("--max-steps", type=int, default=500)
+    parser.add_argument("--batch-size", type=int, default=128)
+    parser.add_argument("--target-update-freq", type=int, default=2000)
+    parser.add_argument("--save-dir", default="artifacts/checkpoints/dqn")
+    return parser.parse_args(argv)
 
 
-def main():
-    args = parse_args()
+def main(argv=None, *, prog=None):
+    args = parse_args(argv, prog=prog)
 
     device = get_device(args.device)
     print_device_info(device)
@@ -40,7 +45,7 @@ def main():
     )
     
     # 1. 实例化环境
-    env = JackalEnv(headless=True, use_video=False)
+    env = JackalEnv(headless=True, use_video=False, max_steps=args.max_steps)
     _, initial_state = env.reset()
     state_dim = initial_state.shape[0]
     action_dim = env.n_actions
@@ -52,9 +57,14 @@ def main():
         "action_dim": action_dim,
         "n_agents": env.n_agents,
         "n_enemies": env.n_enemies,
+        "episodes": args.episodes,
+        "max_steps": args.max_steps,
+        "batch_size": args.batch_size,
+        "target_update_freq": args.target_update_freq,
     }
-    os.makedirs("artifacts/checkpoints/dqn", exist_ok=True)
-    with open("artifacts/checkpoints/dqn/dqn_run_config.json", "w", encoding="utf-8") as f:
+    os.makedirs(args.save_dir, exist_ok=True)
+    run_config_path = os.path.join(args.save_dir, "dqn_run_config.json")
+    with open(run_config_path, "w", encoding="utf-8") as f:
         json.dump(run_config, f, ensure_ascii=False, indent=2)
     
     # 2. 实例化共享网络并放入设备
@@ -68,9 +78,9 @@ def main():
     agent = DQNAgent(action_dim, policy_net, device)
     learner = DQNLearner(policy_net, target_net, device)
     
-    batch_size = 128
-    num_episodes = 2000
-    target_update_freq = 2000
+    batch_size = args.batch_size
+    num_episodes = args.episodes
+    target_update_freq = args.target_update_freq
     
     # ==========================================
     # 4. 主干交互循环 (使用 tqdm 包装)
@@ -128,10 +138,12 @@ def main():
         
         # 定期保存模型 (使用 pbar.write 防止打断进度条渲染)
         if episode % 100 == 0:
-            torch.save(policy_net.state_dict(), f"artifacts/checkpoints/dqn/dqn_model_ep{episode}.pth")
-            pbar.write(f"--> [检查点] 模型已保存至 artifacts/checkpoints/dqn/dqn_model_ep{episode}.pth")
+            checkpoint_path = os.path.join(args.save_dir, f"dqn_model_ep{episode}.pth")
+            torch.save(policy_net.state_dict(), checkpoint_path)
+            pbar.write(f"--> [检查点] 模型已保存至 {checkpoint_path}")
 
-    torch.save(policy_net.state_dict(), "artifacts/checkpoints/dqn/dqn_model_final.pth")
+    final_path = os.path.join(args.save_dir, "dqn_model_final.pth")
+    torch.save(policy_net.state_dict(), final_path)
     print("\n训练结束！最终模型已保存。")
     env.close()
 

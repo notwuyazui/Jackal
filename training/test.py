@@ -9,7 +9,8 @@ if _PROJECT_ROOT not in sys.path:
 from game.BattleWorld import BattleWorld
 from game.Parameter import Team, FPS, ACC
 from game.PCControl import PCControl
-from game.utils import Action, set_font
+from game.utils import Action
+from environment.rendering import PygameRenderer
 
 
 def init_game():
@@ -41,21 +42,12 @@ def init_game():
     return world
 
 if __name__ == "__main__":
-    pygame.init()
-    
     screen_width, screen_height = 960, 640
-    screen = pygame.display.set_mode((screen_width, screen_height))
-    pygame.display.set_caption("test")
+    renderer = PygameRenderer(screen_width, screen_height, visible=True, title="test")
     clock = pygame.time.Clock()
-    
-    font = set_font()
     
     # 添加地图和单位
     game_manager = init_game()
-    
-    # 用于显示信息的表面
-    info_surface = pygame.Surface((200, 120), pygame.SRCALPHA)
-    info_surface.fill((0, 0, 0, 128))  # 半透明黑色背景
     
     action = Action()
     
@@ -65,18 +57,16 @@ if __name__ == "__main__":
         clock.tick(FPS * ACC)
         
         # 应用键盘鼠标控制
-        running, action = PCControl(game_manager, action, screen)
+        running, action = PCControl(game_manager, action)
         game_manager.set_unit_action(0, action)
         
         # 更新、绘制
         game_manager.update(delta_time)
-        screen.fill((50, 50, 70))
-        game_manager.draw(screen)
-        
-        pygame.display.flip()
+        renderer.draw(game_manager, mouse_pos=action.mouse_pos)
+        renderer.present()
         
         # 每5秒打印一次单位记录
         game_manager.print_record()
     
-    pygame.quit()
+    renderer.close()
     sys.exit()

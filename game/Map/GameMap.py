@@ -8,7 +8,6 @@ from game.Map.TrapTile.TrapTile import TrapTile
 from typing import Callable, Dict, List, Optional, Tuple
 import os
 from game.Parameter import *
-from game.GameMode import *
 from game.utils import *
 import random
 
@@ -34,7 +33,6 @@ class GameMap:
         self._indexed_bullet_obstacle_count = 0
         self.width = 0
         self.height = 0
-        self.map_surface = None              # 地图表面（用于快速绘制）
 
         if map_data:
             if len(map_data) > 0:
@@ -46,9 +44,7 @@ class GameMap:
                     self.tiles = map_data
                     self.height = len(map_data)
                     self.width = len(map_data[0]) if map_data else 0
-                    self._create_map_surface()
                     self._update_obstacles_from_tiles()
-                    self._render_all()
         else:
             # 空地图
             pass
@@ -81,25 +77,7 @@ class GameMap:
 
             self.tiles.append(tile_row)
 
-        self._create_map_surface()
-        self._render_all()
         self._rebuild_spatial_indices()
-
-    def _create_map_surface(self) -> None:
-        """创建地图表面"""
-        self.map_surface = pygame.Surface((self.width * self.tile_size, self.height * self.tile_size))
-
-    def _render_tile(self, row: int, col: int) -> None:
-        """将指定地块绘制到地图表面"""
-        tile = self.tiles[row][col]
-        if tile.image and self.map_surface is not None:
-            self.map_surface.blit(tile.image, (tile.x, tile.y))
-
-    def _render_all(self) -> None:
-        """将所有地块绘制到地图表面"""
-        for row_idx, row in enumerate(self.tiles):
-            for col_idx, _ in enumerate(row):
-                self._render_tile(row_idx, col_idx)
 
     def _update_obstacles_from_tiles(self) -> None:
         """根据当前地块重新生成障碍物列表"""
@@ -169,14 +147,6 @@ class GameMap:
             obstacle.clipline(start, end)
             for obstacle in self.get_candidate_line_obstacles(start, end)
         )
-
-    def draw(self, surface: pygame.Surface, camera_offset: List[float] = [0, 0]) -> None:
-        """绘制地图"""
-        for row in self.tiles:
-            for tile in row:
-                tile.draw(surface, camera_offset)
-        if DRAW_OBSTACLE_BOUNDING_BOX or DEBUG_MODE:
-            self._draw_debug(surface, camera_offset)
 
     def update(self, delta_time: float) -> None:
         """更新所有地块（例如生命恢复、动画等）"""
@@ -295,17 +265,6 @@ class GameMap:
             return self.tiles[row][col]
         return None
 
-    def _draw_debug(self, surface: pygame.Surface, camera_offset: List[float]) -> None:
-        """绘制调试信息（障碍物边框）"""
-        # 单位障碍物（红色边框）
-        for obs in self.unit_obstacles:
-            screen_rect = obs.move(-camera_offset[0], -camera_offset[1])
-            pygame.draw.rect(surface, (255, 0, 0), screen_rect, 2)
-        # 子弹障碍物（绿色边框）
-        for obs in self.bullet_obstacles:
-            screen_rect = obs.move(-camera_offset[0], -camera_offset[1])
-            pygame.draw.rect(surface, (0, 255, 0), screen_rect, 1)
-    
     def to_strings(self) -> List[str]:
         """返回地图的字符串表示（每行一个字符串）"""
         return [''.join(tile.letter for tile in row) for row in self.tiles]

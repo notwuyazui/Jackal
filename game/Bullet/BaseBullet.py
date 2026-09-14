@@ -7,7 +7,6 @@ import math
 from typing import List, Tuple, Optional, Dict, Any
 from game.Parameter import *
 from game.utils import *
-from game.GameMode import *
 import json
 import os
 
@@ -38,12 +37,7 @@ class BaseBullet:
         
         # 图像和渲染
         self.image_path: Optional[str] = bullet_image_path
-        self.image: Optional[pygame.Surface] = load_image(bullet_image_path) if bullet_image_path else None
-        
-        if size == (0.0, 0.0) and self.image:
-            self.size: Tuple[float, float] = self.image.get_size()
-        else:
-            self.size = size
+        self.size = size
             
         # 基本属性
         self.max_lifetime: float = lifetime                                                 # 射程
@@ -60,9 +54,6 @@ class BaseBullet:
         self.explosion_radius: float = explosion_radius                                     # 爆炸半径
         self.explosion_damage_rate: float = explosion_damage_rate                           # 爆炸伤害
         self.explosion_image_path: Optional[str] = explosion_image_path                     # 爆炸效果图像路径
-        self.explosion_image: Optional[pygame.Surface] = None
-        if explosion_image_path:
-            self.explosion_image = load_image(explosion_image_path)
         
         # 实时属性
         self.lifetime: float = lifetime
@@ -287,17 +278,6 @@ class BaseBullet:
         self.explosion_timer = 0.0
         self.is_active = True  # 保持活跃以显示爆炸效果
         
-        # 如果有爆炸图像，使用子弹位置作为爆炸中心
-        if self.explosion_image:
-            # 将子弹图像替换为爆炸图像
-            self.image = self.explosion_image
-            
-            # 调整大小以匹配爆炸半径
-            if self.explosion_radius > 0 and EXPLOSION_IMAGE_ADAPT_TO_RANGE:
-                scaled_size = (int(self.explosion_radius * 2), int(self.explosion_radius * 2))
-                self.image = pygame.transform.scale(self.image, scaled_size)
-                self.size = scaled_size
-                self._update_bounding_box()
     
     def apply_explosion_damage(self, unit_manager):
         """
@@ -332,44 +312,6 @@ class BaseBullet:
                 damage_map[unit.id] = actual_damage
         
         return damage_map
-    
-    def draw(self, surface: pygame.Surface, camera_offset: Tuple[float, float] = (0, 0)) -> None:
-        """绘制子弹"""
-        if not self.is_active:
-            return
-        
-        screen_x = self.position[0] - camera_offset[0]
-        screen_y = self.position[1] - camera_offset[1]
-        
-        if self.image:
-            # 如果需要旋转，根据速度方向旋转图像
-            if self.rotation_angle != 0:
-                rotated_image = pygame.transform.rotate(self.image, -self.rotation_angle)
-                image_rect = rotated_image.get_rect(center=(screen_x, screen_y))
-                surface.blit(rotated_image, image_rect)
-            else:
-                image_rect = self.image.get_rect(center=(screen_x, screen_y))
-                surface.blit(self.image, image_rect)
-        
-        # 调试绘制：爆炸范围
-        if self.has_exploded and self.is_explosive and (DEBUG_MODE or DRAW_BULLET_EXPLOSION_RANGE):
-            pygame.draw.circle(
-                surface, 
-                (255, 100, 100, 128),  # 半透明红色
-                (int(screen_x), int(screen_y)),
-                int(self.explosion_radius),
-                2  # 线宽
-            )
-        
-        # 调试绘制：碰撞箱
-        if (DEBUG_MODE or DRAW_BULLET_BOUNDING_BOX) and self.bounding_box:
-            debug_rect = pygame.Rect(
-                self.bounding_box.x - camera_offset[0],
-                self.bounding_box.y - camera_offset[1],
-                self.bounding_box.width,
-                self.bounding_box.height
-            )
-            pygame.draw.rect(surface, (255, 0, 0), debug_rect, 1)
     
     def get_info(self) -> Dict[str, Any]:
         """获取子弹信息"""

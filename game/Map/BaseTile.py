@@ -7,7 +7,7 @@ import os
 import random
 from typing import List, Tuple, Optional
 from game.Parameter import *
-from game.utils import load_image, get_next_filename
+from game.utils import get_next_filename
 
 class BaseTile:
     def __init__(self, id=None, x=0.0, y=0.0, tile_size=64, name="base", letter='?', image_path=None,
@@ -31,7 +31,6 @@ class BaseTile:
         self.name = name
         self.letter = letter
         self.image_path = image_path
-        self.image = load_image(image_path) if image_path else None
 
         # 独特属性
         self.blocks_bullet = blocks_bullet                                                  # 是否阻挡子弹
@@ -50,13 +49,6 @@ class BaseTile:
         # 实时属性
         self.id = id
         self.current_health = self.max_health               # 当前生命值
-
-    def draw(self, surface: pygame.Surface, camera_offset: Tuple[float, float] = (0, 0)) -> None:
-        """绘制地块到表面"""
-        if self.image:
-            screen_x = self.x - camera_offset[0]
-            screen_y = self.y - camera_offset[1]
-            surface.blit(self.image, (screen_x, screen_y))
 
     def update(self, delta_time: float) -> None:
         """更新地块状态（可被子类重写）"""

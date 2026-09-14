@@ -44,7 +44,8 @@ def test_model(model_path, episodes=3, device_name="auto", video_dir="artifacts/
         headless=True,
         use_video=True,
         video_dir=video_dir,
-        auto_aim=run_config.get("auto_aim", True)
+        auto_aim=run_config.get("auto_aim", True),
+        max_steps=int(run_config.get("max_steps", 500)),
     )
     
     _, initial_state = env.reset()

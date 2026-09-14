@@ -106,14 +106,12 @@ def test_drqn_model(
     }
     if env_delta_time is not None:
         env_kwargs["fixed_delta_time"] = env_delta_time
+    if max_steps is not None:
+        env_kwargs["max_steps"] = int(max_steps)
+    elif run_config.get("max_steps") is not None:
+        env_kwargs["max_steps"] = int(run_config["max_steps"])
 
     env = JackalEnv(**env_kwargs)
-
-    # 默认读取训练配置中的 max_steps，确保测试时长与训练一致。
-    if max_steps is not None:
-        env.max_steps = int(max_steps)
-    elif run_config.get("max_steps") is not None:
-        env.max_steps = int(run_config["max_steps"])
 
     print(f"测试环境配置: max_steps={env.max_steps}, delta_time={env.delta_time}")
     

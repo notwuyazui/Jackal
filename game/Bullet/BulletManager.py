@@ -82,10 +82,6 @@ class BulletManager:
         rect = pygame.Rect(x - radius, y - radius, radius * 2, radius * 2)
         return self.get_candidate_bullets(rect, game_map)
 
-    def draw(self, surface, camera_offset) -> None:
-        for bullet in self.bullets:
-            bullet.draw(surface, camera_offset)
-
     def get_active_count(self) -> int:
         return sum(bullet.is_active for bullet in self.bullets)
 

@@ -266,10 +266,6 @@ class UnitManager:
                 if unit.broadcast(self)[3]:
                     changed = True
 
-    def draw(self, surface, camera_offset, mouse_pos=None) -> None:
-        for unit in self.units:
-            unit.draw(surface, camera_offset, mouse_pos)
-
     def get_unit_by_id(self, unit_id: int) -> BaseUnit | None:
         return next((unit for unit in self.units if unit.id == unit_id), None)
 

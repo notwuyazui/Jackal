@@ -3,8 +3,6 @@
     较低机动，较高生命，较低侦察范围，仅装备火箭弹
 '''
 
-import pygame
-import math
 from game.Unit.BaseUnit import BaseUnit
 from game.Parameter import *
 
@@ -35,7 +33,8 @@ class Archie(BaseUnit):
         super().__init__(unit_id, unit_team, usingAI,
                          unit_type=self.unit_type,
                          body_image_path=self.body_image_path, 
-                         turret_image_path=self.turret_image_path, 
+                         turret_image_path=self.turret_image_path,
+                         size=(20.0, 24.0),
                          visible=self.visible,
                          max_speed_rate=self.max_speed_rate, 
                          max_acceleration_rate=self.max_acceleration_rate, 

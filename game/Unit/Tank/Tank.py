@@ -3,8 +3,6 @@
     标准机动性，标准生存性，较高侦察范围，装备子弹、火箭弹和重炮弹
 '''
 
-import pygame
-import math
 from game.Unit.BaseUnit import BaseUnit
 from game.Parameter import *
 
@@ -41,7 +39,8 @@ class Tank(BaseUnit):
         super().__init__(unit_id, unit_team, usingAI,
                          unit_type=self.unit_type,
                          body_image_path=self.body_image_path, 
-                         turret_image_path=self.turret_image_path, 
+                         turret_image_path=self.turret_image_path,
+                         size=(16.0, 23.0),
                          visible=self.visible,
                          max_speed_rate=self.max_speed_rate, 
                          max_acceleration_rate=self.max_acceleration_rate, 

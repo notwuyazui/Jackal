@@ -2,25 +2,8 @@ import pygame
 from game.BattleWorld import BattleWorld
 from game.utils import *
 from game.Parameter import *
-from game.GameMode import *
 
-def draw_debug_info(surface, tank, camera_offset, mouse_pos):
-    debug_font = pygame.font.Font(None, 20)
-    
-    # 坦克中心点
-    screen_x = tank.position[0] - camera_offset[0]
-    screen_y = tank.position[1] - camera_offset[1]
-
-    # 鼠标目标线
-    world_mouse_x = mouse_pos[0] + camera_offset[0]
-    world_mouse_y = mouse_pos[1] + camera_offset[1]
-    screen_mouse_x = world_mouse_x - camera_offset[0]
-    screen_mouse_y = world_mouse_y - camera_offset[1]
-    if DRAW_MOUSE_TARGET_LINE or DEBUG_MODE:
-        pygame.draw.line(surface, (255, 0, 255), (screen_x, screen_y), (screen_mouse_x, screen_mouse_y), 1)
-        pygame.draw.circle(surface, (255, 0, 255), (int(screen_mouse_x), int(screen_mouse_y)), 3)
-
-def PCControl(game_manager: BattleWorld, action: Action, screen):
+def PCControl(game_manager: BattleWorld, action: Action, screen=None):
         running = True
         action.switch_ammo = False
         
@@ -81,6 +64,5 @@ def PCControl(game_manager: BattleWorld, action: Action, screen):
             game_manager.move_camera(Direction.DOWN)
         
         action.mouse_pos = pygame.mouse.get_pos()      # 炮塔指向鼠标
-        draw_debug_info(screen, game_manager.get_unit(0), game_manager.camera_offset, action.mouse_pos)
         
         return running, action

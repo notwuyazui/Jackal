@@ -18,8 +18,8 @@ from training.DRQN_Test.buffer import EpisodeBuffer
 from training.DRQN_Test.learner import DRQNLearner
 
 
-def parse_args():
-    parser = argparse.ArgumentParser(description="DRQN 1v1 training")
+def parse_args(argv=None, *, prog=None):
+    parser = argparse.ArgumentParser(prog=prog, description="DRQN 1v1 training")
     parser.add_argument("--gpu-id", type=int, default=0)
     parser.add_argument("--episodes", type=int, default=6000)
     parser.add_argument("--max-steps", type=int, default=300)
@@ -37,12 +37,13 @@ def parse_args():
     parser.add_argument("--headless", action="store_true", default=True)
     parser.add_argument("--no-headless", action="store_false", dest="headless")
     parser.add_argument("--auto-aim", action="store_true", default=False)
+    parser.add_argument("--save-dir", type=str, default="artifacts/checkpoints/drqn")
     parser.add_argument("--save-prefix", type=str, default="drqn")
     parser.add_argument("--device", type=str, default="auto", choices=["auto", "cpu", "cuda", "mps"])
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
-def main():
-    args = parse_args()
+def main(argv=None, *, prog=None):
+    args = parse_args(argv, prog=prog)
     from training.utils.device import (
         get_device,
         print_device_info
@@ -53,8 +54,12 @@ def main():
     # ==========================================
     # 1. 实例化环境 (你可以随时把 n_enemies 改为 2 开启 1v2 挑战)
     # ==========================================
-    env = JackalEnv(headless=args.headless, use_video=False, auto_aim=args.auto_aim)
-    env.max_steps = args.max_steps
+    env = JackalEnv(
+        headless=args.headless,
+        use_video=False,
+        auto_aim=args.auto_aim,
+        max_steps=args.max_steps,
+    )
     _, initial_state = env.reset()
     state_dim = initial_state.shape[0]
     action_dim = env.n_actions
@@ -91,8 +96,7 @@ def main():
         "max_steps": args.max_steps,
         "min_buffer_episodes": args.min_buffer_episodes,
     }
-    model_root_dir = "artifacts/checkpoints/drqn"
-    run_dir = os.path.join(model_root_dir, args.save_prefix)
+    run_dir = os.path.join(args.save_dir, args.save_prefix)
     checkpoint_dir = os.path.join(run_dir, "checkpoints")
     os.makedirs(checkpoint_dir, exist_ok=True)
 

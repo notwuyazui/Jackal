@@ -7,9 +7,6 @@ import re
 from collections.abc import Callable, Iterable
 from typing import Generic, TypeVar
 
-_GAME_ROOT = os.path.dirname(os.path.abspath(__file__))
-_PROJECT_ROOT = os.path.dirname(_GAME_ROOT)
-
 T = TypeVar("T")
 
 
@@ -52,23 +49,6 @@ class SpatialIndex(Generic[T]):
         return candidates
 
 
-def load_image(image_path):
-    candidates = [image_path]
-    if image_path and not os.path.isabs(image_path):
-        candidates.append(os.path.join(_PROJECT_ROOT, image_path))
-        if image_path.startswith(("Bullet/", "Map/", "Unit/")):
-            candidates.append(os.path.join(_PROJECT_ROOT, "game", image_path))
-
-    for candidate in candidates:
-        try:
-            if candidate and os.path.exists(candidate):
-                return pygame.image.load(candidate)
-        except Exception:
-            continue
-
-    print(f"Warning: Cannot load image: {image_path}")
-    return None
-    
 def get_next_filename(folder_path, prefix, extension='.txt'):
     """
     获取文件夹中最小的未被使用的文件名
@@ -125,24 +105,6 @@ def get_class_from_str(class_name: str):
     
 def count_distance(a, b):
     return ((a.position[0] - b.position[0]) ** 2 + (a.position[1] - b.position[1]) ** 2) ** 0.5
-
-def set_font():
-    # 字体设置
-    font_paths = [
-        "C:/Windows/Fonts/simhei.ttf",  # 黑体
-        "C:/Windows/Fonts/simsun.ttc",  # 宋体
-        "C:/Windows/Fonts/msyh.ttc",    # 微软雅黑
-    ]
-    font = None
-    for path in font_paths:
-        try:
-            font = pygame.font.Font(path, 24)
-            break
-        except:
-            continue
-    if font is None:
-        font = pygame.font.Font(None, 24)  # 使用默认字体
-    return font
 
 class Action:
     """单位的基本动作"""

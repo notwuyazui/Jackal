@@ -1,4 +1,3 @@
-import pygame
 import os
 import random
 import numpy as np
@@ -18,7 +17,7 @@ from game.BattleState import WorldSnapshot
 from game.BattleWorld import BattleWorld
 from game.Unit.UnitManager import UnitManager
 from environment.observation import ObservationConfig, ObservationManager
-from environment.rendering import create_video_writer, rgb_to_bgr
+from environment.rendering import PygameRenderer, create_video_writer, rgb_to_bgr
 from environment.reward import RewardManager, default_reward_config, merge_reward_config
 
 class JackalEnv:
@@ -93,15 +92,17 @@ class JackalEnv:
             os.environ["SDL_VIDEODRIVER"] = "dummy"
             os.environ["SDL_AUDIODRIVER"] = "dummy"
             
-        pygame.init()
-        
         self.screen_width, self.screen_height = 960, 640
-        
-        if not self.headless:
-            self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
-            pygame.display.set_caption("Jackal MARL Environment")
-        else:
-            self.screen = pygame.Surface((self.screen_width, self.screen_height))
+        self.renderer = (
+            PygameRenderer(
+                self.screen_width,
+                self.screen_height,
+                visible=not self.headless,
+                title="Jackal MARL Environment",
+            )
+            if self.use_video or not self.headless
+            else None
+        )
 
         self.n_agents = int(n_agents)
         self.n_enemies = int(n_enemies)
@@ -543,20 +544,20 @@ class JackalEnv:
         return self.observation_manager.get_state(self.snapshot)
 
     def _render_to_video(self):
-        if self.video_writer is None:
+        if self.video_writer is None or self.renderer is None:
             return
-        self.screen.fill((50, 50, 70))
-        camera_offset = [0.0, 0.0]
-        
-        # 渲染逻辑适配：交由 UnitManager 统一绘制
-        self.game_map.draw(self.screen, camera_offset)
-        self.unit_manager.draw(self.screen, camera_offset)
-        self.bullet_manager.draw(self.screen, camera_offset)
-        
-        frame = pygame.surfarray.array3d(self.screen)
-        frame = np.transpose(frame, (1, 0, 2))
-        frame = rgb_to_bgr(frame)
+        self.renderer.draw(self.world)
+        frame = rgb_to_bgr(self.renderer.rgb_array())
         self.video_writer.write(frame)
+
+    def render(self):
+        """Render the current world only when a Pygame adapter was requested."""
+
+        if self.renderer is None:
+            return None
+        surface = self.renderer.draw(self.world)
+        self.renderer.present()
+        return surface
 
     def _parse_action_auto_aim(self, agent, action):
         """
@@ -659,4 +660,5 @@ class JackalEnv:
     def close(self):
         if self.use_video and self.video_writer is not None:
             self.video_writer.release()
-        pygame.quit()
+        if self.renderer is not None:
+            self.renderer.close()

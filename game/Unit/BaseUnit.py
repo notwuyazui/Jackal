@@ -6,15 +6,19 @@ import pygame
 import math
 import json
 import os
+from itertools import count
 from game.Parameter import *
 from game.utils import *
-from game.GameMode import *
+from game.GameMode import USE_TEAR_DROP_VISION
 from typing import Any, List, Mapping, Optional, Tuple
 
 from game.Bullet.weapon_specs import PROJECTILE_SPECS, ProjectileSpec, get_projectile_spec
 
+_PROJECTILE_SEQUENCE = count()
+
 class BaseUnit:
     def __init__(self, unit_id, unit_team, usingAI, unit_type, body_image_path, turret_image_path,
+                 size=(1.0, 1.0),
                  visible=True, 
                  max_speed_rate=1.0, 
                  max_acceleration_rate=INF, 
@@ -34,9 +38,7 @@ class BaseUnit:
         self.unit_type: str = unit_type
         self.body_image_path: str = body_image_path
         self.turret_image_path: str = turret_image_path
-        self.body_image = load_image(self.body_image_path) if self.body_image_path else None
-        self.turret_image = load_image(self.turret_image_path) if self.turret_image_path else None
-        self.size = self.body_image.get_size() if self.body_image else (0, 0)
+        self.size = (float(size[0]), float(size[1]))
         self.usingAI = usingAI
         self.visible = visible
         
@@ -385,7 +387,7 @@ class BaseUnit:
         
         try:
             bullet_kwargs = dict(
-                projectile_id=f"bullet_{self.id}_{pygame.time.get_ticks()}",  # 使用时间戳确保唯一性
+                projectile_id=f"bullet_{self.id}_{next(_PROJECTILE_SEQUENCE)}",
                 shooter=self,
                 shooter_team=self.team,
                 position=(bullet_start_x, bullet_start_y),
@@ -613,119 +615,6 @@ class BaseUnit:
             "reload_timer": self.reload_timer
         }
     
-    def draw(self, surface, camera_offset=(0, 0), mouse_pos=None) -> None:
-        if not self.is_alive:
-            return
-        if not self.visible:
-            return
-
-        
-        screen_x = self.position[0] - camera_offset[0]
-        screen_y = self.position[1] - camera_offset[1]
-        
-        # 绘制车身
-        if self.body_image:
-            rotated_body = pygame.transform.rotate(self.body_image, -self.direction_angle)
-            body_rect = rotated_body.get_rect(center=(screen_x, screen_y))
-            surface.blit(rotated_body, body_rect)
-        
-        # 绘制炮塔
-        if self.turret_image:
-            rotated_turret = pygame.transform.rotate(self.turret_image, -self.turret_direction_angle)
-            turret_rect = rotated_turret.get_rect(center=(screen_x, screen_y))
-            surface.blit(rotated_turret, turret_rect)
-        
-        # 绘制生命条
-        if DRAW_HEALTH_BAR or DEBUG_MODE:
-            self._draw_health_bar(surface, screen_x, screen_y)
-            
-        # 绘制视野范围
-        if DRAW_SIGHT_RANGE or DEBUG_MODE:
-            self._draw_sight_range(surface, camera_offset)
-            
-        # 绘制从坦克到鼠标位置的线段
-        if mouse_pos is not None and (DRAW_MOUSE_TARGET_LINE or DEBUG_MODE) :
-            self._draw_mouse_target_line(surface, camera_offset, mouse_pos)
-    
-    def _draw_health_bar(self, surface, x, y) -> None:
-        """
-        绘制生命条并在血条中间显示生命值
-        """
-        bar_width = 40
-        bar_height = 8  # 稍微增加高度以容纳文字
-        
-        bar_x = x - bar_width / 2
-        bar_y = y - self.size[1] / 2 - 15  # 稍微上调血条位置
-        
-        # 绘制背景（红色）
-        pygame.draw.rect(surface, (255, 0, 0), 
-                        (bar_x, bar_y, bar_width, bar_height))
-        
-        # 绘制生命值（绿色）
-        health_percentage = self.health / self.max_health
-        current_width = bar_width * health_percentage
-        pygame.draw.rect(surface, (0, 255, 0), 
-                        (bar_x, bar_y, current_width, bar_height))
-        
-        # 绘制边框
-        pygame.draw.rect(surface, (255, 255, 255), 
-                        (bar_x, bar_y, bar_width, bar_height), 1)
-        
-        # 在血条中间显示生命值文本
-        health_text = f"{int(self.health)}/{int(self.max_health)}"
-        
-        # 使用小号字体
-        font = pygame.font.Font(None, 12)
-        text_surface = font.render(health_text, True, (0, 0, 0))
-        text_rect = text_surface.get_rect(center=(x, bar_y + bar_height / 2))
-        
-        surface.blit(text_surface, text_rect)
-    
-    def _draw_sight_range(self, surface, camera_offset):
-        if not self.is_alive:
-            return
-        screen_x = self.position[0] - camera_offset[0]
-        screen_y = self.position[1] - camera_offset[1]
-        color = (0, 0, 0)
-
-        if not USE_TEAR_DROP_VISION:
-            # 圆形视野
-            pygame.draw.circle(surface, color,
-                            (int(screen_x), int(screen_y)),
-                            int(self.sight_range), 1)
-        else:
-            angle_rad = math.radians(self.direction_angle - 90)
-            forward_x = math.cos(angle_rad)
-            forward_y = math.sin(angle_rad)
-
-            points = []
-            num_segments = 60  # 轮廓平滑度
-            for i in range(num_segments + 1):
-                theta = 2 * math.pi * i / num_segments
-                a = (self.sight_range + self.min_sight_range) / 2
-                b = (self.sight_range - self.min_sight_range) / 2
-                r = a + b * math.cos(theta)
-                dir_x = forward_x * math.cos(theta) - forward_y * math.sin(theta)
-                dir_y = forward_x * math.sin(theta) + forward_y * math.cos(theta)
-
-                world_x = self.position[0] + r * dir_x
-                world_y = self.position[1] + r * dir_y
-                screen_pt = (world_x - camera_offset[0],
-                            world_y - camera_offset[1])
-                points.append(screen_pt)
-
-            if len(points) >= 3:
-                pygame.draw.polygon(surface, color, points, 1)
-    
-    def _draw_mouse_target_line(self, surface, camera_offset, mouse_pos):
-        """绘制从坦克到鼠标位置的线段"""
-        if not self.is_alive:
-            return
-        screen_x = self.position[0] - camera_offset[0]
-        screen_y = self.position[1] - camera_offset[1]
-        pygame.draw.line(surface, (255, 0, 255), (screen_x, screen_y), (mouse_pos[0], mouse_pos[1]), 1)
-        pygame.draw.circle(surface, (255, 0, 255), (int(mouse_pos[0]), int(mouse_pos[1])), 3)
-                         
     def take_damage(self, unit_manager, damage_source, damage_amount):
         """
         坦克承受伤害

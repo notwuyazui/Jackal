@@ -1,5 +1,6 @@
 """Rendering utilities kept outside the core environment module."""
 
+from environment.rendering.pygame_renderer import PygameRenderer
 from environment.rendering.video import create_video_writer, rgb_to_bgr
 
-__all__ = ["create_video_writer", "rgb_to_bgr"]
+__all__ = ["PygameRenderer", "create_video_writer", "rgb_to_bgr"]
