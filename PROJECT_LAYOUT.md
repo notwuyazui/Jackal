@@ -9,6 +9,8 @@ The project is split into three code areas:
     projectile registration remain with their existing managers.
 - `environment/`: RL-facing Jackal environment built on top of the game engine.
   - `jackal_env.py`: episode lifecycle, action execution, and the stable environment API.
+  - `scenario.py`: map selection, spawn placement, and per-episode unit configuration.
+  - `action_controller.py`: discrete action decoding, action masks, and automatic aiming.
   - `observation/`: local observations, centralized state, map features, and feature normalization.
   - `rendering/`: the optional Pygame renderer and video helpers; headless training does not create them.
   - `reward/`: reward defaults, shared battle statistics, and aim-mode reward functions.

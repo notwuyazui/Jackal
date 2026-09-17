@@ -1,24 +1,23 @@
 import os
-import random
-import numpy as np
-import math
 import datetime
 from typing import Optional
 
-from game.Parameter import BULLET_SPEED, Team, UNIT_MIN_SIGHT_RATIO
-from game.Map.GameMap import (
-    GameMap,
-    create_builtin_map,
-    create_map_from_file,
-    create_map_from_strings,
-)
+from game.Parameter import BULLET_SPEED
+from game.Map.GameMap import GameMap
 from game.Bullet.BulletManager import BulletManager
 from game.BattleState import WorldSnapshot
 from game.BattleWorld import BattleWorld
 from game.Unit.UnitManager import UnitManager
+from environment.action_controller import ActionController
 from environment.observation import ObservationConfig, ObservationManager
 from environment.rendering import PygameRenderer, create_video_writer, rgb_to_bgr
 from environment.reward import RewardManager, default_reward_config, merge_reward_config
+from environment.scenario import (
+    ScenarioConfig,
+    build_episode,
+    default_positions,
+    normalize_unit_types,
+)
 
 class JackalEnv:
     def __init__(
@@ -74,10 +73,6 @@ class JackalEnv:
         self.video_dir = video_dir
         self.video_writer = None
         self.auto_aim = auto_aim
-        self.map_name = str(map_name or "border").lower()
-        self.map_file = map_file
-        self.map_data = map_data
-        self.map_tile_size = int(map_tile_size)
         self.include_obs_map_features = bool(include_map_features) if include_obs_map_features is None else bool(include_obs_map_features)
         self.include_state_map_features = bool(include_map_features) if include_state_map_features is None else bool(include_state_map_features)
         self.obs_map_grid_size = int(obs_map_grid_size)
@@ -111,56 +106,76 @@ class JackalEnv:
         if self.n_enemies <= 0:
             raise ValueError("n_enemies must be >= 1")
 
-        self.ally_positions = (
+        ally_positions = (
             [tuple(pos) for pos in ally_positions]
             if ally_positions is not None
-            else self._build_default_positions(self.n_agents, is_enemy=False)
+            else default_positions(self.n_agents, enemy=False)
         )
-        self.enemy_positions = (
+        enemy_positions = (
             [tuple(pos) for pos in enemy_positions]
             if enemy_positions is not None
-            else self._build_default_positions(self.n_enemies, is_enemy=True)
+            else default_positions(self.n_enemies, enemy=True)
         )
         self.max_steps = int(max_steps)
-        self.enemy_use_ai = bool(enemy_use_ai)
 
         self.unit_type_names = list(unit_type_names) if unit_type_names is not None else ["tank", "archie"]
         self.include_unit_type_onehot = bool(include_unit_type_onehot)
         self.unit_type_dim = len(self.unit_type_names) if self.include_unit_type_onehot else 0
-        self.ally_unit_types = self._normalize_unit_types(ally_unit_types, self.n_agents)
-        self.enemy_unit_types = self._normalize_unit_types(enemy_unit_types, self.n_enemies)
+        ally_unit_types = normalize_unit_types(
+            ally_unit_types,
+            self.n_agents,
+            self.unit_type_names,
+        )
+        enemy_unit_types = normalize_unit_types(
+            enemy_unit_types,
+            self.n_enemies,
+            self.unit_type_names,
+        )
 
-        # 单位属性缩放接口（用于任务难度调节/课程学习）
-        self.ally_unit_scales = ally_unit_scales or {}
-        self.enemy_unit_scales = enemy_unit_scales or {}
-        self.ally_unit_type_scales = ally_unit_type_scales or {}
-        self.enemy_unit_type_scales = enemy_unit_type_scales or {}
-
-        # 开火参数接口（默认保持原行为）
-        self.agent_fire_cooldown_max = agent_fire_cooldown_max
-        self.enemy_ai_fire_cooldown_max = enemy_ai_fire_cooldown_max
-        self.agent_fire_cooldown_by_type = agent_fire_cooldown_by_type or {}
-        self.enemy_ai_fire_cooldown_by_type = enemy_ai_fire_cooldown_by_type or {}
-        self.bullet_overrides_by_unit_type = bullet_overrides_by_unit_type or {}
-        self.enemy_ai_fire_angle_tolerance = enemy_ai_fire_angle_tolerance
-        self.auto_aim_fire_angle_tolerance = auto_aim_fire_angle_tolerance
-        self.auto_aim_auto_fire_when_ready = bool(auto_aim_auto_fire_when_ready)
-        self.ally_initial_headings = ally_initial_headings or []
-        self.enemy_initial_headings = enemy_initial_headings or []
-        self.unit_sight_range = float(unit_sight_range)
-        self.position_jitter = float(position_jitter)
-        self.heading_jitter = float(heading_jitter)
         self._world: Optional[BattleWorld] = None
         self._snapshot: Optional[WorldSnapshot] = None
-        
-        self.fire_cooldown_max = (
+
+        fire_cooldown = (
             float(agent_fire_cooldown_max)
             if agent_fire_cooldown_max is not None
             else 1.5
         )
+        self.action_controller = ActionController(
+            auto_aim=self.auto_aim,
+            fire_angle_tolerance=auto_aim_fire_angle_tolerance,
+            auto_fire_when_ready=auto_aim_auto_fire_when_ready,
+        )
+        self.n_actions = self.action_controller.n_actions
+        self.scenario_config = ScenarioConfig(
+            map_name=str(map_name or "border").lower(),
+            map_file=map_file,
+            map_data=map_data,
+            map_tile_size=int(map_tile_size),
+            arena_size=(self.screen_width, self.screen_height),
+            ally_positions=ally_positions,
+            enemy_positions=enemy_positions,
+            ally_unit_types=ally_unit_types,
+            enemy_unit_types=enemy_unit_types,
+            enemy_use_ai=bool(enemy_use_ai),
+            ally_unit_scales=ally_unit_scales or {},
+            enemy_unit_scales=enemy_unit_scales or {},
+            ally_unit_type_scales=ally_unit_type_scales or {},
+            enemy_unit_type_scales=enemy_unit_type_scales or {},
+            agent_fire_cooldown=fire_cooldown,
+            enemy_fire_cooldown=enemy_ai_fire_cooldown_max,
+            agent_fire_cooldown_by_type=agent_fire_cooldown_by_type or {},
+            enemy_fire_cooldown_by_type=enemy_ai_fire_cooldown_by_type or {},
+            projectile_overrides_by_type=bullet_overrides_by_unit_type or {},
+            enemy_fire_angle_tolerance=enemy_ai_fire_angle_tolerance,
+            ally_initial_headings=ally_initial_headings or (),
+            enemy_initial_headings=enemy_initial_headings or (),
+            sight_range=float(unit_sight_range),
+            position_jitter=float(position_jitter),
+            heading_jitter=float(heading_jitter),
+        )
         self.max_obs_bullets = 3
         self.max_state_bullets = 10
-        self.obs_sight_range = self.unit_sight_range
+        self.obs_sight_range = float(unit_sight_range)
         self.bullet_norm_speed = max(1.0, float(BULLET_SPEED))
 
         observation_config = ObservationConfig(
@@ -217,196 +232,18 @@ class JackalEnv:
             raise RuntimeError("Environment must be reset before accessing a snapshot")
         return self._snapshot
 
-    def _create_game_map(self) -> GameMap:
-        if self.map_data:
-            return create_map_from_strings(self.map_data, tile_size=self.map_tile_size)
-        if self.map_file:
-            game_map = create_map_from_file(self.map_file, tile_size=self.map_tile_size)
-            if game_map is None:
-                raise ValueError(f"Failed to load map_file: {self.map_file}")
-            return game_map
-
-        return create_builtin_map(self.map_name)
-
     def set_reward_config(self, reward_config):
         if reward_config:
             merge_reward_config(self.reward_config, reward_config)
 
-    def _build_default_positions(self, count, is_enemy=False):
-        """为多智能体任务构建可复现的默认出生点。"""
-        x = 740 if is_enemy else 220
-        start_y = 220
-        spacing_y = 100
-        return [(x, start_y + i * spacing_y) for i in range(count)]
-
-    def _normalize_unit_types(self, unit_types, count):
-        if unit_types is None:
-            return ["tank"] * count
-        types = [str(unit_type).lower() for unit_type in unit_types]
-        if len(types) > count:
-            types = types[:count]
-        if len(types) < count:
-            types.extend(["tank"] * (count - len(types)))
-        for unit_type in types:
-            if unit_type not in self.unit_type_names:
-                raise ValueError(
-                    f"Unknown unit_type={unit_type!r}; expected one of {self.unit_type_names}"
-                )
-        return types
-
-    def _unit_type_scale_cfg(self, side_cfg, unit_type):
-        if not side_cfg:
-            return {}
-        return side_cfg.get(unit_type, side_cfg.get(str(unit_type).lower(), {})) or {}
-
-    def _jitter_position(self, position):
-        if self.position_jitter <= 0.0:
-            return position
-        x = float(position[0]) + random.uniform(-self.position_jitter, self.position_jitter)
-        y = float(position[1]) + random.uniform(-self.position_jitter, self.position_jitter)
-        margin = 50.0
-        x = float(np.clip(x, margin, self.screen_width - margin))
-        y = float(np.clip(y, margin, self.screen_height - margin))
-        return (x, y)
-
-    def _apply_initial_heading_jitter(self, unit):
-        if self.heading_jitter <= 0.0:
-            return
-        delta = random.uniform(-self.heading_jitter, self.heading_jitter)
-        unit.direction_angle = unit.normalize_angle(unit.direction_angle + delta)
-        unit.turret_direction_angle = unit.normalize_angle(unit.turret_direction_angle + delta)
-        unit.turret_target_angle = unit.turret_direction_angle
-        unit.velocity = unit.cal_velocity()
-        unit._update_bounding_box()
-
-    def _initial_heading(self, headings, idx):
-        if idx >= len(headings):
-            return None
-        return float(headings[idx])
-
-    def _set_unit_heading(self, unit, heading):
-        heading = unit.normalize_angle(float(heading))
-        unit.direction_angle = heading
-        unit.turret_direction_angle = heading
-        unit.turret_target_angle = heading
-        unit.velocity = unit.cal_velocity()
-        unit._update_bounding_box()
-
-    def _apply_unit_scales(self, unit, scale_cfg):
-        """按配置缩放单位关键属性；缺省键不修改。"""
-        if not scale_cfg:
-            return
-
-        speed_scale = float(scale_cfg.get("speed", 1.0))
-        acc_scale = float(scale_cfg.get("acceleration", 1.0))
-        turn_scale = float(scale_cfg.get("turn", 1.0))
-        turret_turn_scale = float(scale_cfg.get("turret_turn", 1.0))
-        health_scale = float(scale_cfg.get("health", 1.0))
-
-        unit.max_speed *= speed_scale
-        unit.max_acceleration *= acc_scale
-        unit.min_acceleration *= acc_scale
-        unit.max_angular_speed *= turn_scale
-        unit.turret_angular_speed *= turret_turn_scale
-        unit.max_health *= health_scale
-        unit.health = min(unit.health * health_scale, unit.max_health)
-
-    def _apply_unit_sight_range(self, unit):
-        unit.sight_range = self.unit_sight_range
-        unit.min_sight_range = UNIT_MIN_SIGHT_RATIO * unit.sight_range
-        unit.communication_range = unit.sight_range
-
-    def _agent_fire_cooldown_max(self, agent):
-        unit_type = str(getattr(agent, "unit_type", "tank")).lower()
-        if unit_type in self.agent_fire_cooldown_by_type:
-            return float(self.agent_fire_cooldown_by_type[unit_type])
-        return self.fire_cooldown_max
-
-    def _enemy_ai_fire_cooldown_max(self, enemy):
-        unit_type = str(getattr(enemy, "unit_type", "tank")).lower()
-        if unit_type in self.enemy_ai_fire_cooldown_by_type:
-            return float(self.enemy_ai_fire_cooldown_by_type[unit_type])
-        if self.enemy_ai_fire_cooldown_max is not None:
-            return float(self.enemy_ai_fire_cooldown_max)
-        return None
-
-    def _configure_unit_weapon(self, unit, *, is_enemy):
-        unit_type = str(getattr(unit, "unit_type", "tank")).lower()
-        overrides = self.bullet_overrides_by_unit_type.get(unit_type, {})
-        cooldown = (
-            self._enemy_ai_fire_cooldown_max(unit)
-            if is_enemy
-            else self._agent_fire_cooldown_max(unit)
-        )
-        unit.configure_weapon(
-            fire_cooldown=cooldown,
-            projectile_overrides=overrides,
-        )
-
     def reset(self):
         self.steps = 0
         self.reward_manager.reset()
-        world = BattleWorld(self._create_game_map())
-        self._world = world
-        
-        self.agents = []
-        # 创建玩家: RL网络控制，不使用内置AI (usingAI=False)
-        for i in range(self.n_agents):
-            pos = self.ally_positions[i] if i < len(self.ally_positions) else (220, 220 + i * 100)
-            pos = self._jitter_position(pos)
-            unit_type = self.ally_unit_types[i]
-            player = UnitManager.create_unit(
-                unit_type,
-                i + 1,
-                Team.PLAYER,
-                pos,
-                using_ai=False,
-            )
-            player.usingAI = False
-            self._apply_unit_sight_range(player)
-            self._apply_unit_scales(player, self.ally_unit_scales)
-            self._apply_unit_scales(player, self._unit_type_scale_cfg(self.ally_unit_type_scales, unit_type))
-            self._configure_unit_weapon(player, is_enemy=False)
-            initial_heading = self._initial_heading(self.ally_initial_headings, i)
-            if initial_heading is not None:
-                self._set_unit_heading(player, initial_heading)
-            self._apply_initial_heading_jitter(player)
-            world.add_unit(player)
-            self.agents.append(player)
-        
-        self.enemies = []
-        for i in range(self.n_enemies):
-            # 安全读取坐标，防止配置坐标数量不足
-            pos = self.enemy_positions[i] if i < len(self.enemy_positions) else (740, 220 + i * 100)
-            pos = self._jitter_position(pos)
-
-            # 创建敌人: 开启内置AI控制
-            unit_type = self.enemy_unit_types[i]
-            enemy = UnitManager.create_unit(
-                unit_type,
-                100 + i,
-                Team.ENEMY,
-                pos,
-                using_ai=self.enemy_use_ai,
-            )
-            enemy.usingAI = self.enemy_use_ai
-            self._apply_unit_sight_range(enemy)
-            self._apply_unit_scales(enemy, self.enemy_unit_scales)
-            self._apply_unit_scales(enemy, self._unit_type_scale_cfg(self.enemy_unit_type_scales, unit_type))
-            self._configure_unit_weapon(enemy, is_enemy=True)
-            initial_heading = self._initial_heading(self.enemy_initial_headings, i)
-            if initial_heading is not None:
-                self._set_unit_heading(enemy, initial_heading)
-            self._apply_initial_heading_jitter(enemy)
-
-            if self.enemy_ai_fire_angle_tolerance is not None:
-                enemy.ai_fire_angle_tolerance = float(self.enemy_ai_fire_angle_tolerance)
-
-            world.add_unit(enemy)
-            self.enemies.append(enemy)
-
-        world.refresh_vision()
-        self._snapshot = world.snapshot()
+        episode = build_episode(self.scenario_config)
+        self._world = episode.world
+        self.agents = episode.allies
+        self.enemies = episode.enemies
+        self._snapshot = episode.world.snapshot()
             
         if self.use_video:
             if self.video_writer is not None:
@@ -426,83 +263,25 @@ class JackalEnv:
             self.observation_manager.get_state(self.snapshot),
         )
 
-    def _distance_between(self, src, dst):
-        return math.hypot(dst.position[0] - src.position[0], dst.position[1] - src.position[1])
-
-    def _has_auto_aim_fire_target(self, agent):
-        fire_angle_tolerance = self.auto_aim_fire_angle_tolerance
-        for enemy in self.enemies:
-            if not enemy.is_alive or not self.world.is_visible(agent, enemy):
-                continue
-            dist = self._distance_between(agent, enemy)
-            line_of_fire, in_range, _ = self._target_geometry_features(agent, enemy, dist)
-            if line_of_fire > 0.0 and in_range > 0.0:
-                if fire_angle_tolerance is not None:
-                    dx = enemy.position[0] - agent.position[0]
-                    dy = enemy.position[1] - agent.position[1]
-                    target_angle = (math.degrees(math.atan2(dy, dx)) + 90) % 360
-                    angle_diff = abs(agent.get_angle_difference(agent.turret_direction_angle, target_angle))
-                    if angle_diff > float(fire_angle_tolerance):
-                        continue
-                return True
-        return False
-
-    def _target_geometry_features(self, observer, target, dist):
-        dx = target.position[0] - observer.position[0]
-        dy = target.position[1] - observer.position[1]
-        target_angle = (math.degrees(math.atan2(dy, dx)) + 90) % 360
-        turret_diff = abs(observer.get_angle_difference(observer.turret_direction_angle, target_angle))
-        turret_alignment = 1.0 - min(turret_diff, 180.0) / 180.0
-        line_of_fire = 1.0 if self.world.has_line_of_sight(observer, target) else 0.0
-        in_range = 1.0 if dist <= observer.weapon_range() else 0.0
-        return line_of_fire, in_range, turret_alignment
-
-    @property
-    def n_actions(self):
-        """
-        动作空间动态调整:
-        - auto_aim=True : 10 维 (9种机身走位 + 1种停步开火 炮塔自动追踪)
-        - auto_aim=False: 28 维 (9种机身 * 3种炮塔旋转 + 1种停步开火)
-        """
-        return 10 if self.auto_aim else 28
-    
     def get_avail_agent_actions(self, agent_id):
-        avail_actions = [0] * self.n_actions
-        agent = self.agents[agent_id]
-        if not agent.is_alive:
-            avail_actions[0] = 1 
-            return avail_actions
-        if self.auto_aim:
-            # auto_aim: 0~8 为机动，9 为开火
-            avail_actions[0:9] = [1] * 9
-            if agent.can_fire() and self._has_auto_aim_fire_target(agent):
-                avail_actions[9] = 1
-        else:
-            # manual_aim: 0~26 为机动+炮塔，27 为开火
-            avail_actions[0:28] = [1] * 28
-        return avail_actions
+        return self.action_controller.available_actions(
+            self.world,
+            self.agents,
+            self.enemies,
+            agent_id,
+        )
         
     def get_avail_actions(self):
         return [self.get_avail_agent_actions(i) for i in range(self.n_agents)]
 
     def step(self, actions):
         self.steps += 1
-        
-       # --- 1. 动作解析与执行 ---
-        for agent_id, agent in enumerate(self.agents):
-            if not agent.is_alive: continue
-                
-            action = actions[agent_id]
-            
-            # 每次解析前先重置机身指令
-            agent.set_movement(forward=False, backward=False)
-            agent.set_turning(left=False, right=False)
-            
-            # 根据当前的瞄准模式，将动作分发给对应的成员函数处理
-            if self.auto_aim:
-                self._parse_action_auto_aim(agent, action)
-            else:
-                self._parse_action_manual(agent, action)
+        self.action_controller.apply(
+            self.world,
+            self.agents,
+            self.enemies,
+            actions,
+        )
 
         pre_snapshot = self.snapshot
 
@@ -558,104 +337,6 @@ class JackalEnv:
         surface = self.renderer.draw(self.world)
         self.renderer.present()
         return surface
-
-    def _parse_action_auto_aim(self, agent, action):
-        """
-        模式 A: 开启辅助瞄准时的动作解析 (10 维)
-        """
-        # 1. 走位与开火判定
-        if action < 9:
-            chassis_action = action
-            if chassis_action == 1: agent.set_movement(forward=True, backward=False)
-            elif chassis_action == 2: agent.set_movement(forward=False, backward=True)
-            elif chassis_action == 3: agent.set_turning(left=True, right=False)
-            elif chassis_action == 4: agent.set_turning(left=False, right=True)
-            elif chassis_action == 5:
-                agent.set_movement(forward=True, backward=False)
-                agent.set_turning(left=True, right=False)
-            elif chassis_action == 6:
-                agent.set_movement(forward=True, backward=False)
-                agent.set_turning(left=False, right=True)
-            elif chassis_action == 7:
-                agent.set_movement(forward=False, backward=True)
-                agent.set_turning(left=True, right=False)
-            elif chassis_action == 8:
-                agent.set_movement(forward=False, backward=True)
-                agent.set_turning(left=False, right=True)
-                
-        elif action == 9:
-            # 停步开火
-            if agent.can_fire() and self._has_auto_aim_fire_target(agent):
-                self.world.fire_weapon(agent)
-
-        # 2. 环境层接管炮塔的“辅助瞄准”
-        closest_enemy = None
-        min_dist = float('inf')
-        for enemy in self.enemies:
-            if enemy.is_alive and self.world.is_visible(agent, enemy):
-                dx = enemy.position[0] - agent.position[0]
-                dy = enemy.position[1] - agent.position[1]
-                dist = math.hypot(dx, dy)
-                if dist < min_dist:
-                    min_dist = dist
-                    closest_enemy = enemy
-        
-        if closest_enemy is not None:
-            dx = closest_enemy.position[0] - agent.position[0]
-            dy = closest_enemy.position[1] - agent.position[1]
-            target_angle = math.degrees(math.atan2(dy, dx)) + 90
-            target_angle = target_angle % 360
-            if target_angle < 0: target_angle += 360
-            agent.turret_target_angle = target_angle
-        else:
-            agent.turret_target_angle = agent.direction_angle
-
-        if (
-            self.auto_aim_auto_fire_when_ready
-            and action < 9
-            and agent.can_fire()
-            and self._has_auto_aim_fire_target(agent)
-        ):
-            self.world.fire_weapon(agent)
-
-    def _parse_action_manual(self, agent, action):
-        """
-        模式 B: 关闭辅助瞄准，完全手动操作时的动作解析 (28 维)
-        """
-        if action < 27:
-            chassis_action = action % 9
-            turret_action = action // 9
-            
-            if chassis_action == 1: agent.set_movement(forward=True, backward=False)
-            elif chassis_action == 2: agent.set_movement(forward=False, backward=True)
-            elif chassis_action == 3: agent.set_turning(left=True, right=False)
-            elif chassis_action == 4: agent.set_turning(left=False, right=True)
-            elif chassis_action == 5:
-                agent.set_movement(forward=True, backward=False)
-                agent.set_turning(left=True, right=False)
-            elif chassis_action == 6:
-                agent.set_movement(forward=True, backward=False)
-                agent.set_turning(left=False, right=True)
-            elif chassis_action == 7:
-                agent.set_movement(forward=False, backward=True)
-                agent.set_turning(left=True, right=False)
-            elif chassis_action == 8:
-                agent.set_movement(forward=False, backward=True)
-                agent.set_turning(left=False, right=True)
-                
-            # 炮塔手动旋转
-            if turret_action == 1:
-                agent.turret_target_angle = agent.turret_direction_angle - 15.0
-            elif turret_action == 2:
-                agent.turret_target_angle = agent.turret_direction_angle + 15.0
-            else:
-                agent.turret_target_angle = agent.turret_direction_angle
-                
-        elif action == 27:
-            # 停步锁定并开火
-            agent.turret_target_angle = agent.turret_direction_angle
-            if agent.can_fire():
-                self.world.fire_weapon(agent)
 
     def close(self):
         if self.use_video and self.video_writer is not None:
