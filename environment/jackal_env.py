@@ -216,14 +216,20 @@ class JackalEnv:
 
     @property
     def game_map(self) -> GameMap:
+        """Compatibility access for existing integrations; prefer environment APIs."""
+
         return self.world.game_map
 
     @property
     def unit_manager(self) -> UnitManager:
+        """Compatibility access for existing integrations; prefer environment APIs."""
+
         return self.world.unit_manager
 
     @property
     def bullet_manager(self) -> BulletManager:
+        """Compatibility access for existing integrations; prefer environment APIs."""
+
         return self.world.bullet_manager
 
     @property
@@ -266,8 +272,7 @@ class JackalEnv:
     def get_avail_agent_actions(self, agent_id):
         return self.action_controller.available_actions(
             self.world,
-            self.agents,
-            self.enemies,
+            self.snapshot,
             agent_id,
         )
         
@@ -278,8 +283,7 @@ class JackalEnv:
         self.steps += 1
         self.action_controller.apply(
             self.world,
-            self.agents,
-            self.enemies,
+            self.snapshot,
             actions,
         )
 
@@ -309,10 +313,37 @@ class JackalEnv:
         )
     
     def _check_done(self):
-        if self.steps >= self.max_steps: return True
-        if all(not agent.is_alive for agent in self.agents): return True
-        if all(not enemy.is_alive for enemy in self.enemies): return True
-        return False
+        return (
+            self.steps >= self.max_steps
+            or all(not agent.alive for agent in self.snapshot.allies)
+            or all(not enemy.alive for enemy in self.snapshot.enemies)
+        )
+
+    def get_env_info(self):
+        """Return stable metadata without exposing environment components."""
+
+        return {
+            "n_agents": self.n_agents,
+            "n_enemies": self.n_enemies,
+            "n_actions": self.n_actions,
+            "state_shape": self.observation_manager.state_dim(),
+            "obs_shape": self.observation_manager.observation_dim(),
+            "episode_limit": self.max_steps,
+            "unit_type_dim": self.unit_type_dim,
+            "obs_map_dim": self.observation_manager.observation_map_dim(),
+            "state_map_dim": self.observation_manager.state_map_dim(),
+        }
+
+    def get_runtime_info(self):
+        """Return lightweight episode diagnostics through the environment API."""
+
+        return {
+            "steps": self.steps,
+            "world_tick": self.snapshot.tick,
+            "active_allies": sum(unit.alive for unit in self.snapshot.allies),
+            "active_enemies": sum(unit.alive for unit in self.snapshot.enemies),
+            "active_bullets": sum(bullet.active for bullet in self.snapshot.bullets),
+        }
 
     def get_obs(self):
         """Return local observations through the stable environment API."""

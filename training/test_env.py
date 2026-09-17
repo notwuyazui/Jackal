@@ -33,16 +33,10 @@ def test_marl_env():
             break
             
         if step % 10 == 0:
-            print(f"\n--- [Step {step}] 状态报告 (场上子弹: {len(env.bullet_manager.bullets)}) ---")
+            active_bullets = env.get_runtime_info()["active_bullets"]
+            print(f"\n--- [Step {step}] 状态报告 (场上子弹: {active_bullets}) ---")
             print(f"局部观测 (obs[0]): {obs[0]}")
             print(f"全局状态 (state): {state}")
-            # for agent in env.agents:
-            #     info_agent = agent.get_info()
-            #     print(f"  [玩家] 位置: ({info_agent['position'][0]:.1f}, {info_agent['position'][1]:.1f}) | 朝向: {info_agent['direction']:>5.1f} | 血量: {info_agent['health']}")
-                
-            # for enemy in env.enemies:
-            #     info_enemy = enemy.get_info()
-            #     print(f"  [敌军] 位置: ({info_enemy['position'][0]:.1f}, {info_enemy['position'][1]:.1f}) | 血量: {info_enemy['health']}")
     
     print("\n测试完成。正在保存录像文件...")
     env.close()  

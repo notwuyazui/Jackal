@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import math
-from typing import Any, Sequence
+from typing import Sequence
 
+from game.BattleState import UnitSnapshot, WorldSnapshot
 from game.BattleWorld import BattleWorld
 
 
@@ -39,18 +40,18 @@ class ActionController:
     def available_actions(
         self,
         world: BattleWorld,
-        agents: Sequence[Any],
-        enemies: Sequence[Any],
+        snapshot: WorldSnapshot,
         agent_id: int,
     ) -> list[int]:
         available = [0] * self.n_actions
-        agent = agents[agent_id]
-        if not agent.is_alive:
+        agent = snapshot.allies[agent_id]
+        if not agent.alive:
             available[0] = 1
         elif self.auto_aim:
             available[:9] = [1] * 9
             available[9] = int(
-                agent.can_fire() and self._has_fire_target(world, agent, enemies)
+                world.can_unit_fire(agent.unit_id)
+                and self._has_fire_target(agent, snapshot.enemies)
             )
         else:
             available[:] = [1] * self.n_actions
@@ -59,12 +60,12 @@ class ActionController:
     def apply(
         self,
         world: BattleWorld,
-        agents: Sequence[Any],
-        enemies: Sequence[Any],
+        snapshot: WorldSnapshot,
         actions: Sequence[int],
     ) -> None:
-        for agent_id, agent in enumerate(agents):
-            if not agent.is_alive:
+        enemies = snapshot.enemies
+        for agent_id, agent in enumerate(snapshot.allies):
+            if not agent.alive:
                 continue
             action = actions[agent_id]
             if self.auto_aim:
@@ -73,81 +74,86 @@ class ActionController:
                 self._apply_manual(world, agent, action)
 
     @staticmethod
-    def _set_chassis(agent, action: int) -> None:
-        forward, backward, left, right = _CHASSIS_COMMANDS[action]
-        agent.set_movement(forward=forward, backward=backward)
-        agent.set_turning(left=left, right=right)
+    def _set_chassis(world: BattleWorld, unit_id: int, action: int) -> None:
+        world.set_unit_chassis(unit_id, _CHASSIS_COMMANDS[action])
 
     def _apply_auto_aim(
         self,
         world: BattleWorld,
-        agent,
-        enemies: Sequence[Any],
+        agent: UnitSnapshot,
+        enemies: Sequence[UnitSnapshot],
         action: int,
     ) -> None:
-        self._set_chassis(agent, action if 0 <= action < 9 else 0)
+        self._set_chassis(world, agent.unit_id, action if 0 <= action < 9 else 0)
         if (
             action == 9
-            and agent.can_fire()
-            and self._has_fire_target(world, agent, enemies)
+            and world.can_unit_fire(agent.unit_id)
+            and self._has_fire_target(agent, enemies)
         ):
-            world.fire_weapon(agent)
+            world.set_unit_fire(agent.unit_id)
 
         closest = min(
             (
                 enemy
                 for enemy in enemies
-                if enemy.is_alive and world.is_visible(agent, enemy)
+                if enemy.alive and agent.can_see_unit(enemy.unit_id)
             ),
             key=lambda enemy: _distance(agent, enemy),
             default=None,
         )
-        agent.turret_target_angle = (
+        turret_target_angle = (
             agent.direction_angle if closest is None else _target_angle(agent, closest)
         )
+        world.set_unit_turret_target_angle(agent.unit_id, turret_target_angle)
 
         if (
             self.auto_fire_when_ready
             and action < 9
-            and agent.can_fire()
-            and self._has_fire_target(world, agent, enemies)
+            and world.can_unit_fire(agent.unit_id)
+            and self._has_fire_target(agent, enemies)
         ):
-            world.fire_weapon(agent)
+            world.set_unit_fire(agent.unit_id)
 
-    def _apply_manual(self, world: BattleWorld, agent, action: int) -> None:
+    def _apply_manual(
+        self,
+        world: BattleWorld,
+        agent: UnitSnapshot,
+        action: int,
+    ) -> None:
         if action < 27:
-            self._set_chassis(agent, action % 9)
+            self._set_chassis(world, agent.unit_id, action % 9)
             turret_action = action // 9
             if turret_action == 1:
-                agent.turret_target_angle = agent.turret_direction_angle - 15.0
+                target_angle = agent.turret_direction_angle - 15.0
             elif turret_action == 2:
-                agent.turret_target_angle = agent.turret_direction_angle + 15.0
+                target_angle = agent.turret_direction_angle + 15.0
             else:
-                agent.turret_target_angle = agent.turret_direction_angle
+                target_angle = agent.turret_direction_angle
+            world.set_unit_turret_target_angle(agent.unit_id, target_angle)
             return
 
-        self._set_chassis(agent, 0)
+        self._set_chassis(world, agent.unit_id, 0)
         if action == 27:
-            agent.turret_target_angle = agent.turret_direction_angle
-            if agent.can_fire():
-                world.fire_weapon(agent)
+            world.set_unit_turret_target_angle(
+                agent.unit_id,
+                agent.turret_direction_angle,
+            )
+            if world.can_unit_fire(agent.unit_id):
+                world.set_unit_fire(agent.unit_id)
 
     def _has_fire_target(
         self,
-        world: BattleWorld,
-        agent,
-        enemies: Sequence[Any],
+        agent: UnitSnapshot,
+        enemies: Sequence[UnitSnapshot],
     ) -> bool:
         for enemy in enemies:
-            if not enemy.is_alive or not world.is_visible(agent, enemy):
+            if not enemy.alive or not agent.can_see_unit(enemy.unit_id):
                 continue
-            if _distance(agent, enemy) > agent.weapon_range():
-                continue
-            if not world.has_line_of_sight(agent, enemy):
+            if _distance(agent, enemy) > agent.weapon_range:
                 continue
             if self.fire_angle_tolerance is not None:
                 angle_difference = abs(
-                    agent.get_angle_difference(
+                    _angle_difference(
                         agent.turret_direction_angle,
                         _target_angle(agent, enemy),
                     )
@@ -175,3 +181,7 @@ def _target_angle(source, target) -> float:
         )
         + 90
     ) % 360
+
+
+def _angle_difference(angle1: float, angle2: float) -> float:
+    return (angle2 - angle1 + 180.0) % 360.0 - 180.0

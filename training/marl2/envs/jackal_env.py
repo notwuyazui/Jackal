@@ -12,12 +12,15 @@ class JackalMultiAgentEnv:
 
         self.env = JackalEnv(**self.env_args)
         obs, state = self.env.reset()
+        env_info = self.env.get_env_info()
 
-        self.n_agents = self.env.n_agents
-        self.n_actions = self.env.n_actions
-        self.obs_shape = obs[0].shape[0]
-        self.state_shape = state.shape[0]
-        self.episode_limit = self.env.max_steps
+        self.n_agents = int(env_info["n_agents"])
+        self.n_actions = int(env_info["n_actions"])
+        self.obs_shape = int(env_info["obs_shape"])
+        self.state_shape = int(env_info["state_shape"])
+        self.episode_limit = int(env_info["episode_limit"])
+        if obs[0].shape[0] != self.obs_shape or state.shape[0] != self.state_shape:
+            raise RuntimeError("Environment metadata does not match reset output shapes")
 
     def reset(self):
         return self.env.reset()
@@ -39,17 +42,9 @@ class JackalMultiAgentEnv:
         return self.env.get_avail_agent_actions(agent_id)
 
     def get_env_info(self):
-        return {
-            "n_agents": self.n_agents,
-            "n_actions": self.n_actions,
-            "state_shape": self.state_shape,
-            "obs_shape": self.obs_shape,
-            "episode_limit": self.episode_limit,
-            "env_name": self.env_name,
-            "unit_type_dim": getattr(self.env, "unit_type_dim", 0),
-            "obs_map_dim": self.env.observation_manager.observation_map_dim(),
-            "state_map_dim": self.env.observation_manager.state_map_dim(),
-        }
+        info = self.env.get_env_info()
+        info["env_name"] = self.env_name
+        return info
 
     def close(self):
         self.env.close()

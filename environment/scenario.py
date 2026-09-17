@@ -12,7 +12,7 @@ from game.Map.GameMap import (
     create_map_from_file,
     create_map_from_strings,
 )
-from game.Parameter import Team, UNIT_MIN_SIGHT_RATIO
+from game.Parameter import Team
 
 
 @dataclass
@@ -124,37 +124,43 @@ def _create_unit(
     positions = config.enemy_positions if enemy else config.ally_positions
     default = (740, 220 + index * 100) if enemy else (220, 220 + index * 100)
     position = positions[index] if index < len(positions) else default
-    unit = world.unit_manager.create_unit(
-        unit_type,
-        100 + index if enemy else index + 1,
-        team,
-        _jitter_position(position, config.position_jitter, config.arena_size),
-        using_ai=config.enemy_use_ai if enemy else False,
+    spawn_position = _jitter_position(
+        position,
+        config.position_jitter,
+        config.arena_size,
     )
-    unit.usingAI = config.enemy_use_ai if enemy else False
-
-    unit.sight_range = config.sight_range
-    unit.min_sight_range = UNIT_MIN_SIGHT_RATIO * unit.sight_range
-    unit.communication_range = unit.sight_range
-    _apply_scales(unit, config.enemy_unit_scales if enemy else config.ally_unit_scales)
+    team_scales = config.enemy_unit_scales if enemy else config.ally_unit_scales
     type_scales = (
         config.enemy_unit_type_scales if enemy else config.ally_unit_type_scales
     )
-    _apply_scales(
-        unit,
-        type_scales.get(unit_type, type_scales.get(unit_type.lower(), {})) or {},
+    type_specific_scales = (
+        type_scales.get(unit_type, type_scales.get(unit_type.lower(), {})) or {}
     )
-    _configure_weapon(unit, config, unit_type, enemy=enemy)
-
     headings = config.enemy_initial_headings if enemy else config.ally_initial_headings
-    if index < len(headings):
-        _set_heading(unit, float(headings[index]))
-    _jitter_heading(unit, config.heading_jitter)
+    initial_heading = float(headings[index]) if index < len(headings) else None
+    if config.heading_jitter > 0.0:
+        initial_heading = (initial_heading or 0.0) + random.uniform(
+            -config.heading_jitter,
+            config.heading_jitter,
+        )
 
-    if enemy and config.enemy_fire_angle_tolerance is not None:
-        unit.ai_fire_angle_tolerance = float(config.enemy_fire_angle_tolerance)
-    world.add_unit(unit)
-    return unit
+    cooldown = _resolve_fire_cooldown(config, unit_type, enemy=enemy)
+    return world.create_unit(
+        unit_type,
+        team,
+        spawn_position,
+        unit_id=100 + index if enemy else index + 1,
+        using_ai=config.enemy_use_ai if enemy else False,
+        sight_range=config.sight_range,
+        communication_range=config.sight_range,
+        stat_scale_layers=(team_scales, type_specific_scales),
+        fire_cooldown=cooldown,
+        projectile_overrides=config.projectile_overrides_by_type.get(unit_type, {}),
+        initial_heading=initial_heading,
+        ai_fire_angle_tolerance=(
+            config.enemy_fire_angle_tolerance if enemy else None
+        ),
+    )
 
 
 def _jitter_position(
@@ -173,49 +179,12 @@ def _jitter_position(
     )
 
 
-def _set_heading(unit, heading: float) -> None:
-    heading = unit.normalize_angle(heading)
-    unit.direction_angle = heading
-    unit.turret_direction_angle = heading
-    unit.turret_target_angle = heading
-    unit.velocity = unit.cal_velocity()
-    unit._update_bounding_box()
-
-
-def _jitter_heading(unit, jitter: float) -> None:
-    if jitter <= 0.0:
-        return
-    delta = random.uniform(-jitter, jitter)
-    unit.direction_angle = unit.normalize_angle(unit.direction_angle + delta)
-    unit.turret_direction_angle = unit.normalize_angle(
-        unit.turret_direction_angle + delta
-    )
-    unit.turret_target_angle = unit.turret_direction_angle
-    unit.velocity = unit.cal_velocity()
-    unit._update_bounding_box()
-
-
-def _apply_scales(unit, scales: Mapping[str, Any]) -> None:
-    if not scales:
-        return
-    unit.max_speed *= float(scales.get("speed", 1.0))
-    acceleration = float(scales.get("acceleration", 1.0))
-    unit.max_acceleration *= acceleration
-    unit.min_acceleration *= acceleration
-    unit.max_angular_speed *= float(scales.get("turn", 1.0))
-    unit.turret_angular_speed *= float(scales.get("turret_turn", 1.0))
-    health = float(scales.get("health", 1.0))
-    unit.max_health *= health
-    unit.health = min(unit.health * health, unit.max_health)
-
-
-def _configure_weapon(
-    unit,
+def _resolve_fire_cooldown(
     config: ScenarioConfig,
     unit_type: str,
     *,
     enemy: bool,
-) -> None:
+) -> float | None:
     cooldown: float | None
     if enemy:
         if unit_type in config.enemy_fire_cooldown_by_type:
@@ -228,7 +197,4 @@ def _configure_weapon(
             if unit_type in config.agent_fire_cooldown_by_type
             else config.agent_fire_cooldown
         )
-    unit.configure_weapon(
-        fire_cooldown=None if cooldown is None else float(cooldown),
-        projectile_overrides=config.projectile_overrides_by_type.get(unit_type, {}),
-    )
+    return None if cooldown is None else float(cooldown)

@@ -82,11 +82,11 @@ class PygameRenderer:
         background: tuple[int, int, int] = (50, 50, 70),
     ) -> pygame.Surface:
         self.surface.fill(background)
-        offset = world.camera_offset
+        offset = world.get_camera_offset()
         self._draw_map(world, offset)
-        for unit in world.unit_manager.units:
+        for unit in world.iter_units():
             self._draw_unit(unit, offset, mouse_pos)
-        for bullet in world.bullet_manager.bullets:
+        for bullet in world.iter_bullets():
             self._draw_bullet(bullet, offset)
         return self.surface
 
@@ -105,21 +105,21 @@ class PygameRenderer:
             pygame.display.quit()
 
     def _draw_map(self, world: BattleWorld, offset) -> None:
-        for row in world.game_map.tiles:
+        for row in world.iter_map_tiles():
             for tile in row:
                 image = self._load_image(tile.image_path)
                 if image is not None:
                     self.surface.blit(image, (tile.x - offset[0], tile.y - offset[1]))
 
         if DRAW_OBSTACLE_BOUNDING_BOX or DEBUG_MODE:
-            for obstacle in world.game_map.unit_obstacles:
+            for obstacle in world.get_unit_obstacles():
                 pygame.draw.rect(
                     self.surface,
                     (255, 0, 0),
                     obstacle.move(-offset[0], -offset[1]),
                     2,
                 )
-            for obstacle in world.game_map.bullet_obstacles:
+            for obstacle in world.get_bullet_obstacles():
                 pygame.draw.rect(
                     self.surface,
                     (0, 255, 0),

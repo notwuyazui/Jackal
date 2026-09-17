@@ -206,6 +206,51 @@ class BattleWorldTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             UnitManager.create_unit("unknown", 1, Team.PLAYER)
 
+    def test_world_configures_unit_before_registering_ai(self) -> None:
+        world = BattleWorld(GameMap())
+        unit = world.create_unit(
+            "tank",
+            Team.ENEMY,
+            (123.0, 234.0),
+            unit_id=9,
+            using_ai=True,
+            sight_range=350.0,
+            communication_range=300.0,
+            stat_scale_layers=(
+                {"speed": 1.5, "health": 2.0},
+                {"speed": 0.5, "health": 0.75},
+            ),
+            fire_cooldown=0.4,
+            projectile_overrides={"normal_shell": {"speed_rate": 1.5}},
+            initial_heading=725.0,
+            ai_fire_angle_tolerance=3.0,
+        )
+
+        self.assertEqual(unit.sight_range, 350.0)
+        self.assertEqual(unit.communication_range, 300.0)
+        self.assertAlmostEqual(unit.max_speed, 37.5)
+        self.assertAlmostEqual(unit.max_health, 150.0)
+        self.assertAlmostEqual(unit.health, 150.0)
+        self.assertEqual(unit.direction_angle, 5.0)
+        self.assertEqual(unit.turret_direction_angle, 5.0)
+        self.assertAlmostEqual(unit.fire_cooldown_duration(), 0.4)
+        self.assertAlmostEqual(unit.get_weapon_spec().speed, 600.0)
+        self.assertEqual(len(world.unit_manager.enemy_ais), 1)
+        self.assertEqual(world.unit_manager.enemy_ais[0].fire_angle_tolerance, 3.0)
+
+    def test_world_command_interface_controls_and_fires_unit(self) -> None:
+        world = BattleWorld(GameMap())
+        unit = world.create_unit("tank", Team.PLAYER, unit_id=4)
+
+        self.assertTrue(world.set_unit_chassis(4, (True, False, False, True)))
+        self.assertEqual(unit.acceleration, unit.max_acceleration)
+        self.assertEqual(unit.angular_speed, unit.max_angular_speed)
+        self.assertTrue(world.set_unit_turret_target_angle(4, 123.0))
+        self.assertEqual(unit.turret_target_angle, 123.0)
+        self.assertTrue(world.can_unit_fire(4))
+        self.assertIsNotNone(world.set_unit_fire(4))
+        self.assertEqual(world.get_active_bullets_counts(), 1)
+
     def test_snapshot_is_read_only_and_contains_no_live_entities(self) -> None:
         world = BattleWorld(GameMap())
         unit = world.create_unit("tank", Team.PLAYER, (100.0, 100.0), unit_id=1)

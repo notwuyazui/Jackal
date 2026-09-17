@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
 from game.BattleState import (
     BulletSnapshot,
@@ -14,7 +14,7 @@ from game.BattleState import (
 from game.Bullet.BulletManager import BulletManager
 from game.GameMode import DEBUG_MODE, PRINT_VISIBLE_UNIT, UNIT_RECORD_TEXT
 from game.Map.GameMap import GameMap, create_builtin_map, create_empty_map
-from game.Parameter import ACC, Direction, Team
+from game.Parameter import ACC, Direction, Team, UNIT_MIN_SIGHT_RATIO
 from game.Unit.UnitManager import UnitManager
 
 if TYPE_CHECKING:
@@ -89,7 +89,20 @@ class BattleWorld:
         unit_id: int | None = None,
         using_ai: bool = False,
         visible: bool = True,
+        sight_range: float | None = None,
+        communication_range: float | None = None,
+        stat_scale_layers: Sequence[Mapping[str, Any]] = (),
+        fire_cooldown: float | None = None,
+        projectile_overrides: Mapping[str, Any] | None = None,
+        initial_heading: float | None = None,
+        ai_fire_angle_tolerance: float | None = None,
     ) -> BaseUnit:
+        """Create, configure, and register a unit through the world boundary.
+
+        Configuration is applied before registration so an AI controller observes
+        the final weapon and perception parameters during its construction.
+        """
+
         resolved_id = len(self.unit_manager.units) if unit_id is None else unit_id
         unit = self.unit_manager.create_unit(
             unit_type,
@@ -99,8 +112,53 @@ class BattleWorld:
             using_ai=using_ai,
             visible=visible,
         )
+        if sight_range is not None:
+            unit.sight_range = float(sight_range)
+            unit.min_sight_range = UNIT_MIN_SIGHT_RATIO * unit.sight_range
+        if communication_range is not None:
+            unit.communication_range = float(communication_range)
+        elif sight_range is not None:
+            unit.communication_range = unit.sight_range
+
+        for scales in stat_scale_layers:
+            self._apply_unit_scales(unit, scales)
+
+        unit.configure_weapon(
+            fire_cooldown=fire_cooldown,
+            projectile_overrides=projectile_overrides,
+        )
+        if initial_heading is not None:
+            self._set_unit_heading(unit, initial_heading)
+        if ai_fire_angle_tolerance is not None:
+            unit.ai_fire_angle_tolerance = float(ai_fire_angle_tolerance)
+
         self.add_unit(unit)
         return unit
+
+    @staticmethod
+    def _apply_unit_scales(unit: BaseUnit, scales: Mapping[str, Any]) -> None:
+        """Apply one ordered layer of scenario stat multipliers."""
+
+        if not scales:
+            return
+        unit.max_speed *= float(scales.get("speed", 1.0))
+        acceleration = float(scales.get("acceleration", 1.0))
+        unit.max_acceleration *= acceleration
+        unit.min_acceleration *= acceleration
+        unit.max_angular_speed *= float(scales.get("turn", 1.0))
+        unit.turret_angular_speed *= float(scales.get("turret_turn", 1.0))
+        health = float(scales.get("health", 1.0))
+        unit.max_health *= health
+        unit.health = min(unit.health * health, unit.max_health)
+
+    @staticmethod
+    def _set_unit_heading(unit: BaseUnit, heading: float) -> None:
+        heading = unit.normalize_angle(float(heading))
+        unit.direction_angle = heading
+        unit.turret_direction_angle = heading
+        unit.turret_target_angle = heading
+        unit.velocity = unit.cal_velocity()
+        unit._update_bounding_box()
 
     def add_bullet(self, bullet: BaseBullet | None) -> None:
         self.bullet_manager.add_bullet(bullet)
@@ -207,6 +265,20 @@ class BattleWorld:
     def get_unit(self, unit_id: int) -> BaseUnit | None:
         return self.unit_manager.get_unit_by_id(unit_id)
 
+    def can_unit_fire(self, unit_id: int) -> bool:
+        unit = self.get_unit(unit_id)
+        return bool(unit is not None and unit.can_fire())
+
+    def set_unit_chassis(self, unit_id: int, action: Sequence[bool]) -> bool:
+        """Apply forward/backward/left/right controls to one unit."""
+
+        if len(action) != 4:
+            raise ValueError("A chassis action must contain four boolean values")
+        forward, backward, left, right = action
+        moved = self.set_unit_movement(unit_id, bool(forward), bool(backward))
+        turned = self.set_unit_turning(unit_id, bool(left), bool(right))
+        return moved and turned
+
     def set_unit_movement(
         self,
         unit_id: int,
@@ -234,6 +306,13 @@ class BattleWorld:
         unit = self.get_unit(unit_id)
         offset = self.camera_offset if camera_offset is None else camera_offset
         return False if unit is None else unit.set_turret_target_to_mouse(mouse_pos, offset)
+
+    def set_unit_turret_target_angle(self, unit_id: int, angle: float) -> bool:
+        unit = self.get_unit(unit_id)
+        if unit is None:
+            return False
+        unit.turret_target_angle = float(angle)
+        return True
 
     def set_unit_fire(self, unit_id: int) -> BaseBullet | None:
         unit = self.get_unit(unit_id)
@@ -294,6 +373,26 @@ class BattleWorld:
 
     def get_active_bullets_counts(self) -> int:
         return self.bullet_manager.get_active_count()
+
+    def iter_units(self):
+        """Return a stable collection view for render and inspection adapters."""
+
+        return tuple(self.unit_manager.units)
+
+    def iter_bullets(self):
+        return tuple(self.bullet_manager.bullets)
+
+    def iter_map_tiles(self):
+        return tuple(tuple(row) for row in self.game_map.tiles)
+
+    def get_unit_obstacles(self):
+        return tuple(self.game_map.unit_obstacles)
+
+    def get_bullet_obstacles(self):
+        return tuple(self.game_map.bullet_obstacles)
+
+    def get_camera_offset(self) -> tuple[float, float]:
+        return float(self.camera_offset[0]), float(self.camera_offset[1])
 
     def print_record(self) -> None:
         if self.print_record_timer <= 5.0:

@@ -101,6 +101,22 @@ class EnvironmentWeaponIntegrationTests(unittest.TestCase):
         self.env.step([0])
         self.assertAlmostEqual(agent.fire_cooldown, 0.29)
 
+    def test_environment_metadata_matches_observation_outputs(self) -> None:
+        obs, state = self.env.reset()
+        info = self.env.get_env_info()
+
+        self.assertEqual(info["n_agents"], len(obs))
+        self.assertEqual(info["obs_shape"], obs[0].shape[0])
+        self.assertEqual(info["state_shape"], state.shape[0])
+        self.assertEqual(info["n_actions"], self.env.n_actions)
+
+        runtime_info = self.env.get_runtime_info()
+        self.assertEqual(runtime_info["steps"], 0)
+        self.assertEqual(runtime_info["world_tick"], 0)
+        self.assertEqual(runtime_info["active_allies"], 1)
+        self.assertEqual(runtime_info["active_enemies"], 1)
+        self.assertEqual(runtime_info["active_bullets"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()
