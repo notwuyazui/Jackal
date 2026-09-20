@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 import pygame
 
-from game.GameMode import AUTO_COMMUNICATE
+import game.GameMode as GameMode
 from game.BattleState import CombatEvent
 from game.Parameter import Team
 from game.utils import SpatialIndex
@@ -18,9 +18,36 @@ if TYPE_CHECKING:
 
 
 class UnitManager:
-    def __init__(self) -> None:
+    """管理单场战斗的单位和单位级规则。
+
+    三项模式参数未传入时，使用 GameMode 中的全局默认值。
+    """
+
+    def __init__(
+        self,
+        *,
+        enable_unit_collision: bool | None = None,
+        use_tear_drop_vision: bool | None = None,
+        auto_communicate: bool | None = None,
+    ) -> None:
         self.units: list[BaseUnit] = []
         self.enemy_ais: list[Any] = []
+        self.enable_unit_collision = bool(
+            GameMode.ENABLE_UNIT_COLLISION
+            if enable_unit_collision is None
+            else enable_unit_collision
+        )
+        self.use_tear_drop_vision = bool(
+            GameMode.USE_TEAR_DROP_VISION
+            if use_tear_drop_vision is None
+            else use_tear_drop_vision
+        )
+        self.auto_communicate_enabled = bool(
+            GameMode.AUTO_COMMUNICATE
+            if auto_communicate is None
+            else auto_communicate
+        )
+        self.unit_collision_count = 0
         self._unit_spatial_index = SpatialIndex[Any](64)
         self._unit_index_valid = False
         self._visibility_cache: dict[tuple[int, int], bool] = {}
@@ -33,6 +60,8 @@ class UnitManager:
 
         self.current_tick = int(tick)
         self.combat_events.clear()
+        for unit in self.units:
+            unit.blocked_by_unit = False
 
     def record_damage(self, source, target: BaseUnit, amount: float, destroyed: bool) -> None:
         """Record damage where it is applied so reward code need not infer it."""
@@ -103,6 +132,7 @@ class UnitManager:
         if unit is None:
             raise RuntimeError(f"Unit builder returned None for {normalized_type!r}")
         unit._update_bounding_box()
+        unit._update_collision_box()
         return unit
 
     def add_unit(
@@ -117,6 +147,12 @@ class UnitManager:
 
         if unit is None:
             return
+        if self.enable_unit_collision:
+            collision = self.find_unit_collision(unit, unit.collision_box)
+            if collision is not None:
+                raise ValueError(
+                    f"Unit {unit.id} overlaps unit {collision.id} at spawn"
+                )
         self.units.append(unit)
         self._unit_index_valid = False
         self.invalidate_perception_cache()
@@ -129,12 +165,17 @@ class UnitManager:
         bullet_manager: BulletManager,
         game_map: GameMap,
     ) -> None:
-        for ai in self.enemy_ais:
+        # Only the optional collision rule needs a fresh pre-movement index;
+        # keeping this conditional preserves the original disabled-path cost.
+        if self.enable_unit_collision:
+            self.rebuild_unit_spatial_index(game_map)
+        # Updates use stable ids to avoid insertion-order drift.
+        for ai in sorted(self.enemy_ais, key=lambda item: item.unit.id):
             ai.update()
-        for unit in self.units:
+        for unit in sorted(self.units, key=lambda item: item.id):
             unit.update(delta_time, self, bullet_manager, game_map)
 
-        if AUTO_COMMUNICATE:
+        if self.auto_communicate_enabled:
             self.auto_communicate()
 
         dead_units = {unit for unit in self.units if not unit.is_alive}
@@ -144,6 +185,9 @@ class UnitManager:
 
     @staticmethod
     def _entity_rect(entity) -> pygame.Rect:
+        collision_box = getattr(entity, "collision_box", None)
+        if collision_box is not None:
+            return collision_box
         if entity.bounding_box is not None:
             return entity.bounding_box
         x, y = entity.position
@@ -160,6 +204,38 @@ class UnitManager:
             return self.units
         return self._unit_spatial_index.query_rect(rect)
 
+    def _ensure_unit_spatial_index(self) -> None:
+        if not self._unit_index_valid:
+            self._unit_spatial_index.rebuild(self.units, self._entity_rect)
+            self._unit_index_valid = True
+
+    def find_unit_collision(self, unit: BaseUnit, rect: pygame.Rect):
+        """Return the first live unit whose physical footprint overlaps rect."""
+
+        if not self.enable_unit_collision:
+            return None
+        self._ensure_unit_spatial_index()
+        # The index represents positions at the beginning of the unit update pass.
+        # Search one adjacent spatial cell to tolerate normal within-step movement
+        # without rebuilding the complete index after every unit.
+        padding = self._unit_spatial_index.cell_size
+        query_rect = rect.inflate(padding * 2, padding * 2)
+        candidates = self._unit_spatial_index.query_rect(query_rect)
+        for other in sorted(candidates, key=lambda item: item.id):
+            if other is unit or not getattr(other, "is_alive", False):
+                continue
+            other_box = getattr(other, "collision_box", None)
+            if other_box is not None and rect.colliderect(other_box):
+                return other
+        return None
+
+    def record_unit_collision(self, unit: BaseUnit, other: BaseUnit) -> None:
+        """Update diagnostics for a movement blocked by another unit."""
+
+        unit.blocked_by_unit = True
+        unit.unit_collision_count += 1
+        self.unit_collision_count += 1
+
     def get_units_in_radius(
         self,
         position: tuple[float, float],
@@ -173,8 +249,7 @@ class UnitManager:
         self._visibility_cache.clear()
         self._line_of_sight_cache.clear()
 
-    @staticmethod
-    def is_in_view(observer: BaseUnit, target: Any) -> bool:
+    def is_in_view(self, observer: BaseUnit, target: Any) -> bool:
         """执行不含地图遮挡的快速视野判断。"""
 
         return (
@@ -183,7 +258,7 @@ class UnitManager:
             and getattr(target, "is_active", True)
             and getattr(target, "visible", True)
             and not getattr(target, "conceal", False)
-            and observer.is_in_sight(target)
+            and observer.is_in_sight(target, self.use_tear_drop_vision)
         )
 
     def is_visible(
@@ -282,6 +357,7 @@ class UnitManager:
         self._unit_index_valid = False
         self.invalidate_perception_cache()
         self.combat_events.clear()
+        self.unit_collision_count = 0
 
     def save(self) -> list[bool]:
         return [unit.save() for unit in self.units]

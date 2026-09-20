@@ -76,6 +76,9 @@ class UnitSnapshot:
     weapon_range: float
     visible_unit_ids: frozenset[int]
     visible_bullet_indices: frozenset[int]
+    blocked_by_unit: bool = False
+    unit_collision_count: int = 0
+    collision_size: tuple[float, float] = (0.0, 0.0)
 
     def can_see_unit(self, target_id: int) -> bool:
         return target_id in self.visible_unit_ids

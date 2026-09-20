@@ -13,6 +13,7 @@ from game.Map.GameMap import (
     create_map_from_strings,
 )
 from game.Parameter import Team
+from game.Unit.UnitManager import UnitManager
 
 
 @dataclass
@@ -42,6 +43,10 @@ class ScenarioConfig:
     sight_range: float = 400.0
     position_jitter: float = 0.0
     heading_jitter: float = 0.0
+    collision_scale: float = 1.0
+    enable_unit_collision: bool | None = None
+    use_tear_drop_vision: bool | None = None
+    auto_communicate: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -82,7 +87,12 @@ def normalize_unit_types(
 def build_episode(config: ScenarioConfig) -> EpisodeScenario:
     """Create and configure a fresh battle world without depending on JackalEnv."""
 
-    world = BattleWorld(_create_map(config))
+    unit_manager = UnitManager(
+        enable_unit_collision=config.enable_unit_collision,
+        use_tear_drop_vision=config.use_tear_drop_vision,
+        auto_communicate=config.auto_communicate,
+    )
+    world = BattleWorld(_create_map(config), unit_manager=unit_manager)
     allies = [
         _create_unit(world, config, Team.PLAYER, index, unit_type, enemy=False)
         for index, unit_type in enumerate(config.ally_unit_types)
@@ -160,6 +170,7 @@ def _create_unit(
         ai_fire_angle_tolerance=(
             config.enemy_fire_angle_tolerance if enemy else None
         ),
+        collision_scale=config.collision_scale,
     )
 
 

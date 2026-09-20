@@ -35,6 +35,7 @@ class Plane(BaseUnit):
                          body_image_path=self.body_image_path, 
                          turret_image_path=self.turret_image_path,
                          size=(32.0, 32.0) if unit_team == Team.ENEMY else (30.0, 31.0),
+                         collision_size=(32.0, 32.0) if unit_team == Team.ENEMY else (30.0, 31.0),
                          visible=self.visible,
                          max_speed_rate=self.max_speed_rate, 
                          max_acceleration_rate=self.max_acceleration_rate, 

@@ -8,16 +8,7 @@ from typing import TYPE_CHECKING
 
 import pygame
 
-from game.GameMode import (
-    DEBUG_MODE,
-    DRAW_BULLET_BOUNDING_BOX,
-    DRAW_BULLET_EXPLOSION_RANGE,
-    DRAW_HEALTH_BAR,
-    DRAW_MOUSE_TARGET_LINE,
-    DRAW_OBSTACLE_BOUNDING_BOX,
-    DRAW_SIGHT_RANGE,
-    USE_TEAR_DROP_VISION,
-)
+import game.GameMode as GameMode
 from game.Parameter import EXPLOSION_IMAGE_ADAPT_TO_RANGE
 
 if TYPE_CHECKING:
@@ -85,7 +76,12 @@ class PygameRenderer:
         offset = world.get_camera_offset()
         self._draw_map(world, offset)
         for unit in world.iter_units():
-            self._draw_unit(unit, offset, mouse_pos)
+            self._draw_unit(
+                unit,
+                offset,
+                mouse_pos,
+                world.unit_manager.use_tear_drop_vision,
+            )
         for bullet in world.iter_bullets():
             self._draw_bullet(bullet, offset)
         return self.surface
@@ -111,7 +107,7 @@ class PygameRenderer:
                 if image is not None:
                     self.surface.blit(image, (tile.x - offset[0], tile.y - offset[1]))
 
-        if DRAW_OBSTACLE_BOUNDING_BOX or DEBUG_MODE:
+        if GameMode.DRAW_OBSTACLE_BOUNDING_BOX or GameMode.DEBUG_MODE:
             for obstacle in world.get_unit_obstacles():
                 pygame.draw.rect(
                     self.surface,
@@ -127,7 +123,13 @@ class PygameRenderer:
                     1,
                 )
 
-    def _draw_unit(self, unit, offset, mouse_pos) -> None:
+    def _draw_unit(
+        self,
+        unit,
+        offset,
+        mouse_pos,
+        use_tear_drop_vision: bool,
+    ) -> None:
         if not unit.is_alive or not unit.visible:
             return
         x = unit.position[0] - offset[0]
@@ -141,11 +143,15 @@ class PygameRenderer:
                 rotated = pygame.transform.rotate(image, -angle)
                 self.surface.blit(rotated, rotated.get_rect(center=(x, y)))
 
-        if DRAW_HEALTH_BAR or DEBUG_MODE:
+        if GameMode.DRAW_HEALTH_BAR or GameMode.DEBUG_MODE:
             self._draw_health_bar(unit, x, y)
-        if DRAW_SIGHT_RANGE or DEBUG_MODE:
-            self._draw_sight_range(unit, offset)
-        if mouse_pos is not None and (DRAW_MOUSE_TARGET_LINE or DEBUG_MODE):
+        if GameMode.DRAW_SIGHT_RANGE or GameMode.DEBUG_MODE:
+            self._draw_sight_range(unit, offset, use_tear_drop_vision)
+        if (
+            unit.id == 0
+            and mouse_pos is not None
+            and (GameMode.DRAW_MOUSE_TARGET_LINE or GameMode.DEBUG_MODE)
+        ):
             pygame.draw.line(self.surface, (255, 0, 255), (x, y), mouse_pos, 1)
             pygame.draw.circle(
                 self.surface,
@@ -177,10 +183,15 @@ class PygameRenderer:
         )
         self.surface.blit(text, text.get_rect(center=(x, bar_y + height / 2)))
 
-    def _draw_sight_range(self, unit, offset) -> None:
+    def _draw_sight_range(
+        self,
+        unit,
+        offset,
+        use_tear_drop_vision: bool,
+    ) -> None:
         x = unit.position[0] - offset[0]
         y = unit.position[1] - offset[1]
-        if not USE_TEAR_DROP_VISION:
+        if not use_tear_drop_vision:
             pygame.draw.circle(
                 self.surface, (0, 0, 0), (int(x), int(y)), int(unit.sight_range), 1
             )
@@ -222,7 +233,7 @@ class PygameRenderer:
             self.surface.blit(rotated, rotated.get_rect(center=(x, y)))
 
         if bullet.has_exploded and bullet.is_explosive and (
-            DEBUG_MODE or DRAW_BULLET_EXPLOSION_RANGE
+            GameMode.DEBUG_MODE or GameMode.DRAW_BULLET_EXPLOSION_RANGE
         ):
             pygame.draw.circle(
                 self.surface,
@@ -231,7 +242,9 @@ class PygameRenderer:
                 int(bullet.explosion_radius),
                 2,
             )
-        if (DEBUG_MODE or DRAW_BULLET_BOUNDING_BOX) and bullet.bounding_box:
+        if (
+            GameMode.DEBUG_MODE or GameMode.DRAW_BULLET_BOUNDING_BOX
+        ) and bullet.bounding_box:
             pygame.draw.rect(
                 self.surface,
                 (255, 0, 0),

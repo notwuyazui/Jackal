@@ -2,6 +2,7 @@ import os
 import datetime
 from typing import Optional
 
+import game.GameMode as GameMode
 from game.Parameter import BULLET_SPEED
 from game.Map.GameMap import GameMap
 from game.Bullet.BulletManager import BulletManager
@@ -65,6 +66,10 @@ class JackalEnv:
         unit_sight_range=400.0,
         position_jitter=0.0,
         heading_jitter=0.0,
+        enable_unit_collision=None,
+        use_tear_drop_vision=None,
+        auto_communicate=None,
+        collision_scale=1.0,
     ):
         self.headless = headless
         self.delta_time = fixed_delta_time
@@ -73,6 +78,24 @@ class JackalEnv:
         self.video_dir = video_dir
         self.video_writer = None
         self.auto_aim = auto_aim
+        self.enable_unit_collision = bool(
+            GameMode.ENABLE_UNIT_COLLISION
+            if enable_unit_collision is None
+            else enable_unit_collision
+        )
+        self.use_tear_drop_vision = bool(
+            GameMode.USE_TEAR_DROP_VISION
+            if use_tear_drop_vision is None
+            else use_tear_drop_vision
+        )
+        self.auto_communicate = bool(
+            GameMode.AUTO_COMMUNICATE
+            if auto_communicate is None
+            else auto_communicate
+        )
+        self.collision_scale = float(collision_scale)
+        if self.collision_scale <= 0.0:
+            raise ValueError("collision_scale must be > 0")
         self.include_obs_map_features = bool(include_map_features) if include_obs_map_features is None else bool(include_obs_map_features)
         self.include_state_map_features = bool(include_map_features) if include_state_map_features is None else bool(include_state_map_features)
         self.obs_map_grid_size = int(obs_map_grid_size)
@@ -172,6 +195,10 @@ class JackalEnv:
             sight_range=float(unit_sight_range),
             position_jitter=float(position_jitter),
             heading_jitter=float(heading_jitter),
+            collision_scale=self.collision_scale,
+            enable_unit_collision=self.enable_unit_collision,
+            use_tear_drop_vision=self.use_tear_drop_vision,
+            auto_communicate=self.auto_communicate,
         )
         self.max_obs_bullets = 3
         self.max_state_bullets = 10
@@ -302,6 +329,12 @@ class JackalEnv:
             self.snapshot,
             actions,
         )
+        info["blocked_by_unit"] = tuple(
+            bool(agent.blocked_by_unit) for agent in self.snapshot.allies
+        )
+        info["unit_collision_count"] = tuple(
+            int(agent.unit_collision_count) for agent in self.snapshot.allies
+        )
         done = self._check_done()
         
         return (
@@ -332,6 +365,9 @@ class JackalEnv:
             "unit_type_dim": self.unit_type_dim,
             "obs_map_dim": self.observation_manager.observation_map_dim(),
             "state_map_dim": self.observation_manager.state_map_dim(),
+            "enable_unit_collision": self.enable_unit_collision,
+            "use_tear_drop_vision": self.use_tear_drop_vision,
+            "auto_communicate": self.auto_communicate,
         }
 
     def get_runtime_info(self):
@@ -343,6 +379,12 @@ class JackalEnv:
             "active_allies": sum(unit.alive for unit in self.snapshot.allies),
             "active_enemies": sum(unit.alive for unit in self.snapshot.enemies),
             "active_bullets": sum(bullet.active for bullet in self.snapshot.bullets),
+            "blocked_by_unit": tuple(
+                bool(agent.blocked_by_unit) for agent in self.snapshot.allies
+            ),
+            "unit_collision_count": tuple(
+                int(agent.unit_collision_count) for agent in self.snapshot.allies
+            ),
         }
 
     def get_obs(self):

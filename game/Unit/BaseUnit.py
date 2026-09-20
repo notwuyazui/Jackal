@@ -9,7 +9,6 @@ import os
 from itertools import count
 from game.Parameter import *
 from game.utils import *
-from game.GameMode import USE_TEAR_DROP_VISION
 from typing import Any, List, Mapping, Optional, Tuple
 
 from game.Bullet.weapon_specs import PROJECTILE_SPECS, ProjectileSpec, get_projectile_spec
@@ -30,7 +29,8 @@ class BaseUnit:
                  communication_range=INF,
                  armor_type=ArmorType.NONE, 
                  ammunition_types=None,
-                 ammo_switch_time=UNIT_AMMO_SWITCH_TIME):
+                 ammo_switch_time=UNIT_AMMO_SWITCH_TIME,
+                 collision_size=None):
         
         # 基本信息
         self.id: int = unit_id
@@ -39,6 +39,15 @@ class BaseUnit:
         self.body_image_path: str = body_image_path
         self.turret_image_path: str = turret_image_path
         self.size = (float(size[0]), float(size[1]))
+        base_collision_size = self.size if collision_size is None else collision_size
+        self.base_collision_size = (
+            float(base_collision_size[0]),
+            float(base_collision_size[1]),
+        )
+        if self.base_collision_size[0] <= 0.0 or self.base_collision_size[1] <= 0.0:
+            raise ValueError("collision_size dimensions must be > 0")
+        self.collision_scale = 1.0
+        self.collision_size = self.base_collision_size
         self.usingAI = usingAI
         self.visible = visible
         
@@ -79,7 +88,11 @@ class BaseUnit:
         self.acceleration = 0.0
         self.angular_speed = 0.0
         self.health: float = self.max_health
-        self.bounding_box = None                # 碰撞箱，pygame.Rect对象
+        # bounding_box is the projectile hit box. collision_box is the independent
+        # physical footprint used for terrain and optional unit-unit collisions.
+        # Both boxes are valid Rect instances for the full lifetime of a unit.
+        self.bounding_box: pygame.Rect = pygame.Rect(0, 0, 0, 0)
+        self.collision_box: pygame.Rect = pygame.Rect(0, 0, 0, 0)
         self.velocity: Tuple[float, float] = self.cal_velocity()     # 速度向量
         self.current_ammunition: str = ""            # 单位当前选中弹种
         self.fire_cooldown: float = 0.0              # 剩余开火冷却时间
@@ -107,6 +120,8 @@ class BaseUnit:
         self.killed_by = None               # 击杀者
         self.living_time = 0.0              # 存活时间
         self.reward = 0.0
+        self.blocked_by_unit = False
+        self.unit_collision_count = 0
 
         # 地块效果会在每一帧开始时重置并重新计算。
         self.speed_slow_multiplier = 1.0
@@ -114,6 +129,7 @@ class BaseUnit:
         
         # 初始化碰撞箱
         self._update_bounding_box()
+        self._update_collision_box()
         
     def cal_velocity(self):
         adjusted_angle = self.direction_angle - 90
@@ -135,8 +151,6 @@ class BaseUnit:
             game_map = GameMap()
             
         old_position = self.position
-        old_bounding_box = self.bounding_box.copy() if self.bounding_box else None
-        
         if not self.is_alive:
             return False
         
@@ -153,21 +167,38 @@ class BaseUnit:
         self._update_direction(delta_time)           # 更新朝向
         self._update_turret_direction(delta_time)    # 更新炮塔朝向
         self._update_position(delta_time)            # 更新位置
-        self._update_bounding_box()                  # 更新碰撞箱
+        self._update_bounding_box()                  # 更新受击箱
+        self._update_collision_box()                 # 更新物理碰撞箱
         self.velocity = self.cal_velocity()          # 更新速度向量
         
         if self.is_switching_ammo and self.reload_timer <= 0:    # 完成弹种切换
             self._complete_ammo_switch()
 
-        # 检查与障碍物的碰撞
-        if self.bounding_box:
-            for obstacle in game_map.get_candidate_unit_obstacles(self.bounding_box):
-                if self.bounding_box.colliderect(obstacle):
+        # 检查与地图障碍物的碰撞。
+        if self.collision_box:
+            for obstacle in game_map.get_candidate_unit_obstacles(self.collision_box):
+                if self.collision_box.colliderect(obstacle):
                     # 发生碰撞，恢复到之前的位置
                     self.position = old_position
                     self._update_bounding_box()
+                    self._update_collision_box()
                     self.speed = 0  # 停止移动
                     return True
+
+        # 单位碰撞是可选规则。仅做邻近 broad-phase 查询和矩形精确检测；
+        # 命中时回退移动者，不引入推挤、质量或弹性求解。
+        if (
+            self.collision_box
+            and unit_manager.enable_unit_collision
+        ):
+            other = unit_manager.find_unit_collision(self, self.collision_box)
+            if other is not None:
+                self.position = old_position
+                self._update_bounding_box()
+                self._update_collision_box()
+                self.speed = 0
+                unit_manager.record_unit_collision(self, other)
+                return True
         
         return True
 
@@ -175,6 +206,20 @@ class BaseUnit:
         """重置仅在当前帧生效的地块效果。"""
         self.speed_slow_multiplier = 1.0
         self.conceal = False
+        self.blocked_by_unit = False
+
+    def configure_collision(self, scale: float = 1.0) -> None:
+        """Configure the physical footprint without changing render or hit size."""
+
+        scale = float(scale)
+        if scale <= 0.0:
+            raise ValueError("collision_scale must be > 0")
+        self.collision_scale = scale
+        self.collision_size = (
+            self.base_collision_size[0] * scale,
+            self.base_collision_size[1] * scale,
+        )
+        self._update_collision_box()
 
     def _update_tile_buff(self, game_map, unit_manager) -> None:
         """应用单位当前位置的地块效果。"""
@@ -329,16 +374,27 @@ class BaseUnit:
             width, height = self.size
             self.bounding_box = pygame.Rect(x - width / 2, y - height / 2, width, height)
 
-    def is_in_sight(self, target) -> bool:
+    def _update_collision_box(self) -> None:
+        if self.collision_size[0] > 0 and self.collision_size[1] > 0:
+            x, y = self.position
+            width, height = self.collision_size
+            self.collision_box = pygame.Rect(
+                x - width / 2,
+                y - height / 2,
+                width,
+                height,
+            )
+
+    def is_in_sight(self, target, use_tear_drop_vision: bool) -> bool:
         """
         判断目标（单位或子弹）是否在视野内。
-        根据 USE_TEAR_DROP_VISION 决定使用圆形还是水滴形判断。
+        由 UnitManager 传入本场战斗的视野形状配置。
         """
         dx = target.position[0] - self.position[0]
         dy = target.position[1] - self.position[1]
         distance = math.hypot(dx, dy)
 
-        if not USE_TEAR_DROP_VISION:
+        if not use_tear_drop_vision:
             return distance <= self.sight_range
 
         # 水滴形视野
@@ -658,7 +714,7 @@ class BaseUnit:
                 continue
             if unit.is_alive == False:
                 continue
-            if unit.is_in_sight(self):
+            if unit.is_in_sight(self, unit_manager.use_tear_drop_vision):
                 unit.assist_damage_dealt += damage_amount
                 if destroy:
                     unit.assist_destroy_count += 1

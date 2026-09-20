@@ -12,7 +12,7 @@ from game.BattleState import (
     WorldSnapshot,
 )
 from game.Bullet.BulletManager import BulletManager
-from game.GameMode import DEBUG_MODE, PRINT_VISIBLE_UNIT, UNIT_RECORD_TEXT
+import game.GameMode as GameMode
 from game.Map.GameMap import GameMap, create_builtin_map, create_empty_map
 from game.Parameter import ACC, Direction, Team, UNIT_MIN_SIGHT_RATIO
 from game.Unit.UnitManager import UnitManager
@@ -96,6 +96,7 @@ class BattleWorld:
         projectile_overrides: Mapping[str, Any] | None = None,
         initial_heading: float | None = None,
         ai_fire_angle_tolerance: float | None = None,
+        collision_scale: float = 1.0,
     ) -> BaseUnit:
         """Create, configure, and register a unit through the world boundary.
 
@@ -123,6 +124,7 @@ class BattleWorld:
         for scales in stat_scale_layers:
             self._apply_unit_scales(unit, scales)
 
+        unit.configure_collision(collision_scale)
         unit.configure_weapon(
             fire_cooldown=fire_cooldown,
             projectile_overrides=projectile_overrides,
@@ -239,6 +241,12 @@ class BattleWorld:
                     weapon_range=float(unit.weapon_range()),
                     visible_unit_ids=visible_unit_ids,
                     visible_bullet_indices=visible_bullet_indices,
+                    blocked_by_unit=bool(unit.blocked_by_unit),
+                    unit_collision_count=int(unit.unit_collision_count),
+                    collision_size=(
+                        float(unit.collision_size[0]),
+                        float(unit.collision_size[1]),
+                    ),
                 )
             )
 
@@ -399,10 +407,10 @@ class BattleWorld:
             return
         self.print_record_timer = 0.0
         print(f"time: {int(self.elapsed_time)}")
-        if UNIT_RECORD_TEXT or DEBUG_MODE:
+        if GameMode.UNIT_RECORD_TEXT or GameMode.DEBUG_MODE:
             for unit in self.unit_manager.units:
                 print(unit.get_record())
-        if PRINT_VISIBLE_UNIT or DEBUG_MODE:
+        if GameMode.PRINT_VISIBLE_UNIT or GameMode.DEBUG_MODE:
             unit = self.get_unit(0)
             if unit is not None:
                 print(f"Unit 0 可见的单位ID: {unit.get_visible_unit_ids()}")

@@ -117,6 +117,40 @@ class EnvironmentWeaponIntegrationTests(unittest.TestCase):
         self.assertEqual(runtime_info["active_enemies"], 1)
         self.assertEqual(runtime_info["active_bullets"], 0)
 
+    def test_collision_configuration_preserves_environment_shapes(self) -> None:
+        collision_env = JackalEnv(
+            headless=True,
+            auto_aim=False,
+            enable_unit_collision=True,
+            use_tear_drop_vision=True,
+            auto_communicate=True,
+            collision_scale=1.5,
+        )
+        try:
+            obs, state = collision_env.reset()
+            info = collision_env.get_env_info()
+            baseline_info = self.env.get_env_info()
+
+            self.assertTrue(info["enable_unit_collision"])
+            self.assertTrue(info["use_tear_drop_vision"])
+            self.assertTrue(info["auto_communicate"])
+            self.assertTrue(collision_env.unit_manager.enable_unit_collision)
+            self.assertTrue(collision_env.unit_manager.use_tear_drop_vision)
+            self.assertTrue(collision_env.unit_manager.auto_communicate_enabled)
+            self.assertEqual(info["n_actions"], baseline_info["n_actions"])
+            self.assertEqual(info["obs_shape"], baseline_info["obs_shape"])
+            self.assertEqual(info["state_shape"], baseline_info["state_shape"])
+            self.assertEqual(obs[0].shape[0], baseline_info["obs_shape"])
+            self.assertEqual(state.shape[0], baseline_info["state_shape"])
+            self.assertEqual(collision_env.agents[0].size, (16.0, 23.0))
+            self.assertEqual(collision_env.agents[0].collision_size, (24.0, 34.5))
+
+            runtime_info = collision_env.get_runtime_info()
+            self.assertEqual(runtime_info["blocked_by_unit"], (False,))
+            self.assertEqual(runtime_info["unit_collision_count"], (0,))
+        finally:
+            collision_env.close()
+
 
 if __name__ == "__main__":
     unittest.main()

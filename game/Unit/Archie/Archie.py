@@ -35,6 +35,7 @@ class Archie(BaseUnit):
                          body_image_path=self.body_image_path, 
                          turret_image_path=self.turret_image_path,
                          size=(20.0, 24.0),
+                         collision_size=(20.0, 24.0),
                          visible=self.visible,
                          max_speed_rate=self.max_speed_rate, 
                          max_acceleration_rate=self.max_acceleration_rate, 

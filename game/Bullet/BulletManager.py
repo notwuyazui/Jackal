@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 import pygame
 
-from game.GameMode import BULLET_INFO_TEXT, DEBUG_MODE
+import game.GameMode as GameMode
 from game.utils import SpatialIndex
 
 if TYPE_CHECKING:
@@ -27,7 +27,7 @@ class BulletManager:
             return
         self.bullets.append(bullet)
         self._spatial_index_valid = False
-        if BULLET_INFO_TEXT or DEBUG_MODE:
+        if GameMode.BULLET_INFO_TEXT or GameMode.DEBUG_MODE:
             print(f"子弹发射: ID={bullet.id}, 位置={bullet.position}")
 
     def fire(self, shooter: BaseUnit) -> BaseBullet | None:
@@ -53,7 +53,7 @@ class BulletManager:
             self.bullets = [
                 bullet for bullet in self.bullets if id(bullet) not in inactive_ids
             ]
-            if BULLET_INFO_TEXT or DEBUG_MODE:
+            if GameMode.BULLET_INFO_TEXT or GameMode.DEBUG_MODE:
                 for bullet in inactive:
                     print(f"子弹移除: ID={bullet.id}")
         self.rebuild_spatial_index(game_map)

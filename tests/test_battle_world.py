@@ -3,6 +3,7 @@ import os
 import sys
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import patch
 
@@ -12,6 +13,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pygame
 
+import game.GameMode as GameMode
+from environment.rendering.pygame_renderer import PygameRenderer
 from game.BattleWorld import BattleWorld
 from game.BattleState import CombatEvent, WorldSnapshot
 from game.Bullet.BulletManager import BulletManager
@@ -70,12 +73,76 @@ class _Observer(_Target):
     def __init__(self, sight_range=200.0) -> None:
         super().__init__((0.0, 0.0))
         self.sight_range = sight_range
+        self.last_use_tear_drop_vision = None
 
-    def is_in_sight(self, target) -> bool:
+    def is_in_sight(self, target, use_tear_drop_vision=False) -> bool:
+        self.last_use_tear_drop_vision = use_tear_drop_vision
         return math.dist(self.position, target.position) <= self.sight_range
 
 
 class BattleWorldTests(unittest.TestCase):
+    def setUp(self) -> None:
+        collision_mode = patch.object(GameMode, "ENABLE_UNIT_COLLISION", False)
+        collision_mode.start()
+        self.addCleanup(collision_mode.stop)
+
+    def test_mouse_target_line_is_only_drawn_for_keyboard_unit(self) -> None:
+        renderer = PygameRenderer(100, 100)
+        unit = SimpleNamespace(
+            id=1,
+            is_alive=True,
+            visible=True,
+            position=(20.0, 20.0),
+            body_image_path=None,
+            turret_image_path=None,
+            direction_angle=0.0,
+            turret_direction_angle=0.0,
+        )
+        try:
+            with (
+                patch.object(GameMode, "DEBUG_MODE", False),
+                patch.object(GameMode, "DRAW_HEALTH_BAR", False),
+                patch.object(GameMode, "DRAW_SIGHT_RANGE", False),
+                patch.object(GameMode, "DRAW_MOUSE_TARGET_LINE", True),
+                patch.object(pygame.draw, "line") as draw_line,
+            ):
+                renderer._draw_unit(unit, (0.0, 0.0), (80.0, 80.0), False)
+                unit.id = 0
+                renderer._draw_unit(unit, (0.0, 0.0), (80.0, 80.0), False)
+
+            draw_line.assert_called_once()
+        finally:
+            renderer.close()
+
+    def test_unit_manager_game_modes_use_defaults_and_allow_overrides(self) -> None:
+        with patch.multiple(
+            GameMode,
+            ENABLE_UNIT_COLLISION=True,
+            USE_TEAR_DROP_VISION=True,
+            AUTO_COMMUNICATE=True,
+        ):
+            defaults = UnitManager()
+
+        self.assertTrue(defaults.enable_unit_collision)
+        self.assertTrue(defaults.use_tear_drop_vision)
+        self.assertTrue(defaults.auto_communicate_enabled)
+
+        overrides = UnitManager(
+            enable_unit_collision=False,
+            use_tear_drop_vision=False,
+            auto_communicate=False,
+        )
+        self.assertFalse(overrides.enable_unit_collision)
+        self.assertFalse(overrides.use_tear_drop_vision)
+        self.assertFalse(overrides.auto_communicate_enabled)
+
+        observer = cast(Any, _Observer())
+        target = cast(Any, _Target())
+        self.assertTrue(defaults.is_in_view(observer, target))
+        self.assertTrue(observer.last_use_tear_drop_vision)
+        self.assertTrue(overrides.is_in_view(observer, target))
+        self.assertFalse(observer.last_use_tear_drop_vision)
+
     def test_step_has_one_authoritative_update_order(self) -> None:
         calls: list[str] = []
         world = BattleWorld(
@@ -250,6 +317,80 @@ class BattleWorldTests(unittest.TestCase):
         self.assertTrue(world.can_unit_fire(4))
         self.assertIsNotNone(world.set_unit_fire(4))
         self.assertEqual(world.get_active_bullets_counts(), 1)
+
+    def test_unit_collision_blocks_friendly_and_enemy_units(self) -> None:
+        team_pairs = (
+            (Team.PLAYER, Team.PLAYER),
+            (Team.PLAYER, Team.ENEMY),
+            (Team.ENEMY, Team.ENEMY),
+        )
+        for mover_team, blocker_team in team_pairs:
+            with self.subTest(mover_team=mover_team, blocker_team=blocker_team):
+                world = BattleWorld(GameMap())
+                world.unit_manager.enable_unit_collision = True
+                # Insert the higher id first; updates must still run by stable unit id.
+                blocker = world.create_unit(
+                    "tank", blocker_team, (122.0, 100.0), unit_id=2
+                )
+                mover = world.create_unit(
+                    "tank", mover_team, (100.0, 100.0), unit_id=1
+                )
+                mover.direction_angle = 90.0
+                mover.speed = 20.0
+                mover.velocity = mover.cal_velocity()
+
+                world.step(0.5)
+
+                self.assertEqual(mover.position, (100.0, 100.0))
+                self.assertTrue(mover.blocked_by_unit)
+                self.assertEqual(mover.unit_collision_count, 1)
+                self.assertEqual(world.unit_manager.unit_collision_count, 1)
+                self.assertFalse(mover.collision_box.colliderect(blocker.collision_box))
+
+                snapshot = world.snapshot()
+                mover_snapshot = next(unit for unit in snapshot.units if unit.unit_id == 1)
+                self.assertTrue(mover_snapshot.blocked_by_unit)
+                self.assertEqual(mover_snapshot.unit_collision_count, 1)
+
+    def test_disabled_unit_collision_preserves_previous_movement(self) -> None:
+        world = BattleWorld(GameMap())
+        world.unit_manager.enable_unit_collision = False
+        mover = world.create_unit("tank", Team.PLAYER, (100.0, 100.0), unit_id=1)
+        blocker = world.create_unit("tank", Team.ENEMY, (122.0, 100.0), unit_id=2)
+        mover.direction_angle = 90.0
+        mover.speed = 20.0
+        mover.velocity = mover.cal_velocity()
+
+        world.step(0.5)
+
+        self.assertGreater(mover.position[0], 100.0)
+        self.assertTrue(mover.collision_box.colliderect(blocker.collision_box))
+        self.assertFalse(mover.blocked_by_unit)
+        self.assertEqual(mover.unit_collision_count, 0)
+
+    def test_collision_scale_does_not_change_render_or_hit_size(self) -> None:
+        world = BattleWorld(GameMap())
+        unit = world.create_unit(
+            "tank",
+            Team.PLAYER,
+            (100.0, 100.0),
+            unit_id=1,
+            collision_scale=1.5,
+        )
+
+        self.assertEqual(unit.size, (16.0, 23.0))
+        self.assertEqual(unit.base_collision_size, (16.0, 23.0))
+        self.assertEqual(unit.collision_size, (24.0, 34.5))
+        self.assertEqual(unit.bounding_box.size, (16, 23))
+        self.assertEqual(unit.collision_box.size, (24, 34))
+
+    def test_unit_collision_rejects_overlapping_spawn(self) -> None:
+        world = BattleWorld(GameMap())
+        world.unit_manager.enable_unit_collision = True
+        world.create_unit("tank", Team.PLAYER, (100.0, 100.0), unit_id=1)
+
+        with self.assertRaisesRegex(ValueError, "overlaps unit 1 at spawn"):
+            world.create_unit("tank", Team.ENEMY, (100.0, 100.0), unit_id=2)
 
     def test_snapshot_is_read_only_and_contains_no_live_entities(self) -> None:
         world = BattleWorld(GameMap())
