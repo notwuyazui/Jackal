@@ -174,16 +174,10 @@ class BaseUnit:
         if self.is_switching_ammo and self.reload_timer <= 0:    # 完成弹种切换
             self._complete_ammo_switch()
 
-        # 检查与地图障碍物的碰撞。
-        if self.collision_box:
-            for obstacle in game_map.get_candidate_unit_obstacles(self.collision_box):
-                if self.collision_box.colliderect(obstacle):
-                    # 发生碰撞，恢复到之前的位置
-                    self.position = old_position
-                    self._update_bounding_box()
-                    self._update_collision_box()
-                    self.speed = 0  # 停止移动
-                    return True
+        # 地图边界与不可通行地块共用 GameMap 的放置查询。
+        if not game_map.can_place_unit(self.position, self.collision_size):
+            self._rollback_blocked_movement(old_position)
+            return True
 
         # 单位碰撞是可选规则。仅做邻近 broad-phase 查询和矩形精确检测；
         # 命中时回退移动者，不引入推挤、质量或弹性求解。
@@ -191,12 +185,12 @@ class BaseUnit:
             self.collision_box
             and unit_manager.enable_unit_collision
         ):
-            other = unit_manager.find_unit_collision(self, self.collision_box)
+            other = unit_manager.find_unit_collision(
+                self.collision_box,
+                exclude_unit=self,
+            )
             if other is not None:
-                self.position = old_position
-                self._update_bounding_box()
-                self._update_collision_box()
-                self.speed = 0
+                self._rollback_blocked_movement(old_position)
                 unit_manager.record_unit_collision(self, other)
                 return True
         
@@ -207,6 +201,17 @@ class BaseUnit:
         self.speed_slow_multiplier = 1.0
         self.conceal = False
         self.blocked_by_unit = False
+
+    def _rollback_blocked_movement(
+        self,
+        old_position: Tuple[float, float],
+    ) -> None:
+        """回退本次移动，不引入推挤或滑动求解。"""
+
+        self.position = old_position
+        self._update_bounding_box()
+        self._update_collision_box()
+        self.speed = 0
 
     def configure_collision(self, scale: float = 1.0) -> None:
         """Configure the physical footprint without changing render or hit size."""
@@ -363,10 +368,15 @@ class BaseUnit:
     
     def _update_position(self, delta_time) -> None:
         """根据速度更新位置"""
-        dx = self.velocity[0] * delta_time
-        dy = self.velocity[1] * delta_time
-        x, y = self.position
-        self.position = (x + dx, y + dy)
+        self.position = self.candidate_position(delta_time)
+
+    def candidate_position(self, delta_time: float) -> Tuple[float, float]:
+        """返回按当前速度前进一个物理步的候选位置。"""
+
+        return (
+            self.position[0] + self.velocity[0] * float(delta_time),
+            self.position[1] + self.velocity[1] * float(delta_time),
+        )
     
     def _update_bounding_box(self) -> None:
         if self.size[0] > 0 and self.size[1] > 0:
@@ -375,15 +385,7 @@ class BaseUnit:
             self.bounding_box = pygame.Rect(x - width / 2, y - height / 2, width, height)
 
     def _update_collision_box(self) -> None:
-        if self.collision_size[0] > 0 and self.collision_size[1] > 0:
-            x, y = self.position
-            width, height = self.collision_size
-            self.collision_box = pygame.Rect(
-                x - width / 2,
-                y - height / 2,
-                width,
-                height,
-            )
+        self.collision_box = centered_rect(self.position, self.collision_size)
 
     def is_in_sight(self, target, use_tear_drop_vision: bool) -> bool:
         """

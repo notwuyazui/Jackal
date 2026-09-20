@@ -31,10 +31,14 @@ class ActionController:
         auto_aim: bool,
         fire_angle_tolerance: float | None,
         auto_fire_when_ready: bool,
+        delta_time: float = 0.03,
     ) -> None:
         self.auto_aim = bool(auto_aim)
         self.fire_angle_tolerance = fire_angle_tolerance
         self.auto_fire_when_ready = bool(auto_fire_when_ready)
+        self.delta_time = float(delta_time)
+        if self.delta_time <= 0.0:
+            raise ValueError("delta_time must be > 0")
         self.n_actions = 10 if self.auto_aim else 28
 
     def available_actions(
@@ -48,13 +52,31 @@ class ActionController:
         if not agent.alive:
             available[0] = 1
         elif self.auto_aim:
-            available[:9] = [1] * 9
+            movement_available = self._next_position_is_available(
+                world,
+                agent.unit_id,
+            )
+            for action, chassis in enumerate(_CHASSIS_COMMANDS):
+                available[action] = int(
+                    self._chassis_action_is_available(chassis, movement_available)
+                )
             available[9] = int(
                 world.can_unit_fire(agent.unit_id)
                 and self._has_fire_target(agent, snapshot.enemies)
             )
         else:
-            available[:] = [1] * self.n_actions
+            movement_available = self._next_position_is_available(
+                world,
+                agent.unit_id,
+            )
+            for action in range(27):
+                available[action] = int(
+                    self._chassis_action_is_available(
+                        _CHASSIS_COMMANDS[action % 9],
+                        movement_available,
+                    )
+                )
+            available[27] = 1
         return available
 
     def apply(
@@ -74,8 +96,35 @@ class ActionController:
                 self._apply_manual(world, agent, action)
 
     @staticmethod
-    def _set_chassis(world: BattleWorld, unit_id: int, action: int) -> None:
-        world.set_unit_chassis(unit_id, _CHASSIS_COMMANDS[action])
+    def _chassis_action_is_available(
+        chassis: tuple[bool, bool, bool, bool],
+        movement_available: bool,
+    ) -> bool:
+        forward, backward, _, _ = chassis
+        return not (forward or backward) or movement_available
+
+    def _next_position_is_available(
+        self,
+        world: BattleWorld,
+        unit_id: int,
+    ) -> bool:
+        unit = world.get_unit(unit_id)
+        if unit is None:
+            return False
+        return world.can_move_unit(
+            unit_id,
+            unit.candidate_position(self.delta_time),
+        )
+
+    def _set_chassis(self, world: BattleWorld, unit_id: int, action: int) -> None:
+        chassis = _CHASSIS_COMMANDS[action]
+        forward, backward, left, right = chassis
+        if (forward or backward) and not self._next_position_is_available(
+            world,
+            unit_id,
+        ):
+            chassis = (False, False, left, right)
+        world.set_unit_chassis(unit_id, chassis)
 
     def _apply_auto_aim(
         self,

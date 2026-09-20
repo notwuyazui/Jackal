@@ -10,6 +10,19 @@ from typing import Generic, TypeVar
 T = TypeVar("T")
 
 
+def centered_rect(
+    position: tuple[float, float],
+    size: tuple[float, float],
+) -> pygame.Rect:
+    """使用中心坐标和尺寸创建矩形，统一单位放置与碰撞几何。"""
+
+    width, height = float(size[0]), float(size[1])
+    if width <= 0.0 or height <= 0.0:
+        raise ValueError("rect size dimensions must be > 0")
+    x, y = float(position[0]), float(position[1])
+    return pygame.Rect(x - width / 2, y - height / 2, width, height)
+
+
 class SpatialIndex(Generic[T]):
     """按矩形覆盖的网格单元索引对象。"""
 

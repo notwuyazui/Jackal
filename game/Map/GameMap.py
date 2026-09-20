@@ -218,6 +218,29 @@ class GameMap:
                 return True
         return False
 
+    def contains_rect(self, rect: pygame.Rect) -> bool:
+        """检查矩形是否完整位于地图边界内。无尺寸空地图视为无边界。"""
+
+        map_width, map_height = self.get_map_size()
+        if map_width <= 0 or map_height <= 0:
+            return True
+        return (
+            rect.left >= 0
+            and rect.top >= 0
+            and rect.right <= map_width
+            and rect.bottom <= map_height
+        )
+
+    def can_place_unit(
+        self,
+        position: Tuple[float, float],
+        collision_size: Tuple[float, float],
+    ) -> bool:
+        """检查单位占用区域是否在边界内且不与不可通行地块重叠。"""
+
+        rect = centered_rect(position, collision_size)
+        return self.contains_rect(rect) and not self.check_collision(rect)
+
     def is_walkable(self, x: float, y: float, width: float = 0, height: float = 0) -> bool:
         """检查区域是否可通行"""
         if width == 0 and height == 0:
@@ -228,7 +251,7 @@ class GameMap:
             return False
         else:
             rect = pygame.Rect(x, y, width, height)
-            return not self.check_collision(rect)
+            return self.contains_rect(rect) and not self.check_collision(rect)
 
     def get_colliding_obstacles(self, rect: pygame.Rect) -> List[pygame.Rect]:
         """获取与矩形碰撞的所有单位障碍物"""

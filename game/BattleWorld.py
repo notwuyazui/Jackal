@@ -16,6 +16,7 @@ import game.GameMode as GameMode
 from game.Map.GameMap import GameMap, create_builtin_map, create_empty_map
 from game.Parameter import ACC, Direction, Team, UNIT_MIN_SIGHT_RATIO
 from game.Unit.UnitManager import UnitManager
+from game.utils import centered_rect
 
 if TYPE_CHECKING:
     from game.Bullet.BaseBullet import BaseBullet
@@ -78,7 +79,63 @@ class BattleWorld:
         self.set_game_map(create_builtin_map(name))
 
     def add_unit(self, unit: BaseUnit) -> None:
+        placement_error = self._unit_placement_error(
+            unit.position,
+            unit.collision_size,
+        )
+        if placement_error is not None:
+            raise ValueError(
+                f"Unit {unit.id} cannot spawn at {unit.position}: {placement_error}"
+            )
         self.unit_manager.add_unit(unit, self.bullet_manager, self.game_map)
+
+    def _unit_placement_error(
+        self,
+        position: tuple[float, float],
+        collision_size: tuple[float, float],
+        *,
+        exclude_unit: BaseUnit | None = None,
+        check_unit_collision: bool = True,
+    ) -> str | None:
+        rect = centered_rect(position, collision_size)
+        if not self.game_map.contains_rect(rect):
+            return "outside map bounds"
+        if self.game_map.check_collision(rect):
+            return "overlaps impassable terrain"
+        if check_unit_collision:
+            blocker = self.unit_manager.find_unit_collision(
+                rect,
+                exclude_unit=exclude_unit,
+            )
+            if blocker is not None:
+                return f"overlaps unit {blocker.id}"
+        return None
+
+    def can_place_unit(
+        self,
+        position: tuple[float, float],
+        collision_size: tuple[float, float],
+    ) -> bool:
+        """查询新单位是否可在指定中心位置占用给定空间。"""
+
+        return self._unit_placement_error(position, collision_size) is None
+
+    def can_move_unit(
+        self,
+        unit_id: int,
+        candidate_position: tuple[float, float],
+    ) -> bool:
+        """检查单位的下一个候选位置，忽略该单位自身占用区域。"""
+
+        unit = self.get_unit(unit_id)
+        if unit is None or not unit.is_alive:
+            return False
+        return self._unit_placement_error(
+            candidate_position,
+            unit.collision_size,
+            exclude_unit=unit,
+            check_unit_collision=self.unit_manager.enable_unit_collision,
+        ) is None
 
     def create_unit(
         self,

@@ -167,6 +167,7 @@ class JackalEnv:
             auto_aim=self.auto_aim,
             fire_angle_tolerance=auto_aim_fire_angle_tolerance,
             auto_fire_when_ready=auto_aim_auto_fire_when_ready,
+            delta_time=self.delta_time,
         )
         self.n_actions = self.action_controller.n_actions
         self.scenario_config = ScenarioConfig(

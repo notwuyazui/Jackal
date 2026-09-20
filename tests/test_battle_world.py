@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import pygame
 
 import game.GameMode as GameMode
+from environment.action_controller import ActionController
 from environment.rendering.pygame_renderer import PygameRenderer
 from game.BattleWorld import BattleWorld
 from game.BattleState import CombatEvent, WorldSnapshot
@@ -243,6 +244,88 @@ class BattleWorldTests(unittest.TestCase):
         self.assertIn(near_obstacle, line_candidates)
         self.assertNotIn(far_obstacle, line_candidates)
 
+    def test_placement_queries_share_bounds_terrain_and_unit_rules(self) -> None:
+        game_map = GameMap(
+            [
+                "ooooo",
+                "ooooo",
+                "ooxoo",
+                "ooooo",
+                "ooooo",
+            ],
+            tile_size=64,
+        )
+        world = BattleWorld(
+            game_map,
+            unit_manager=UnitManager(enable_unit_collision=True),
+        )
+        collision_size = (16.0, 23.0)
+
+        self.assertTrue(game_map.can_place_unit((96.0, 96.0), collision_size))
+        self.assertTrue(world.can_place_unit((96.0, 96.0), collision_size))
+        self.assertFalse(game_map.can_place_unit((4.0, 4.0), collision_size))
+        self.assertFalse(world.can_place_unit((4.0, 4.0), collision_size))
+        self.assertFalse(game_map.can_place_unit((160.0, 160.0), collision_size))
+        self.assertFalse(world.can_place_unit((160.0, 160.0), collision_size))
+
+        unit = world.create_unit(
+            "tank",
+            Team.PLAYER,
+            (96.0, 96.0),
+            unit_id=1,
+        )
+        self.assertTrue(world.can_move_unit(unit.id, unit.position))
+        self.assertFalse(world.can_place_unit(unit.position, unit.collision_size))
+        self.assertFalse(world.can_move_unit(unit.id, (160.0, 160.0)))
+        self.assertFalse(world.can_move_unit(unit.id, (4.0, 4.0)))
+
+        with self.assertRaisesRegex(ValueError, "outside map bounds"):
+            world.create_unit("tank", Team.ENEMY, (4.0, 4.0), unit_id=2)
+        with self.assertRaisesRegex(ValueError, "impassable terrain"):
+            world.create_unit("tank", Team.ENEMY, (160.0, 160.0), unit_id=3)
+        with self.assertRaisesRegex(ValueError, "overlaps unit 1"):
+            world.create_unit("tank", Team.ENEMY, unit.position, unit_id=4)
+
+    def test_action_precheck_uses_next_step_placement_query(self) -> None:
+        game_map = GameMap(
+            [
+                "ooooo",
+                "ooxoo",
+                "ooooo",
+            ],
+            tile_size=64,
+        )
+        world = BattleWorld(
+            game_map,
+            unit_manager=UnitManager(enable_unit_collision=True),
+        )
+        unit = world.create_unit(
+            "tank",
+            Team.PLAYER,
+            (110.0, 96.0),
+            unit_id=1,
+        )
+        unit.velocity = (400.0, 0.0)
+        controller = ActionController(
+            auto_aim=True,
+            fire_angle_tolerance=None,
+            auto_fire_when_ready=False,
+            delta_time=0.1,
+        )
+        snapshot = world.snapshot()
+
+        self.assertFalse(world.can_move_unit(1, unit.candidate_position(0.1)))
+        available = controller.available_actions(world, snapshot, 0)
+        self.assertEqual(available[0], 1)
+        self.assertEqual(available[1], 0)
+        self.assertEqual(available[3], 1)
+
+        controller.apply(world, snapshot, [1])
+        self.assertEqual(unit.acceleration, 0.0)
+
+        world.step(0.1)
+        self.assertEqual(unit.position, (110.0, 96.0))
+
     def test_fire_registers_created_projectile_once(self) -> None:
         projectile = cast(Any, object())
 
@@ -385,11 +468,13 @@ class BattleWorldTests(unittest.TestCase):
         self.assertEqual(unit.collision_box.size, (24, 34))
 
     def test_unit_collision_rejects_overlapping_spawn(self) -> None:
-        world = BattleWorld(GameMap())
-        world.unit_manager.enable_unit_collision = True
+        world = BattleWorld(
+            GameMap(),
+            unit_manager=UnitManager(enable_unit_collision=False),
+        )
         world.create_unit("tank", Team.PLAYER, (100.0, 100.0), unit_id=1)
 
-        with self.assertRaisesRegex(ValueError, "overlaps unit 1 at spawn"):
+        with self.assertRaisesRegex(ValueError, "cannot spawn.*overlaps unit 1"):
             world.create_unit("tank", Team.ENEMY, (100.0, 100.0), unit_id=2)
 
     def test_snapshot_is_read_only_and_contains_no_live_entities(self) -> None:
@@ -405,8 +490,12 @@ class BattleWorldTests(unittest.TestCase):
 
     def test_damage_emits_structured_combat_events(self) -> None:
         world = BattleWorld(GameMap())
-        attacker = world.create_unit("tank", Team.PLAYER, unit_id=1)
-        target = world.create_unit("tank", Team.ENEMY, unit_id=2)
+        attacker = world.create_unit(
+            "tank", Team.PLAYER, (100.0, 100.0), unit_id=1
+        )
+        target = world.create_unit(
+            "tank", Team.ENEMY, (200.0, 100.0), unit_id=2
+        )
         world.unit_manager.begin_step(1)
 
         target.take_damage(world.unit_manager, attacker, target.health)

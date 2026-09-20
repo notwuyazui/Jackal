@@ -151,6 +151,34 @@ class EnvironmentWeaponIntegrationTests(unittest.TestCase):
         finally:
             collision_env.close()
 
+    def test_reset_rejects_spawn_on_impassable_terrain(self) -> None:
+        invalid_env = JackalEnv(
+            headless=True,
+            map_data=("xxx", "xox", "xxx"),
+            map_tile_size=64,
+            ally_positions=((32.0, 32.0),),
+            enemy_positions=((96.0, 96.0),),
+        )
+        try:
+            with self.assertRaisesRegex(ValueError, "impassable terrain"):
+                invalid_env.reset()
+        finally:
+            invalid_env.close()
+
+    def test_default_five_vs_five_spawns_are_valid(self) -> None:
+        env = JackalEnv(
+            headless=True,
+            n_agents=5,
+            n_enemies=5,
+            enemy_use_ai=False,
+        )
+        try:
+            obs, _ = env.reset()
+            self.assertEqual(len(obs), 5)
+            self.assertEqual(len(env.world.unit_manager.units), 10)
+        finally:
+            env.close()
+
 
 if __name__ == "__main__":
     unittest.main()

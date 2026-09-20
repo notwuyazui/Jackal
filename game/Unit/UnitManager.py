@@ -147,12 +147,6 @@ class UnitManager:
 
         if unit is None:
             return
-        if self.enable_unit_collision:
-            collision = self.find_unit_collision(unit, unit.collision_box)
-            if collision is not None:
-                raise ValueError(
-                    f"Unit {unit.id} overlaps unit {collision.id} at spawn"
-                )
         self.units.append(unit)
         self._unit_index_valid = False
         self.invalidate_perception_cache()
@@ -209,11 +203,14 @@ class UnitManager:
             self._unit_spatial_index.rebuild(self.units, self._entity_rect)
             self._unit_index_valid = True
 
-    def find_unit_collision(self, unit: BaseUnit, rect: pygame.Rect):
+    def find_unit_collision(
+        self,
+        rect: pygame.Rect,
+        *,
+        exclude_unit: BaseUnit | None = None,
+    ) -> BaseUnit | None:
         """Return the first live unit whose physical footprint overlaps rect."""
 
-        if not self.enable_unit_collision:
-            return None
         self._ensure_unit_spatial_index()
         # The index represents positions at the beginning of the unit update pass.
         # Search one adjacent spatial cell to tolerate normal within-step movement
@@ -222,7 +219,7 @@ class UnitManager:
         query_rect = rect.inflate(padding * 2, padding * 2)
         candidates = self._unit_spatial_index.query_rect(query_rect)
         for other in sorted(candidates, key=lambda item: item.id):
-            if other is unit or not getattr(other, "is_alive", False):
+            if other is exclude_unit or not getattr(other, "is_alive", False):
                 continue
             other_box = getattr(other, "collision_box", None)
             if other_box is not None and rect.colliderect(other_box):

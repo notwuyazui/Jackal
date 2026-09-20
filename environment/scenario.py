@@ -59,8 +59,13 @@ class EpisodeScenario:
 def default_positions(count: int, *, enemy: bool) -> list[tuple[int, int]]:
     """Build deterministic default spawn points for one side."""
 
+    if count <= 0:
+        return []
     x = 740 if enemy else 220
-    return [(x, 220 + index * 100) for index in range(count)]
+    # Preserve the original 1v1--4v4 positions. Larger teams compress the
+    # vertical spacing so the final unit remains above the bottom border wall.
+    spacing = min(100.0, 320.0 / max(1, count - 1))
+    return [(x, round(220 + index * spacing)) for index in range(count)]
 
 
 def normalize_unit_types(
@@ -155,23 +160,29 @@ def _create_unit(
         )
 
     cooldown = _resolve_fire_cooldown(config, unit_type, enemy=enemy)
-    return world.create_unit(
-        unit_type,
-        team,
-        spawn_position,
-        unit_id=100 + index if enemy else index + 1,
-        using_ai=config.enemy_use_ai if enemy else False,
-        sight_range=config.sight_range,
-        communication_range=config.sight_range,
-        stat_scale_layers=(team_scales, type_specific_scales),
-        fire_cooldown=cooldown,
-        projectile_overrides=config.projectile_overrides_by_type.get(unit_type, {}),
-        initial_heading=initial_heading,
-        ai_fire_angle_tolerance=(
-            config.enemy_fire_angle_tolerance if enemy else None
-        ),
-        collision_scale=config.collision_scale,
-    )
+    try:
+        return world.create_unit(
+            unit_type,
+            team,
+            spawn_position,
+            unit_id=100 + index if enemy else index + 1,
+            using_ai=config.enemy_use_ai if enemy else False,
+            sight_range=config.sight_range,
+            communication_range=config.sight_range,
+            stat_scale_layers=(team_scales, type_specific_scales),
+            fire_cooldown=cooldown,
+            projectile_overrides=config.projectile_overrides_by_type.get(unit_type, {}),
+            initial_heading=initial_heading,
+            ai_fire_angle_tolerance=(
+                config.enemy_fire_angle_tolerance if enemy else None
+            ),
+            collision_scale=config.collision_scale,
+        )
+    except ValueError as exc:
+        side = "enemy" if enemy else "ally"
+        raise ValueError(
+            f"Invalid {side} spawn index {index} ({unit_type}): {exc}"
+        ) from exc
 
 
 def _jitter_position(
