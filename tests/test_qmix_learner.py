@@ -5,7 +5,10 @@ import numpy as np
 import torch
 
 from training.marl2.controllers.basic_mac import BasicMAC
-from training.marl2.learners.qmix_learner import QMixLearner
+from training.marl2.learners.qmix_learner import (
+    QMixLearner,
+    _should_checkpoint_online_activations,
+)
 from training.marl2.modules.mixers.qmix import QMixer
 
 
@@ -114,8 +117,8 @@ class QMixLearnerGraphTests(unittest.TestCase):
             ),
         }
 
-        # Exercise the MPS memory-saving path on CPU as well; checkpointing is
-        # backend independent, while MPS is not available in every test host.
+        # Exercise the accelerator memory-saving path on CPU as well;
+        # checkpointing is backend independent, while CUDA/MPS may be absent.
         self.learner._checkpoint_online_activations = True
         stats = self.learner.train(batch)
 
@@ -187,6 +190,11 @@ class QMixLearnerGraphTests(unittest.TestCase):
                 direct_parameter.grad,
                 msg=f"gradient mismatch for {name}",
             )
+
+    def test_long_bptt_checkpointing_is_enabled_on_accelerators(self) -> None:
+        self.assertFalse(_should_checkpoint_online_activations(torch.device("cpu")))
+        self.assertTrue(_should_checkpoint_online_activations(torch.device("cuda")))
+        self.assertTrue(_should_checkpoint_online_activations(torch.device("mps")))
 
 
 if __name__ == "__main__":

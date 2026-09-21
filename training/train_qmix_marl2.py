@@ -6,6 +6,18 @@ import random
 import re
 import sys
 from typing import Any, Optional
+import warnings
+
+# Pygame is imported in every spawned environment process for Rect-based game
+# geometry. Headless training performs no display blits, so its wheel-specific
+# AVX2 blit warning and support banner are irrelevant and otherwise flood the
+# terminal once per worker on Windows.
+os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
+warnings.filterwarnings(
+    "ignore",
+    message=r"Your system is avx2 capable but pygame was not built with support for it\..*",
+    category=RuntimeWarning,
+)
 
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _PROJECT_ROOT not in sys.path:

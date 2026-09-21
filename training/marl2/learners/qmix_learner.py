@@ -5,18 +5,23 @@ import torch.nn.functional as F
 from torch.utils.checkpoint import checkpoint
 
 
+def _should_checkpoint_online_activations(device):
+    """Use recomputation on accelerator backends that retain long BPTT graphs."""
+    return torch.device(device).type in {"cuda", "mps"}
+
+
 class QMixLearner:
     def __init__(self, mac, mixer, algo_cfg, device):
         self.mac = mac
         self.mixer = mixer
         self.device = device
         self.algo_cfg = algo_cfg
-        # Long recurrent episodes retain one autograd graph per timestep.  ETD
-        # attention/map activations can exhaust the MPS allocator before the
-        # first backward pass, so trade recomputation for bounded activation
-        # storage on that backend.  This does not truncate BPTT or change the
-        # model, loss, batch size, or optimizer update.
-        self._checkpoint_online_activations = torch.device(device).type == "mps"
+        # Long recurrent episodes retain one autograd graph per timestep. ETD
+        # attention/map activations can exhaust a laptop CUDA GPU or the MPS
+        # allocator before the first backward pass. Trade recomputation for
+        # bounded activation storage on accelerator backends. This does not
+        # truncate BPTT or change the model, loss, batch size, or optimizer.
+        self._checkpoint_online_activations = _should_checkpoint_online_activations(device)
 
         self.gamma = float(algo_cfg.get("gamma", 0.99))
         self.lr = float(algo_cfg.get("lr", 5e-4))
