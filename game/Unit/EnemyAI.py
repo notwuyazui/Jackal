@@ -40,9 +40,9 @@ class EnemyAI:
     SAFETY_WEIGHT = 0.3                      # 安全性的权重（避障时）
 
     # 交战距离控制（避免持续贴脸碰撞）
-    COMBAT_PREFERRED_DISTANCE = 170.0        # 理想交战距离
+    COMBAT_PREFERRED_DISTANCE = 200.0        # 理想交战距离
     COMBAT_DISTANCE_TOLERANCE = 30.0         # 允许波动区间
-    COMBAT_TOO_CLOSE_DISTANCE = 120.0        # 低于此距离优先后撤
+    COMBAT_TOO_CLOSE_DISTANCE = 50.0        # 低于此距离优先后撤
 
     # 单位分离（防止多车堆叠）
     SEPARATION_DISTANCE = 90.0               # 开始产生分离力的距离

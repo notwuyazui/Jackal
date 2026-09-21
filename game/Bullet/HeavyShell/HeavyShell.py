@@ -3,7 +3,7 @@
 '''
 from game.Bullet.BaseBullet import BaseBullet
 from game.Bullet.weapon_specs import ProjectileSpec, get_projectile_spec
-from typing import Tuple
+from typing import Optional, Tuple
 from game.Parameter import Team
 
 class HeavyShell(BaseBullet):
@@ -13,7 +13,7 @@ class HeavyShell(BaseBullet):
                  shooter_team: Team,
                  position: Tuple[float, float] = (0.0, 0.0), 
                  velocity_direction: Tuple[float, float] = (1.0, 0.0),
-                 spec: ProjectileSpec | None = None):
+                 spec: Optional[ProjectileSpec] = None):
         spec = spec or get_projectile_spec("heavy_shell")
         super().__init__(
             projectile_id=projectile_id,

@@ -152,6 +152,8 @@ class PygameRenderer:
             self._draw_health_bar(unit, x, y)
         if GameMode.DRAW_SIGHT_RANGE or GameMode.DEBUG_MODE:
             self._draw_sight_range(unit, offset, use_tear_drop_vision)
+        if GameMode.DRAW_ATTACK_RANGE or GameMode.DEBUG_MODE:
+            self._draw_attack_range(unit, offset)
         if (
             unit.id == 0
             and mouse_pos is not None
@@ -214,6 +216,20 @@ class PygameRenderer:
             direction_y = forward_x * math.sin(theta) + forward_y * math.cos(theta)
             points.append((x + radius * direction_x, y + radius * direction_y))
         pygame.draw.polygon(self.surface, (0, 0, 0), points, 1)
+
+    def _draw_attack_range(self, unit, offset) -> None:
+        attack_range = unit.weapon_range()
+        if attack_range <= 0.0:
+            return
+        x = unit.position[0] - offset[0]
+        y = unit.position[1] - offset[1]
+        pygame.draw.circle(
+            self.surface,
+            (255, 0, 0),
+            (int(x), int(y)),
+            int(attack_range),
+            1,
+        )
 
     def _draw_bullet(self, bullet, offset) -> None:
         if not bullet.is_active:

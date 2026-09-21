@@ -108,8 +108,8 @@ PROJECTILE_SPECS: dict[str, ProjectileSpec] = {
         size=(6.0, 6.0),
         lifetime=1.2,
         speed_rate=1.0,
-        damage_rate=2.5,
-        cooldown=1.0,
+        damage_rate=1.0,
+        cooldown=0.8,
         penetration=(1.0, 0.8, 0.6),
     ),
     "rocket_shell": ProjectileSpec(
