@@ -40,6 +40,9 @@ class BattleWorld:
         )
         self.camera_offset = [0.0, 0.0]
         self.camera_speed = 5.0
+        self.camera_viewport_size = tuple(
+            float(value) for value in self.game_map.get_map_size()
+        )
         self.tick = 0
         self.elapsed_time = 0.0
         self.print_record_timer = 0.0
@@ -71,6 +74,7 @@ class BattleWorld:
             raise ValueError("Game map cannot be None")
         self.game_map = game_map
         self._map_snapshot = None
+        self._clamp_camera_offset()
         for ai in self.unit_manager.enemy_ais:
             ai.game_map = game_map
         self.refresh_vision()
@@ -432,6 +436,24 @@ class BattleWorld:
         dx, dy = offsets[direction]
         self.camera_offset[0] += dx
         self.camera_offset[1] += dy
+        self._clamp_camera_offset()
+
+    def set_camera_viewport(self, viewport_size: tuple[float, float]) -> None:
+        """Set the visible camera area without changing the world dimensions."""
+
+        width, height = float(viewport_size[0]), float(viewport_size[1])
+        if width <= 0.0 or height <= 0.0:
+            raise ValueError("camera viewport dimensions must be > 0")
+        self.camera_viewport_size = (width, height)
+        self._clamp_camera_offset()
+
+    def _clamp_camera_offset(self) -> None:
+        world_width, world_height = self.game_map.get_map_size()
+        viewport_width, viewport_height = self.camera_viewport_size
+        max_x = max(0.0, float(world_width) - viewport_width)
+        max_y = max(0.0, float(world_height) - viewport_height)
+        self.camera_offset[0] = min(max(0.0, self.camera_offset[0]), max_x)
+        self.camera_offset[1] = min(max(0.0, self.camera_offset[1]), max_y)
 
     def get_active_units_counts(self) -> int:
         return self.unit_manager.get_active_count()
@@ -457,6 +479,7 @@ class BattleWorld:
         return tuple(self.game_map.bullet_obstacles)
 
     def get_camera_offset(self) -> tuple[float, float]:
+        self._clamp_camera_offset()
         return float(self.camera_offset[0]), float(self.camera_offset[1])
 
     def print_record(self) -> None:

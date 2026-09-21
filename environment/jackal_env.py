@@ -16,6 +16,7 @@ from environment.reward import RewardManager, default_reward_config, merge_rewar
 from environment.scenario import (
     ScenarioConfig,
     build_episode,
+    create_scenario_map,
     default_positions,
     normalize_unit_types,
 )
@@ -32,6 +33,8 @@ class JackalEnv:
         map_file=None,
         map_data=None,
         map_tile_size=64,
+        viewport_width=960,
+        viewport_height=640,
         include_map_features=False,
         include_obs_map_features=None,
         include_state_map_features=None,
@@ -109,12 +112,29 @@ class JackalEnv:
         if self.headless:
             os.environ["SDL_VIDEODRIVER"] = "dummy"
             os.environ["SDL_AUDIODRIVER"] = "dummy"
-            
-        self.screen_width, self.screen_height = 960, 640
+
+        self.viewport_width = int(viewport_width)
+        self.viewport_height = int(viewport_height)
+        if self.viewport_width <= 0 or self.viewport_height <= 0:
+            raise ValueError("viewport dimensions must be > 0")
+
+        resolved_map_name = str(map_name or "border").lower()
+        resolved_map_tile_size = int(map_tile_size)
+        map_layout = create_scenario_map(
+            map_name=resolved_map_name,
+            map_file=map_file,
+            map_data=map_data,
+            map_tile_size=resolved_map_tile_size,
+        )
+        self.world_width, self.world_height = map_layout.get_map_size()
+        if self.world_width <= 0 or self.world_height <= 0:
+            raise ValueError("map dimensions must be > 0")
+        self._initial_map: Optional[GameMap] = map_layout
+
         self.renderer = (
             PygameRenderer(
-                self.screen_width,
-                self.screen_height,
+                self.viewport_width,
+                self.viewport_height,
                 visible=not self.headless,
                 title="Jackal MARL Environment",
             )
@@ -171,11 +191,11 @@ class JackalEnv:
         )
         self.n_actions = self.action_controller.n_actions
         self.scenario_config = ScenarioConfig(
-            map_name=str(map_name or "border").lower(),
+            map_name=resolved_map_name,
             map_file=map_file,
             map_data=map_data,
-            map_tile_size=int(map_tile_size),
-            arena_size=(self.screen_width, self.screen_height),
+            map_tile_size=resolved_map_tile_size,
+            arena_size=(self.world_width, self.world_height),
             ally_positions=ally_positions,
             enemy_positions=enemy_positions,
             ally_unit_types=ally_unit_types,
@@ -207,8 +227,8 @@ class JackalEnv:
         self.bullet_norm_speed = max(1.0, float(BULLET_SPEED))
 
         observation_config = ObservationConfig(
-            screen_width=float(self.screen_width),
-            screen_height=float(self.screen_height),
+            world_width=float(self.world_width),
+            world_height=float(self.world_height),
             n_agents=self.n_agents,
             n_enemies=self.n_enemies,
             unit_type_names=tuple(self.unit_type_names),
@@ -229,7 +249,7 @@ class JackalEnv:
         self.reward_manager = RewardManager(
             auto_aim=self.auto_aim,
             max_steps=self.max_steps,
-            arena_size=(float(self.screen_width), float(self.screen_height)),
+            arena_size=(float(self.world_width), float(self.world_height)),
             config=self.reward_config,
         )
         
@@ -273,8 +293,13 @@ class JackalEnv:
     def reset(self):
         self.steps = 0
         self.reward_manager.reset()
-        episode = build_episode(self.scenario_config)
+        initial_map = self._initial_map
+        self._initial_map = None
+        episode = build_episode(self.scenario_config, game_map=initial_map)
         self._world = episode.world
+        self._world.set_camera_viewport(
+            (self.viewport_width, self.viewport_height)
+        )
         self.agents = episode.allies
         self.enemies = episode.enemies
         self._snapshot = episode.world.snapshot()
@@ -288,7 +313,7 @@ class JackalEnv:
             self.video_writer = create_video_writer(
                 video_path,
                 fps,
-                (self.screen_width, self.screen_height),
+                (self.viewport_width, self.viewport_height),
             )
             self._render_to_video()
             
@@ -366,6 +391,10 @@ class JackalEnv:
             "unit_type_dim": self.unit_type_dim,
             "obs_map_dim": self.observation_manager.observation_map_dim(),
             "state_map_dim": self.observation_manager.state_map_dim(),
+            "world_width": self.world_width,
+            "world_height": self.world_height,
+            "viewport_width": self.viewport_width,
+            "viewport_height": self.viewport_height,
             "enable_unit_collision": self.enable_unit_collision,
             "use_tear_drop_vision": self.use_tear_drop_vision,
             "auto_communicate": self.auto_communicate,

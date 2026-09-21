@@ -47,8 +47,8 @@ class GlobalStateEncoder:
             if agent.alive:
                 features.extend([
                     1.0,
-                    agent.position[0] / config.screen_width,
-                    agent.position[1] / config.screen_height,
+                    agent.position[0] / config.world_width,
+                    agent.position[1] / config.world_height,
                     agent.health / agent.max_health,
                     math.cos(math.radians(agent.direction_angle)),
                     math.sin(math.radians(agent.direction_angle)),
@@ -66,8 +66,8 @@ class GlobalStateEncoder:
             if enemy.alive:
                 features.extend([
                     1.0,
-                    enemy.position[0] / config.screen_width,
-                    enemy.position[1] / config.screen_height,
+                    enemy.position[0] / config.world_width,
+                    enemy.position[1] / config.world_height,
                     enemy.health / enemy.max_health,
                     math.cos(math.radians(enemy.direction_angle)),
                     math.sin(math.radians(enemy.direction_angle)),
@@ -87,8 +87,8 @@ class GlobalStateEncoder:
             bullet = snapshot.bullets[index]
             features.extend([
                 1.0 if bullet.active else 0.0,
-                bullet.position[0] / config.screen_width,
-                bullet.position[1] / config.screen_height,
+                bullet.position[0] / config.world_width,
+                bullet.position[1] / config.world_height,
                 bullet.velocity[0] / config.bullet_norm_speed,
                 bullet.velocity[1] / config.bullet_norm_speed,
                 1.0 if bullet.shooter_team.name == "PLAYER" else -1.0,

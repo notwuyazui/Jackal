@@ -70,8 +70,8 @@ class LocalObservationEncoder:
                 continue
 
             features: List[float] = [
-                agent.position[0] / config.screen_width,
-                agent.position[1] / config.screen_height,
+                agent.position[0] / config.world_width,
+                agent.position[1] / config.world_height,
                 agent.health / agent.max_health,
                 math.cos(math.radians(agent.direction_angle)),
                 math.sin(math.radians(agent.direction_angle)),

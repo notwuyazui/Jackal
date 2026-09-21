@@ -8,6 +8,7 @@ from typing import Any, Mapping, Sequence
 
 from game.BattleWorld import BattleWorld
 from game.Map.GameMap import (
+    GameMap,
     create_builtin_map,
     create_map_from_file,
     create_map_from_strings,
@@ -89,7 +90,10 @@ def normalize_unit_types(
     return normalized
 
 
-def build_episode(config: ScenarioConfig) -> EpisodeScenario:
+def build_episode(
+    config: ScenarioConfig,
+    game_map: GameMap | None = None,
+) -> EpisodeScenario:
     """Create and configure a fresh battle world without depending on JackalEnv."""
 
     unit_manager = UnitManager(
@@ -97,7 +101,17 @@ def build_episode(config: ScenarioConfig) -> EpisodeScenario:
         use_tear_drop_vision=config.use_tear_drop_vision,
         auto_communicate=config.auto_communicate,
     )
-    world = BattleWorld(_create_map(config), unit_manager=unit_manager)
+    world = BattleWorld(
+        game_map
+        if game_map is not None
+        else create_scenario_map(
+            map_name=config.map_name,
+            map_file=config.map_file,
+            map_data=config.map_data,
+            map_tile_size=config.map_tile_size,
+        ),
+        unit_manager=unit_manager,
+    )
     allies = [
         _create_unit(world, config, Team.PLAYER, index, unit_type, enemy=False)
         for index, unit_type in enumerate(config.ally_unit_types)
@@ -110,21 +124,29 @@ def build_episode(config: ScenarioConfig) -> EpisodeScenario:
     return EpisodeScenario(world, allies, enemies)
 
 
-def _create_map(config: ScenarioConfig):
-    if config.map_data:
+def create_scenario_map(
+    *,
+    map_name: str,
+    map_file: str | None,
+    map_data: Sequence[str] | None,
+    map_tile_size: int,
+) -> GameMap:
+    """Create the map described by an environment scenario."""
+
+    if map_data:
         return create_map_from_strings(
-            config.map_data,
-            tile_size=config.map_tile_size,
+            list(map_data),
+            tile_size=map_tile_size,
         )
-    if config.map_file:
+    if map_file:
         game_map = create_map_from_file(
-            config.map_file,
-            tile_size=config.map_tile_size,
+            map_file,
+            tile_size=map_tile_size,
         )
         if game_map is None:
-            raise ValueError(f"Failed to load map_file: {config.map_file}")
+            raise ValueError(f"Failed to load map_file: {map_file}")
         return game_map
-    return create_builtin_map(config.map_name)
+    return create_builtin_map(map_name)
 
 
 def _create_unit(

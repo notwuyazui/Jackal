@@ -30,6 +30,9 @@ class _RecordingMap:
     def __init__(self, calls: list[str]) -> None:
         self.calls = calls
 
+    def get_map_size(self) -> tuple[int, int]:
+        return 960, 640
+
     def update(self, delta_time: float) -> None:
         self.calls.append(f"map:{delta_time}")
 

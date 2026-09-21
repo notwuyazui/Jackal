@@ -303,6 +303,10 @@ def create_test_map() -> Optional[GameMap]:
     """创建测试地图"""
     return GameMap.load_from_file("test_map.txt")
 
+def create_big_map_test_map() -> Optional[GameMap]:
+    """创建大地图键鼠测试地图。"""
+    return GameMap.load_from_file("08_big_map_test.txt")
+
 def create_empty_map(width: int = 15, height: int = 10) -> GameMap:
     map_data = ["o" * width for _ in range(height)]
     return GameMap(map_data)
@@ -382,6 +386,7 @@ def create_builtin_map(name: str) -> GameMap:
         "maze": create_maze_map,
         "random": create_random_map,
         "test": create_test_map,
+        "big_map_test": create_big_map_test_map,
         "valley": create_valley_map,
         "river": create_river_map,
         "spindle": create_spindle_map,

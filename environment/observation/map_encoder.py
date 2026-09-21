@@ -54,8 +54,8 @@ class MapFeatureEncoder:
 
         grid_size = self.config.state_map_grid_size
         features: List[float] = []
-        width = max(1.0, float(self.config.screen_width))
-        height = max(1.0, float(self.config.screen_height))
+        width = max(1.0, float(self.config.world_width))
+        height = max(1.0, float(self.config.world_height))
         for grid_y in range(grid_size):
             sample_y = (grid_y + 0.5) * height / grid_size
             for grid_x in range(grid_size):

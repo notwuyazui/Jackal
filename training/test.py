@@ -13,24 +13,49 @@ from game.utils import Action
 from environment.rendering import PygameRenderer
 
 
-def init_game():
+def init_game(map_name="test_map"):
     world = BattleWorld()
-    world.load_builtin_map("test")
-    units = [
-        ("tank", 0, Team.PLAYER, (100, 500), False),
-        ("tank", 101, Team.PLAYER, (256, 448), True),
-        ("tank", 102, Team.PLAYER, (480, 448), True),
-        ("tank", 103, Team.PLAYER, (768, 448), True),
-        ("archie", 104, Team.PLAYER, (256, 512), True),
-        ("plane", 105, Team.PLAYER, (480, 512), True),
-        ("archie", 106, Team.PLAYER, (768, 512), True),
-        ("archie", 201, Team.ENEMY, (256, 192), True),
-        ("archie", 202, Team.ENEMY, (480, 192), True),
-        ("archie", 203, Team.ENEMY, (768, 192), True),
-        ("tank", 204, Team.ENEMY, (256, 128), True),
-        ("plane", 205, Team.ENEMY, (480, 128), True),
-        ("tank", 206, Team.ENEMY, (768, 128), True),
-    ]
+    if map_name == "test_map":
+        world.load_builtin_map("test_map")
+        units = [
+            ("tank", 0, Team.PLAYER, (100, 500), False),
+            ("tank", 101, Team.PLAYER, (256, 448), True),
+            ("tank", 102, Team.PLAYER, (480, 448), True),
+            ("tank", 103, Team.PLAYER, (768, 448), True),
+            ("archie", 104, Team.PLAYER, (256, 512), True),
+            ("plane", 105, Team.PLAYER, (480, 512), True),
+            ("archie", 106, Team.PLAYER, (768, 512), True),
+            ("archie", 201, Team.ENEMY, (256, 192), True),
+            ("archie", 202, Team.ENEMY, (480, 192), True),
+            ("archie", 203, Team.ENEMY, (768, 192), True),
+            ("tank", 204, Team.ENEMY, (256, 128), True),
+            ("plane", 205, Team.ENEMY, (480, 128), True),
+            ("tank", 206, Team.ENEMY, (768, 128), True),
+        ]
+    elif map_name == "big_map_test":
+        world.load_builtin_map("big_map_test")
+        units = [
+            ("tank", 0, Team.PLAYER, (544, 480), False),
+            ("archie", 101, Team.PLAYER, (224, 160), True),
+            ("plane", 102, Team.PLAYER, (352, 352), True),
+            ("tank", 103, Team.PLAYER, (224, 480), True),
+            ("archie", 104, Team.PLAYER, (416, 608), True),
+            ("plane", 105, Team.PLAYER, (544, 736), True),
+            ("tank", 106, Team.PLAYER, (352, 864), True),
+            ("tank", 201, Team.ENEMY, (1056, 480), True),
+            ("archie", 202, Team.ENEMY, (1376, 160), True),
+            ("plane", 203, Team.ENEMY, (1248, 352), True),
+            ("tank", 204, Team.ENEMY, (1376, 480), True),
+            ("archie", 205, Team.ENEMY, (1184, 608), True),
+            ("plane", 206, Team.ENEMY, (1056, 736), True),
+            ("tank", 207, Team.ENEMY, (1248, 864), True),
+        ]
+    else:
+        raise ValueError(
+            f"Unsupported test map {map_name!r}; "
+            "expected 'test_map' or 'big_map_test'"
+        )
+
     for unit_type, unit_id, team, position, using_ai in units:
         world.create_unit(
             unit_type,
@@ -47,7 +72,8 @@ if __name__ == "__main__":
     clock = pygame.time.Clock()
     
     # 添加地图和单位
-    game_manager = init_game()
+    map_name = sys.argv[1] if len(sys.argv) > 1 else "big_map_test"
+    game_manager = init_game(map_name)
     
     action = Action()
     

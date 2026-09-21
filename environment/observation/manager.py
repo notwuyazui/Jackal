@@ -13,8 +13,8 @@ from game.BattleState import WorldSnapshot
 
 @dataclass(frozen=True, slots=True)
 class ObservationConfig:
-    screen_width: float
-    screen_height: float
+    world_width: float
+    world_height: float
     n_agents: int
     n_enemies: int
     unit_type_names: tuple[str, ...]

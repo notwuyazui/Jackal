@@ -31,10 +31,14 @@ class PygameRenderer:
     ) -> None:
         pygame.init()
         self.visible = visible
+        self.viewport_width = int(width)
+        self.viewport_height = int(height)
+        if self.viewport_width <= 0 or self.viewport_height <= 0:
+            raise ValueError("viewport dimensions must be > 0")
         self.surface = (
-            pygame.display.set_mode((width, height))
+            pygame.display.set_mode((self.viewport_width, self.viewport_height))
             if visible
-            else pygame.Surface((width, height))
+            else pygame.Surface((self.viewport_width, self.viewport_height))
         )
         if visible:
             pygame.display.set_caption(title)
@@ -73,6 +77,7 @@ class PygameRenderer:
         background: tuple[int, int, int] = (50, 50, 70),
     ) -> pygame.Surface:
         self.surface.fill(background)
+        world.set_camera_viewport((self.viewport_width, self.viewport_height))
         offset = world.get_camera_offset()
         self._draw_map(world, offset)
         for unit in world.iter_units():

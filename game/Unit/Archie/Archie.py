@@ -23,8 +23,8 @@ class Archie(BaseUnit):
         self.max_angular_speed_rate = 0.5
         self.turret_angular_speed_rate = 0.5
         self.max_health_rate = 2.0
-        self.sight_range = 100
-        self.communication_range = 100
+        self.sight_range = 150
+        self.communication_range = 150
         self.armor_type = ArmorType.MEDIUM                                                        # 护甲类型
         self.ammunition_types = ['rocket_shell']                                                # 单位拥有弹种
         self.ammo_switch_time =  UNIT_AMMO_SWITCH_TIME                                          # 单位切换弹种时间
