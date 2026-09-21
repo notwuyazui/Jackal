@@ -11,7 +11,6 @@ class JackalMultiAgentEnv:
         self.env_name = self.env_args.pop("name", "jackal")
 
         self.env = JackalEnv(**self.env_args)
-        obs, state = self.env.reset()
         env_info = self.env.get_env_info()
 
         self.n_agents = int(env_info["n_agents"])
@@ -19,11 +18,15 @@ class JackalMultiAgentEnv:
         self.obs_shape = int(env_info["obs_shape"])
         self.state_shape = int(env_info["state_shape"])
         self.episode_limit = int(env_info["episode_limit"])
-        if obs[0].shape[0] != self.obs_shape or state.shape[0] != self.state_shape:
-            raise RuntimeError("Environment metadata does not match reset output shapes")
+        self._reset_shapes_validated = False
 
     def reset(self):
-        return self.env.reset()
+        obs, state = self.env.reset()
+        if not self._reset_shapes_validated:
+            if obs[0].shape[0] != self.obs_shape or state.shape[0] != self.state_shape:
+                raise RuntimeError("Environment metadata does not match reset output shapes")
+            self._reset_shapes_validated = True
+        return obs, state
 
     def step(self, actions):
         next_obs, next_state, reward, done, info = self.env.step(actions)

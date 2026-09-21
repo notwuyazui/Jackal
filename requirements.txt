@@ -1,7 +1,7 @@
 numpy
-opencv-python-headless
 pygame
 torch
 tqdm
 tensorboard
 imageio
+imageio-ffmpeg

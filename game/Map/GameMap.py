@@ -201,7 +201,7 @@ class GameMap:
                 if len(row) != first_len:
                     print(f"警告：第 {i} 行长度不一致")
 
-            print(f"地图已从 {file_path} 加载")
+            #print(f"地图已从 {file_path} 加载")
             return cls(map_data, tile_size)
 
         except FileNotFoundError:

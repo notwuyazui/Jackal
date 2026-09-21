@@ -11,7 +11,7 @@ from game.BattleWorld import BattleWorld
 from game.Unit.UnitManager import UnitManager
 from environment.action_controller import ActionController
 from environment.observation import ObservationConfig, ObservationManager
-from environment.rendering import PygameRenderer, create_video_writer, rgb_to_bgr
+from environment.rendering import PygameRenderer, create_video_writer
 from environment.reward import RewardManager, default_reward_config, merge_reward_config
 from environment.scenario import (
     ScenarioConfig,
@@ -400,8 +400,7 @@ class JackalEnv:
         if self.video_writer is None or self.renderer is None:
             return
         self.renderer.draw(self.world)
-        frame = rgb_to_bgr(self.renderer.rgb_array())
-        self.video_writer.write(frame)
+        self.video_writer.write(self.renderer.rgb_array())
 
     def render(self):
         """Render the current world only when a Pygame adapter was requested."""
