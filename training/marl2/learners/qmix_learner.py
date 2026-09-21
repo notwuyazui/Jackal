@@ -2,6 +2,7 @@ import copy
 
 import torch
 import torch.nn.functional as F
+from torch.utils.checkpoint import checkpoint
 
 
 class QMixLearner:
@@ -10,6 +11,12 @@ class QMixLearner:
         self.mixer = mixer
         self.device = device
         self.algo_cfg = algo_cfg
+        # Long recurrent episodes retain one autograd graph per timestep.  ETD
+        # attention/map activations can exhaust the MPS allocator before the
+        # first backward pass, so trade recomputation for bounded activation
+        # storage on that backend.  This does not truncate BPTT or change the
+        # model, loss, batch size, or optimizer update.
+        self._checkpoint_online_activations = torch.device(device).type == "mps"
 
         self.gamma = float(algo_cfg.get("gamma", 0.99))
         self.lr = float(algo_cfg.get("lr", 5e-4))
@@ -28,12 +35,27 @@ class QMixLearner:
 
         self.target_agent = copy.deepcopy(self.mac.agent).to(self.device)
         self.target_mixer = copy.deepcopy(self.mixer).to(self.device)
+        self.target_agent.requires_grad_(False)
+        self.target_mixer.requires_grad_(False)
 
         params = list(self.mac.agent.parameters()) + list(self.mixer.parameters())
         self.optimizer = torch.optim.RMSprop(params, lr=self.lr, alpha=0.99, eps=1e-5)
 
         self.train_steps = 0
 
+    def _online_forward(self, obs, prev_actions, hidden_states):
+        if not self._checkpoint_online_activations or not torch.is_grad_enabled():
+            return self.mac.forward_train(obs, prev_actions, hidden_states)
+        return checkpoint(
+            self.mac.forward_train,
+            obs,
+            prev_actions,
+            hidden_states,
+            use_reentrant=False,
+            preserve_rng_state=True,
+        )
+
+    @torch.no_grad()
     def _target_forward(self, obs, prev_actions, hidden_states):
         bs = obs.shape[0]
         inputs = self.mac._build_inputs(obs, prev_actions)
@@ -103,23 +125,35 @@ class QMixLearner:
 
         hidden_eval = torch.zeros(bs, n_agents, self.mac.hidden_dim, device=self.device)
         hidden_target = torch.zeros(bs, n_agents, self.mac.hidden_dim, device=self.device)
+        mixer_requires_hidden = bool(
+            getattr(self.mixer, "requires_hidden_states", False)
+        )
 
         mac_out = []
         target_out = []
-        eval_hidden_out = [hidden_eval]
-        target_hidden_out = [hidden_target]
+        eval_hidden_history = []
+        target_hidden_history = []
+        if mixer_requires_hidden:
+            eval_hidden_history.append(hidden_eval)
+            target_hidden_history.append(hidden_target)
         for t in range(max_t + 1):
-            q_eval, hidden_eval = self.mac.forward_train(obs[:, t], last_actions[:, t], hidden_eval)
+            q_eval, hidden_eval = self._online_forward(
+                obs[:, t],
+                last_actions[:, t],
+                hidden_eval,
+            )
             q_target, hidden_target = self._target_forward(obs[:, t], last_actions[:, t], hidden_target)
             mac_out.append(q_eval)
             target_out.append(q_target)
-            eval_hidden_out.append(hidden_eval)
-            target_hidden_out.append(hidden_target)
+            if mixer_requires_hidden:
+                eval_hidden_history.append(hidden_eval)
+                target_hidden_history.append(hidden_target)
 
         mac_out = torch.stack(mac_out, dim=1)  # [bs, t+1, n_agents, n_actions]
         target_out = torch.stack(target_out, dim=1)
-        eval_hidden_out = torch.stack(eval_hidden_out, dim=1)
-        target_hidden_out = torch.stack(target_hidden_out, dim=1)
+        if mixer_requires_hidden:
+            eval_hidden_out = torch.stack(eval_hidden_history, dim=1)
+            target_hidden_out = torch.stack(target_hidden_history, dim=1)
 
         chosen_qvals = torch.gather(mac_out[:, :-1], dim=3, index=actions).squeeze(3)
 
@@ -143,21 +177,26 @@ class QMixLearner:
         else:
             target_max_qvals = target_next_qvals.max(dim=3)[0]
 
-        if getattr(self.mixer, "requires_hidden_states", False):
+        if mixer_requires_hidden:
             eval_mixer_hidden = eval_hidden_out[:, 1:-1]
             target_mixer_hidden = target_hidden_out[:, 2:]
             if bool(self.algo_cfg.get("detach_mixer_hidden", False)):
                 eval_mixer_hidden = eval_mixer_hidden.detach()
                 target_mixer_hidden = target_mixer_hidden.detach()
             q_tot = self.mixer(chosen_qvals, states[:, :-1], eval_mixer_hidden).squeeze(-1)
-            target_q_tot = self.target_mixer(
-                target_max_qvals,
-                states[:, 1:],
-                target_mixer_hidden,
-            ).squeeze(-1)
+            with torch.no_grad():
+                target_q_tot = self.target_mixer(
+                    target_max_qvals,
+                    states[:, 1:],
+                    target_mixer_hidden,
+                ).squeeze(-1)
         else:
             q_tot = self.mixer(chosen_qvals, states[:, :-1]).squeeze(-1)
-            target_q_tot = self.target_mixer(target_max_qvals, states[:, 1:]).squeeze(-1)
+            with torch.no_grad():
+                target_q_tot = self.target_mixer(
+                    target_max_qvals,
+                    states[:, 1:],
+                ).squeeze(-1)
 
         targets = rewards.squeeze(-1) + self.gamma * (1.0 - terminated.squeeze(-1)) * target_q_tot
 

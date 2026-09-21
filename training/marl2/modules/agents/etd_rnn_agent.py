@@ -1,7 +1,64 @@
+import math
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import math
+
+
+class _MPSCompatibleAdaptiveAvgPool2d(nn.Module):
+    """Adaptive average pooling without MPS non-divisible-size failures."""
+
+    def __init__(self, output_size):
+        super().__init__()
+        self.output_size = (int(output_size[0]), int(output_size[1]))
+
+    @staticmethod
+    def _fixed_pool_params(input_size, output_size):
+        quotient, remainder = divmod(input_size, output_size)
+        if remainder == 0:
+            return quotient, quotient
+        if remainder == 1 and quotient > 0:
+            return quotient + 1, quotient
+        return None
+
+    @staticmethod
+    def _pool_by_regions(inputs, output_size):
+        output_height, output_width = output_size
+        input_height, input_width = inputs.shape[-2:]
+        rows = []
+        for row in range(output_height):
+            row_start = row * input_height // output_height
+            row_end = math.ceil((row + 1) * input_height / output_height)
+            cells = []
+            for column in range(output_width):
+                column_start = column * input_width // output_width
+                column_end = math.ceil(
+                    (column + 1) * input_width / output_width
+                )
+                cells.append(
+                    inputs[
+                        ...,
+                        row_start:row_end,
+                        column_start:column_end,
+                    ].mean(dim=(-2, -1))
+                )
+            rows.append(torch.stack(cells, dim=-1))
+        return torch.stack(rows, dim=-2)
+
+    def forward(self, inputs):
+        output_height, output_width = self.output_size
+        input_height, input_width = inputs.shape[-2:]
+        height_params = self._fixed_pool_params(input_height, output_height)
+        width_params = self._fixed_pool_params(input_width, output_width)
+        if height_params is not None and width_params is not None:
+            return F.avg_pool2d(
+                inputs,
+                kernel_size=(height_params[0], width_params[0]),
+                stride=(height_params[1], width_params[1]),
+            )
+        if inputs.device.type != "mps":
+            return F.adaptive_avg_pool2d(inputs, self.output_size)
+        return self._pool_by_regions(inputs, self.output_size)
 
 
 class ETDRNNAgent(nn.Module):
@@ -116,7 +173,9 @@ class ETDRNNAgent(nn.Module):
                 nn.ReLU(inplace=True),
                 nn.Conv2d(conv_hidden, self.entity_embed_dim, kernel_size=3, padding=1),
                 nn.ReLU(inplace=True),
-                nn.AdaptiveAvgPool2d((self.map_pool_size, self.map_pool_size)),
+                _MPSCompatibleAdaptiveAvgPool2d(
+                    (self.map_pool_size, self.map_pool_size)
+                ),
             )
             self.map_pos_embed = nn.Parameter(
                 torch.zeros(1, self.n_map_tokens, self.entity_embed_dim)

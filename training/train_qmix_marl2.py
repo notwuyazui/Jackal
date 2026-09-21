@@ -41,6 +41,14 @@ class LinearEpsilonSchedule:
         return self.start + frac * (self.finish - self.start)
 
 
+def _should_run_extra_evaluation(
+    eval_extra_nepisode: int,
+    test_nepisode: int,
+) -> bool:
+    """Return whether a separate best-model evaluation should be executed."""
+    return int(eval_extra_nepisode) > 0 and int(eval_extra_nepisode) != int(test_nepisode)
+
+
 def parse_args(argv=None, *, prog=None):
     parser = argparse.ArgumentParser(
         prog=prog,
@@ -584,6 +592,8 @@ def main(argv=None, *, prog=None):
         print(f"[Train] log_interval_episodes={log_interval_episodes}")
     else:
         print(f"[Train] log_interval_steps={log_interval}")
+    if eval_extra_nepisode <= 0:
+        print("[Train] extra evaluation disabled; model selection reuses standard evaluation results")
     if stop_by_win:
         print(
             f"[Train] early-stop enabled: win_rate>={float(early_stop_win_rate):.3f} "
@@ -700,7 +710,7 @@ def main(argv=None, *, prog=None):
                     tb_writer.add_scalar(f"eval/{key}", float(value), t_env)
 
             eval_extra_stats = eval_stats
-            if eval_extra_nepisode != test_nepisode:
+            if _should_run_extra_evaluation(eval_extra_nepisode, test_nepisode):
                 best_seed_base = None if test_seed_base is None else int(test_seed_base) + 1000000
                 eval_extra_stats = evaluate(eval_runner, eval_extra_nepisode, seed_base=best_seed_base, device=device)
                 print(
