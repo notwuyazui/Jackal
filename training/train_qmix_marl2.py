@@ -5,6 +5,7 @@ import os
 import random
 import re
 import sys
+from time import perf_counter
 from typing import Any, Optional
 import warnings
 
@@ -96,23 +97,47 @@ def evaluate(
     cuda_rng_states = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
 
     try:
-        for idx in range(int(n_episodes)):
-            if use_seed:
-                ep_seed = resolved_seed_base + idx
-                random.seed(ep_seed)
-                np.random.seed(ep_seed)
-                torch.manual_seed(ep_seed)
-                if device is not None and device.type == "cuda":
-                    torch.cuda.manual_seed_all(ep_seed)
-                elif device is not None and device.type == "mps":
-                    torch.mps.manual_seed(ep_seed)
+        if isinstance(runner, ParallelEpisodeRunner):
+            episode_offset = 0
+            while episode_offset < int(n_episodes):
+                batch_episodes = min(runner.n_envs, int(n_episodes) - episode_offset)
+                episode_seeds = (
+                    [resolved_seed_base + episode_offset + idx for idx in range(batch_episodes)]
+                    if use_seed
+                    else None
+                )
+                _, batch_stats = runner.run(
+                    test_mode=True,
+                    epsilon=0.0,
+                    n_episodes=batch_episodes,
+                    episode_seeds=episode_seeds,
+                    collect_batches=False,
+                )
+                for stats in batch_stats:
+                    returns.append(stats["episode_return"])
+                    lengths.append(stats["episode_length"])
+                    wins += int(stats["battle_won"])
+                    episode_limits += int(stats.get("episode_limit", False))
+                    no_kill_timeouts += int(stats.get("no_kill_timeout", False))
+                episode_offset += batch_episodes
+        else:
+            for idx in range(int(n_episodes)):
+                if use_seed:
+                    ep_seed = resolved_seed_base + idx
+                    random.seed(ep_seed)
+                    np.random.seed(ep_seed)
+                    torch.manual_seed(ep_seed)
+                    if device is not None and device.type == "cuda":
+                        torch.cuda.manual_seed_all(ep_seed)
+                    elif device is not None and device.type == "mps":
+                        torch.mps.manual_seed(ep_seed)
 
-            _, stats = runner.run(test_mode=True, epsilon=0.0)
-            returns.append(stats["episode_return"])
-            lengths.append(stats["episode_length"])
-            wins += int(stats["battle_won"])
-            episode_limits += int(stats.get("episode_limit", False))
-            no_kill_timeouts += int(stats.get("no_kill_timeout", False))
+                _, stats = runner.run(test_mode=True, epsilon=0.0)
+                returns.append(stats["episode_return"])
+                lengths.append(stats["episode_length"])
+                wins += int(stats["battle_won"])
+                episode_limits += int(stats.get("episode_limit", False))
+                no_kill_timeouts += int(stats.get("no_kill_timeout", False))
     finally:
         if use_seed:
             random.setstate(py_rng_state)
@@ -152,6 +177,19 @@ def _safe_std(values):
     if not values:
         return 0.0
     return float(np.std(np.asarray(values, dtype=np.float32)))
+
+
+def _performance_metrics(phase_times, wall_seconds):
+    wall_seconds = max(float(wall_seconds), 1e-12)
+    return {
+        "rollout_seconds": float(phase_times["rollout"]),
+        "learner_seconds": float(phase_times["learner"]),
+        "evaluation_seconds": float(phase_times["evaluation"]),
+        "rollout_ratio": float(phase_times["rollout"]) / wall_seconds,
+        "learner_ratio": float(phase_times["learner"]) / wall_seconds,
+        "evaluation_ratio": float(phase_times["evaluation"]) / wall_seconds,
+        "env_steps_per_second": float(phase_times["env_steps"]) / wall_seconds,
+    }
 
 
 def _fmt_stat(name, value):
@@ -271,7 +309,6 @@ def main(argv=None, *, prog=None):
     env_info = train_env.get_env_info()
     eval_env_override = cfg.get("eval_env", train_cfg.get("eval_env", {}))
     eval_env_cfg = merge_dict(cfg["env"], eval_env_override) if eval_env_override else cfg["env"]
-    eval_env = env_cls(eval_env_cfg)
 
     mac = BasicMAC(
         n_agents=env_info["n_agents"],
@@ -294,9 +331,6 @@ def main(argv=None, *, prog=None):
     learner = learner_cls(mac, mixer, algo_cfg, device)
 
     buffer = EpisodeReplayBuffer(buffer_size=int(algo_cfg.get("buffer_size", 5000)))
-    eval_runner = EpisodeRunner(eval_env, eval_mac)
-    _sync_eval_mac_params(mac, eval_mac)
-
     eps_schedule = LinearEpsilonSchedule(
         start=float(train_cfg.get("epsilon_start", 1.0)),
         finish=float(train_cfg.get("epsilon_finish", 0.05)),
@@ -346,6 +380,23 @@ def main(argv=None, *, prog=None):
             print("[Train] parallel runner requested but parallel_envs<=1, fallback to episode runner.")
         runner = EpisodeRunner(train_env, mac)
         runner_is_parallel = False
+
+    max_eval_episodes = max(test_nepisode, eval_extra_nepisode)
+    parallel_eval_envs = min(parallel_envs, max_eval_episodes)
+    if runner_is_parallel and parallel_eval_envs > 1:
+        eval_runner: Any = ParallelEpisodeRunner(
+            env_cls=env_cls,
+            env_args=eval_env_cfg,
+            mac=eval_mac,
+            n_envs=parallel_eval_envs,
+            seed=seed + 100000,
+            start_method=parallel_start_method,
+        )
+        eval_runner_is_parallel = True
+    else:
+        eval_runner = EpisodeRunner(env_cls(eval_env_cfg), eval_mac)
+        eval_runner_is_parallel = False
+    _sync_eval_mac_params(mac, eval_mac)
 
     # 早停：在评估胜率稳定达到阈值后停止训练并保存最终模型。
     early_stop_win_rate = train_cfg.get("early_stop_win_rate", None)
@@ -450,6 +501,12 @@ def main(argv=None, *, prog=None):
         "target_mean": [],
         "td_error_abs": [],
         "grad_norm": [],
+    }
+    recent_phase_times = {
+        "rollout": 0.0,
+        "learner": 0.0,
+        "evaluation": 0.0,
+        "env_steps": 0,
     }
 
     last_eval_stats = {
@@ -600,6 +657,10 @@ def main(argv=None, *, prog=None):
         print(f"[Train] runner=parallel parallel_envs={parallel_envs} start_method={parallel_start_method}")
     else:
         print("[Train] runner=episode")
+    if eval_runner_is_parallel:
+        print(f"[Train] eval_runner=parallel parallel_eval_envs={parallel_eval_envs}")
+    else:
+        print("[Train] eval_runner=episode")
     if log_interval_episodes is not None:
         print(f"[Train] log_interval_episodes={log_interval_episodes}")
     else:
@@ -632,7 +693,10 @@ def main(argv=None, *, prog=None):
             f"clear_buffer={rollback_clear_buffer}"
         )
 
+    phase_window_started = perf_counter()
     while t_env < t_max:
+        rollout_started = perf_counter()
+        t_env_before_rollout = t_env
         epsilon = eps_schedule.eval(t_env)
         if runner_is_parallel:
             episode_batches, rollout_stats_list = runner.run(test_mode=False, epsilon=epsilon)
@@ -664,6 +728,9 @@ def main(argv=None, *, prog=None):
             episode += 1
             t_env += int(rollout_stats["episode_length"])
 
+        recent_phase_times["rollout"] += perf_counter() - rollout_started
+        recent_phase_times["env_steps"] += t_env - t_env_before_rollout
+
         if tb_writer is not None:
             tb_writer.add_scalar("rollout/episode_return", float(rollout_stats["episode_return"]), t_env)
             tb_writer.add_scalar("rollout/episode_length", float(rollout_stats["episode_length"]), t_env)
@@ -675,6 +742,7 @@ def main(argv=None, *, prog=None):
             if "no_kill_timeout" in rollout_stats:
                 tb_writer.add_scalar("rollout/no_kill_timeout", float(rollout_stats["no_kill_timeout"]), t_env)
 
+        learner_started = perf_counter()
         train_stats = None
         if buffer.can_sample(batch_size):
             if rollback_override_updates_per_collect is not None:
@@ -703,8 +771,10 @@ def main(argv=None, *, prog=None):
                     tb_writer.add_scalar("train/stabilization_stage", float(stabilization_stage), t_env)
                     if learner.optimizer.param_groups:
                         tb_writer.add_scalar("train/lr", float(learner.optimizer.param_groups[0]["lr"]), t_env)
+        recent_phase_times["learner"] += perf_counter() - learner_started
 
         if t_env >= next_test_t:
+            evaluation_started = perf_counter()
             _sync_eval_mac_params(mac, eval_mac)
             eval_stats = evaluate(eval_runner, test_nepisode, seed_base=test_seed_base, device=device)
             eval_count += 1
@@ -1019,6 +1089,7 @@ def main(argv=None, *, prog=None):
                     break
 
             next_test_t += test_interval
+            recent_phase_times["evaluation"] += perf_counter() - evaluation_started
 
         should_log = (
             episode >= next_log_episode
@@ -1039,6 +1110,10 @@ def main(argv=None, *, prog=None):
             target_mean = _safe_mean(recent_learner_stats["target_mean"])
             td_error_abs = _safe_mean(recent_learner_stats["td_error_abs"])
             grad_norm = _safe_mean(recent_learner_stats["grad_norm"])
+            perf_stats = _performance_metrics(
+                recent_phase_times,
+                perf_counter() - phase_window_started,
+            )
 
             _log_info(f"Recent Stats | t_env:{t_env:10d} | Episode:{episode:10d}")
             print(
@@ -1060,6 +1135,17 @@ def main(argv=None, *, prog=None):
                 f"{_fmt_stat('td_error_abs:', td_error_abs)} "
                 f"{_fmt_stat('grad_norm:', grad_norm)}"
             )
+            print(
+                f"{_fmt_stat('rollout_seconds:', perf_stats['rollout_seconds'])} "
+                f"{_fmt_stat('learner_seconds:', perf_stats['learner_seconds'])} "
+                f"{_fmt_stat('evaluation_seconds:', perf_stats['evaluation_seconds'])} "
+                f"{_fmt_stat('env_steps_per_second:', perf_stats['env_steps_per_second'])}"
+            )
+            print(
+                f"{_fmt_stat('rollout_time_ratio:', perf_stats['rollout_ratio'])} "
+                f"{_fmt_stat('learner_time_ratio:', perf_stats['learner_ratio'])} "
+                f"{_fmt_stat('evaluation_time_ratio:', perf_stats['evaluation_ratio'])}"
+            )
 
             if tb_writer is not None:
                 tb_writer.add_scalar("train_stats/battle_won_mean", battle_won_mean, t_env)
@@ -1069,10 +1155,15 @@ def main(argv=None, *, prog=None):
                 tb_writer.add_scalar("train_stats/episode_limit_mean", episode_limit_mean, t_env)
                 tb_writer.add_scalar("train_stats/no_kill_timeout_mean", no_kill_timeout_mean, t_env)
                 tb_writer.add_scalar("train_stats/n_episodes", float(train_episode_count), t_env)
+                for key, value in perf_stats.items():
+                    tb_writer.add_scalar(f"performance/{key}", float(value), t_env)
 
             _clear_episode_stat_buffer(recent_train_episode_stats)
             for key in recent_learner_stats:
                 recent_learner_stats[key].clear()
+            for key in recent_phase_times:
+                recent_phase_times[key] = 0
+            phase_window_started = perf_counter()
 
             if next_log_episode is not None:
                 assert log_interval_episodes is not None
@@ -1096,7 +1187,7 @@ def main(argv=None, *, prog=None):
         runner.close()
     if train_env is not None:
         train_env.close()
-    eval_env.close()
+    eval_runner.close()
     if tb_writer is not None:
         tb_writer.flush()
         tb_writer.close()

@@ -24,11 +24,26 @@ def _env_worker(remote, parent_remote, env_cls, env_args, seed):
                 break
 
             if cmd == "reset":
+                if data is not None:
+                    episode_seed = int(data)
+                    random.seed(episode_seed)
+                    np.random.seed(episode_seed)
+                    torch.manual_seed(episode_seed)
                 obs, state = env.reset()
-                remote.send((obs, state))
+                remote.send((obs, state, env.get_avail_actions()))
             elif cmd == "step":
                 reward, terminated, info, next_obs, next_state = env.step(data)
-                remote.send((reward, terminated, info, next_obs, next_state))
+                next_avail_actions = None if terminated else env.get_avail_actions()
+                remote.send(
+                    (
+                        reward,
+                        terminated,
+                        info,
+                        next_obs,
+                        next_state,
+                        next_avail_actions,
+                    )
+                )
             elif cmd == "get_avail_actions":
                 remote.send(env.get_avail_actions())
             elif cmd == "get_env_info":
@@ -97,42 +112,57 @@ class ParallelEpisodeRunner:
             "filled": np.zeros((self.episode_limit, 1), dtype=np.float32),
         }
 
-    def run(self, test_mode=False, epsilon=0.0):
+    def run(
+        self,
+        test_mode=False,
+        epsilon=0.0,
+        *,
+        n_episodes=None,
+        episode_seeds=None,
+        collect_batches=True,
+    ):
         if self.closed:
             raise RuntimeError("ParallelEpisodeRunner has already been closed")
 
-        for conn in self.parent_conns:
-            conn.send(("reset", None))
-        reset_results = [conn.recv() for conn in self.parent_conns]
+        run_count = self.n_envs if n_episodes is None else int(n_episodes)
+        if run_count < 1 or run_count > self.n_envs:
+            raise ValueError(f"n_episodes must be in [1, {self.n_envs}], got {run_count}")
+        if episode_seeds is not None and len(episode_seeds) != run_count:
+            raise ValueError("episode_seeds length must match n_episodes")
+
+        active_conns = self.parent_conns[:run_count]
+        for env_idx, conn in enumerate(active_conns):
+            episode_seed = None if episode_seeds is None else episode_seeds[env_idx]
+            conn.send(("reset", episode_seed))
+        reset_results = [conn.recv() for conn in active_conns]
 
         obs_list = [res[0] for res in reset_results]
         state_list = [res[1] for res in reset_results]
+        avail_list = [res[2] for res in reset_results]
 
-        self.mac.init_hidden(batch_size=self.n_envs)
+        self.mac.init_hidden(batch_size=run_count)
 
-        episode_batches = [self._new_episode_batch() for _ in range(self.n_envs)]
-        episode_returns = [0.0 for _ in range(self.n_envs)]
-        episode_lengths = [0 for _ in range(self.n_envs)]
-        final_infos: list[dict[str, Any]] = [{} for _ in range(self.n_envs)]
-        terminated = [False for _ in range(self.n_envs)]
+        episode_batches = (
+            [self._new_episode_batch() for _ in range(run_count)]
+            if collect_batches
+            else None
+        )
+        episode_returns = [0.0 for _ in range(run_count)]
+        episode_lengths = [0 for _ in range(run_count)]
+        final_infos: list[dict[str, Any]] = [{} for _ in range(run_count)]
+        terminated = [False for _ in range(run_count)]
 
         for t in range(self.episode_limit):
-            active_envs = [idx for idx in range(self.n_envs) if not terminated[idx]]
+            active_envs = [idx for idx in range(run_count) if not terminated[idx]]
             if not active_envs:
                 break
 
-            active_avail_map = {}
-            for env_idx in active_envs:
-                self.parent_conns[env_idx].send(("get_avail_actions", None))
-            for env_idx in active_envs:
-                active_avail_map[env_idx] = self.parent_conns[env_idx].recv()
-
             obs_batch = np.array(obs_list, dtype=np.float32)
             avail_batch: np.ndarray = np.zeros(
-                (self.n_envs, self.n_agents, self.n_actions), dtype=np.float32
+                (run_count, self.n_agents, self.n_actions), dtype=np.float32
             )
             for env_idx in active_envs:
-                avail_batch[env_idx] = np.array(active_avail_map[env_idx], dtype=np.float32)
+                avail_batch[env_idx] = np.array(avail_list[env_idx], dtype=np.float32)
 
             chosen_actions_batch = self.mac.select_actions_batch(
                 obs_batch=obs_batch,
@@ -143,18 +173,26 @@ class ParallelEpisodeRunner:
             )
 
             for env_idx in active_envs:
-                episode_batches[env_idx]["obs"][t] = np.array(obs_list[env_idx], dtype=np.float32)
-                episode_batches[env_idx]["state"][t] = np.array(state_list[env_idx], dtype=np.float32)
-                episode_batches[env_idx]["avail_actions"][t] = np.array(active_avail_map[env_idx], dtype=np.float32)
+                if episode_batches is not None:
+                    episode_batches[env_idx]["obs"][t] = np.array(obs_list[env_idx], dtype=np.float32)
+                    episode_batches[env_idx]["state"][t] = np.array(state_list[env_idx], dtype=np.float32)
+                    episode_batches[env_idx]["avail_actions"][t] = np.array(
+                        avail_list[env_idx], dtype=np.float32
+                    )
 
                 self.parent_conns[env_idx].send(("step", chosen_actions_batch[env_idx].tolist()))
 
             for env_idx in active_envs:
-                reward, done, info, next_obs, next_state = self.parent_conns[env_idx].recv()
-                episode_batches[env_idx]["actions"][t, :, 0] = np.array(chosen_actions_batch[env_idx], dtype=np.int64)
-                episode_batches[env_idx]["reward"][t, 0] = float(reward)
-                episode_batches[env_idx]["terminated"][t, 0] = float(done)
-                episode_batches[env_idx]["filled"][t, 0] = 1.0
+                reward, done, info, next_obs, next_state, next_avail_actions = (
+                    self.parent_conns[env_idx].recv()
+                )
+                if episode_batches is not None:
+                    episode_batches[env_idx]["actions"][t, :, 0] = np.array(
+                        chosen_actions_batch[env_idx], dtype=np.int64
+                    )
+                    episode_batches[env_idx]["reward"][t, 0] = float(reward)
+                    episode_batches[env_idx]["terminated"][t, 0] = float(done)
+                    episode_batches[env_idx]["filled"][t, 0] = 1.0
 
                 episode_returns[env_idx] += float(reward)
                 episode_lengths[env_idx] = t + 1
@@ -163,29 +201,37 @@ class ParallelEpisodeRunner:
                 obs_list[env_idx] = next_obs
                 state_list[env_idx] = next_state
                 terminated[env_idx] = bool(done)
+                if not done:
+                    avail_list[env_idx] = next_avail_actions
 
         avail_actions_last: list[np.ndarray] = [
             np.zeros((self.n_agents, self.n_actions), dtype=np.float32)
-            for _ in range(self.n_envs)
+            for _ in range(run_count)
         ]
-        active_last_envs = [idx for idx in range(self.n_envs) if not terminated[idx]]
-        for env_idx in active_last_envs:
-            self.parent_conns[env_idx].send(("get_avail_actions", None))
-        for env_idx in active_last_envs:
-            avail_actions_last[env_idx] = self.parent_conns[env_idx].recv()
-        for env_idx in range(self.n_envs):
+        for env_idx in range(run_count):
             if terminated[env_idx]:
                 terminal_avail: np.ndarray = np.zeros(
                     (self.n_agents, self.n_actions), dtype=np.float32
                 )
                 terminal_avail[:, 0] = 1.0
                 avail_actions_last[env_idx] = terminal_avail
+            else:
+                avail_actions_last[env_idx] = np.array(
+                    avail_list[env_idx], dtype=np.float32
+                )
 
-        for env_idx in range(self.n_envs):
-            t_ep = episode_lengths[env_idx]
-            episode_batches[env_idx]["obs"][t_ep] = np.array(obs_list[env_idx], dtype=np.float32)
-            episode_batches[env_idx]["state"][t_ep] = np.array(state_list[env_idx], dtype=np.float32)
-            episode_batches[env_idx]["avail_actions"][t_ep] = np.array(avail_actions_last[env_idx], dtype=np.float32)
+        if episode_batches is not None:
+            for env_idx in range(run_count):
+                t_ep = episode_lengths[env_idx]
+                episode_batches[env_idx]["obs"][t_ep] = np.array(
+                    obs_list[env_idx], dtype=np.float32
+                )
+                episode_batches[env_idx]["state"][t_ep] = np.array(
+                    state_list[env_idx], dtype=np.float32
+                )
+                episode_batches[env_idx]["avail_actions"][t_ep] = np.array(
+                    avail_actions_last[env_idx], dtype=np.float32
+                )
 
         stats_list = [
             {
@@ -195,7 +241,7 @@ class ParallelEpisodeRunner:
                 "episode_limit": bool(final_infos[env_idx].get("episode_limit", False)),
                 "no_kill_timeout": bool(final_infos[env_idx].get("no_kill_timeout", False)),
             }
-            for env_idx in range(self.n_envs)
+            for env_idx in range(run_count)
         ]
 
         return episode_batches, stats_list
