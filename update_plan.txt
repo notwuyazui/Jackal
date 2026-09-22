@@ -1,8 +1,8 @@
 2026.9.8
     未来本项目的主要更新方向：
     1. 优化项目代码结构，使之更易读、更易维护、可扩展性更强。
-        （1）拆分jackal_env中的Reward、Observation、Action、Render等模块。
-        （2）重构统一的游戏引擎BattleEngine，将部分目前env承担的任务下放到engine层面完成。
+        （1）拆分jackal_env中的Reward、Observation、Action、Render等模块。 ok
+        （2）重构统一的游戏引擎BattleEngine，将部分目前env承担的任务下放到engine层面完成。 ok
         （3）支持更多算法
     2. 支持多任务多智能体强化学习MOMARL训练，与传统SMAC作出区别。
     3. 将游戏引擎的运行部署在GPU上实现加速：

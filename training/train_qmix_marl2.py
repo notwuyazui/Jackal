@@ -234,6 +234,23 @@ def _set_optimizer_lr(learner, lr):
         param_group["lr"] = lr
 
 
+def _select_rollback_action(
+    *,
+    collapse_detected: bool,
+    cooldown_ready: bool,
+    rollback_count: int,
+    rollback_max_times: Optional[int],
+    stop_on_exhaustion: bool,
+) -> Optional[str]:
+    if not collapse_detected or not cooldown_ready:
+        return None
+    if rollback_max_times is None or rollback_count < rollback_max_times:
+        return "rollback"
+    if stop_on_exhaustion:
+        return "stop"
+    return None
+
+
 def _map_slug(map_name):
     name = str(map_name or "border").lower()
     aliases = {
@@ -460,7 +477,27 @@ def main(argv=None, *, prog=None):
     rollback_cooldown_evals = max(0, int(train_cfg.get("rollback_cooldown_evals", 3)))
     rollback_max_times_cfg = train_cfg.get("rollback_max_times", None)
     rollback_max_times = None if rollback_max_times_cfg is None else int(rollback_max_times_cfg)
+    if rollback_max_times is not None and rollback_max_times < 0:
+        raise ValueError("rollback_max_times must be >= 0 or null")
     rollback_clear_buffer = bool(train_cfg.get("rollback_clear_buffer", True))
+    rollback_buffer_warmup_episodes = max(
+        0,
+        int(train_cfg.get("rollback_buffer_warmup_episodes", 0)),
+    )
+    rollback_verify_after_load = bool(
+        train_cfg.get("rollback_verify_after_load", False)
+    )
+    rollback_stop_on_exhaustion = bool(
+        train_cfg.get("rollback_stop_on_exhaustion", False)
+    )
+    if rollback_buffer_warmup_episodes > buffer.buffer_size:
+        raise ValueError(
+            "rollback_buffer_warmup_episodes cannot exceed replay buffer_size"
+        )
+    if rollback_stop_on_exhaustion and rollback_max_times is None:
+        raise ValueError(
+            "rollback_stop_on_exhaustion requires a finite rollback_max_times"
+        )
     rollback_lr = train_cfg.get("rollback_lr", None)
     if rollback_lr is not None:
         rollback_lr = float(rollback_lr)
@@ -486,6 +523,7 @@ def main(argv=None, *, prog=None):
     rollback_count = 0
     last_rollback_eval_count = -rollback_cooldown_evals
     rollback_override_updates_per_collect = None
+    rollback_warmup_active = False
 
     t_env = 0
     episode = 0
@@ -560,6 +598,21 @@ def main(argv=None, *, prog=None):
             )
             if rollback_override_updates_per_collect is not None:
                 rollback_override_updates_per_collect = int(rollback_override_updates_per_collect)
+            rollback_warmup_active = bool(
+                resume_meta.get("rollback_warmup_active", False)
+            )
+            saved_rollback_max_times = resume_meta.get("rollback_max_times")
+            if (
+                rollback_max_times is not None
+                and saved_rollback_max_times != rollback_max_times
+            ):
+                rollback_count = 0
+                last_rollback_eval_count = eval_count
+                rollback_warmup_active = False
+                print(
+                    "[Resume] rollback policy changed; reset rollback_count "
+                    f"for the new max_times={rollback_max_times}"
+                )
             resume_best_seen_win_rate = max(best_win_rate, best_selector_score, best_single_win_rate)
             if (
                 stabilize_stage3_single_win_rate is not None
@@ -643,13 +696,39 @@ def main(argv=None, *, prog=None):
             "stable_eval_hits": int(stable_eval_hits),
             "eval_count": int(eval_count),
             "rollback_count": int(rollback_count),
+            "rollback_max_times": rollback_max_times,
             "last_rollback_eval_count": int(last_rollback_eval_count),
             "rollback_override_updates_per_collect": (
                 int(rollback_override_updates_per_collect)
                 if rollback_override_updates_per_collect is not None
                 else None
             ),
+            "rollback_warmup_active": bool(rollback_warmup_active),
         }
+
+    def verify_loaded_rollback_checkpoint():
+        if not rollback_verify_after_load:
+            return None
+        verification_stats = evaluate(
+            eval_runner,
+            test_nepisode,
+            seed_base=test_seed_base,
+            device=device,
+        )
+        print(
+            f"[Rollback-Verify] t_env={t_env} "
+            f"test_battle_won_mean={verification_stats['battle_won_mean']:.3f} "
+            f"test_return_mean={verification_stats['return_mean']:.2f} "
+            f"n_ep={test_nepisode}"
+        )
+        if tb_writer is not None:
+            for key, value in verification_stats.items():
+                tb_writer.add_scalar(
+                    f"rollback_verify/{key}",
+                    float(value),
+                    t_env,
+                )
+        return verification_stats
 
     print(
         f"[Train] device={device} n_agents={env_info['n_agents']} "
@@ -693,7 +772,11 @@ def main(argv=None, *, prog=None):
             f"drop_from_best>={rollback_drop_from_best:.3f}, "
             f"min_best={rollback_min_best_win_rate:.3f}, "
             f"cooldown_evals={rollback_cooldown_evals}, "
-            f"clear_buffer={rollback_clear_buffer}"
+            f"max_times={rollback_max_times}, "
+            f"clear_buffer={rollback_clear_buffer}, "
+            f"buffer_warmup_episodes={rollback_buffer_warmup_episodes}, "
+            f"verify_after_load={rollback_verify_after_load}, "
+            f"stop_on_exhaustion={rollback_stop_on_exhaustion}"
         )
 
     phase_window_started = perf_counter()
@@ -745,9 +828,30 @@ def main(argv=None, *, prog=None):
             if "no_kill_timeout" in rollout_stats:
                 tb_writer.add_scalar("rollout/no_kill_timeout", float(rollout_stats["no_kill_timeout"]), t_env)
 
+        if rollback_warmup_active:
+            if len(buffer) >= rollback_buffer_warmup_episodes:
+                rollback_warmup_active = False
+                print(
+                    f"[Rollback-Warmup] complete at t_env={t_env}: "
+                    f"buffer={len(buffer)}/{rollback_buffer_warmup_episodes}; "
+                    "learner updates resumed"
+                )
+            else:
+                print(
+                    f"[Rollback-Warmup] t_env={t_env} "
+                    f"buffer={len(buffer)}/{rollback_buffer_warmup_episodes}; "
+                    "learner update skipped"
+                )
+        if tb_writer is not None:
+            tb_writer.add_scalar(
+                "buffer/rollback_warmup_active",
+                float(rollback_warmup_active),
+                t_env,
+            )
+
         learner_started = perf_counter()
         train_stats = None
-        if buffer.can_sample(batch_size):
+        if buffer.can_sample(batch_size) and not rollback_warmup_active:
             if rollback_override_updates_per_collect is not None:
                 current_updates_per_collect = rollback_override_updates_per_collect
             elif stabilization_stage >= 3 and stabilize_stage3_updates_per_collect is not None:
@@ -1027,24 +1131,29 @@ def main(argv=None, *, prog=None):
 
             rollback_drop = best_selector_score - window_mean_wr
             rollback_cooldown_ready = (eval_count - last_rollback_eval_count) >= rollback_cooldown_evals
-            rollback_times_ready = rollback_max_times is None or rollback_count < rollback_max_times
-            rollback_ready = (
+            rollback_collapse_detected = (
                 rollback_on_collapse
                 and t_env >= rollback_min_t_env
                 and window_ready
                 and os.path.exists(best_path)
                 and best_selector_score >= rollback_min_best_win_rate
                 and rollback_drop >= rollback_drop_from_best
-                and rollback_cooldown_ready
-                and rollback_times_ready
             )
-            if rollback_ready:
+            rollback_action = _select_rollback_action(
+                collapse_detected=rollback_collapse_detected,
+                cooldown_ready=rollback_cooldown_ready,
+                rollback_count=rollback_count,
+                rollback_max_times=rollback_max_times,
+                stop_on_exhaustion=rollback_stop_on_exhaustion,
+            )
+            if rollback_action == "rollback":
                 learner.load_models(best_path)
                 _sync_eval_mac_params(mac, eval_mac)
                 rollback_count += 1
                 last_rollback_eval_count = eval_count
                 if rollback_clear_buffer:
                     buffer.clear()
+                    rollback_warmup_active = rollback_buffer_warmup_episodes > 0
                 if rollback_stabilization_stage is not None:
                     stabilization_stage = rollback_stabilization_stage
                     stabilization_active = stabilization_stage > 0
@@ -1052,6 +1161,7 @@ def main(argv=None, *, prog=None):
                     _set_optimizer_lr(learner, rollback_lr)
                 if rollback_updates_per_collect is not None:
                     rollback_override_updates_per_collect = rollback_updates_per_collect
+                verify_loaded_rollback_checkpoint()
                 learner.save_models(latest_path, meta=checkpoint_meta())
                 print(
                     f"[Rollback] collapse detected at t_env={t_env}: "
@@ -1060,6 +1170,8 @@ def main(argv=None, *, prog=None):
                     f"drop={rollback_drop:.3f}. "
                     f"Loaded {best_path}, "
                     f"clear_buffer={rollback_clear_buffer}, "
+                    f"warmup_episodes="
+                    f"{rollback_buffer_warmup_episodes if rollback_warmup_active else 0}, "
                     f"lr={learner.optimizer.param_groups[0]['lr'] if learner.optimizer.param_groups else 'n/a'}, "
                     f"updates_per_collect="
                     f"{rollback_override_updates_per_collect if rollback_override_updates_per_collect is not None else 'stage/default'}"
@@ -1070,6 +1182,22 @@ def main(argv=None, *, prog=None):
                     tb_writer.add_scalar("buffer/episodes", float(len(buffer)), t_env)
                     if learner.optimizer.param_groups:
                         tb_writer.add_scalar("train/lr", float(learner.optimizer.param_groups[0]["lr"]), t_env)
+            elif rollback_action == "stop":
+                learner.load_models(best_path)
+                _sync_eval_mac_params(mac, eval_mac)
+                rollback_warmup_active = False
+                verify_loaded_rollback_checkpoint()
+                learner.save_models(latest_path, meta=checkpoint_meta())
+                print(
+                    f"[Stop] rollback limit exhausted at t_env={t_env}: "
+                    f"rollback_count={rollback_count}, "
+                    f"window_mean_win_rate={window_mean_wr:.3f}, "
+                    f"best_window={best_selector_score:.3f}. "
+                    f"Restored {best_path} and stopped training."
+                )
+                if tb_writer is not None:
+                    tb_writer.add_scalar("train/rollback_exhausted", 1.0, t_env)
+                break
 
             # 稳定胜率早停逻辑
             if stop_by_win and t_env >= min_t_env_before_stop:

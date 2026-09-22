@@ -1,8 +1,11 @@
+import json
+from pathlib import Path
 import unittest
 
 from training.marl2.runners.parallel_episode_runner import ParallelEpisodeRunner
 from training.train_qmix_marl2 import (
     _performance_metrics,
+    _select_rollback_action,
     _should_run_extra_evaluation,
     evaluate,
 )
@@ -77,6 +80,69 @@ class PerformanceMetricsTests(unittest.TestCase):
         self.assertAlmostEqual(metrics["learner_ratio"], 0.3)
         self.assertAlmostEqual(metrics["evaluation_ratio"], 0.1)
         self.assertAlmostEqual(metrics["env_steps_per_second"], 20.0)
+
+
+class RollbackProtectionTests(unittest.TestCase):
+    def test_allows_rollbacks_until_limit_then_stops(self) -> None:
+        common = {
+            "collapse_detected": True,
+            "cooldown_ready": True,
+            "rollback_max_times": 3,
+            "stop_on_exhaustion": True,
+        }
+        self.assertEqual(
+            _select_rollback_action(rollback_count=2, **common),
+            "rollback",
+        )
+        self.assertEqual(
+            _select_rollback_action(rollback_count=3, **common),
+            "stop",
+        )
+
+    def test_cooldown_prevents_rollback_and_stop(self) -> None:
+        self.assertIsNone(
+            _select_rollback_action(
+                collapse_detected=True,
+                cooldown_ready=False,
+                rollback_count=3,
+                rollback_max_times=3,
+                stop_on_exhaustion=True,
+            )
+        )
+
+    def test_valley_config_enables_only_requested_stability_changes(self) -> None:
+        config_path = (
+            Path(__file__).resolve().parents[1]
+            / "training"
+            / "configs"
+            / "marl2"
+            / "jackal_autoaim_5v5_etdqmix_hetero_valley_mapfeat7_10m_v2.json"
+        )
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        env_config = config["env"]
+        train_config = config["train"]
+
+        self.assertEqual(env_config["position_jitter"], 3.0)
+        self.assertEqual(env_config["heading_jitter"], 3.0)
+        self.assertEqual(train_config["best_model_window"], 8)
+        self.assertEqual(train_config["best_model_max_recent_zero"], 3)
+        self.assertEqual(
+            [
+                train_config["stabilize_window_win_rate"],
+                train_config["stabilize_stage2_window_win_rate"],
+                train_config["stabilize_stage3_window_win_rate"],
+            ],
+            [0.15, 0.25, 0.35],
+        )
+        self.assertEqual(train_config["rollback_cooldown_evals"], 5)
+        self.assertEqual(train_config["rollback_max_times"], 3)
+        self.assertEqual(train_config["rollback_buffer_warmup_episodes"], 64)
+        self.assertTrue(train_config["rollback_verify_after_load"])
+        self.assertTrue(train_config["rollback_stop_on_exhaustion"])
+
+        # Requested items 4 and 5 remain disabled/unchanged.
+        self.assertIsNone(train_config["early_stop_win_rate"])
+        self.assertEqual(config["algo"]["name"], "qmix")
 
 
 if __name__ == "__main__":
