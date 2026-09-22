@@ -8,7 +8,8 @@ from game.Parameter import *
 
 class Plane(BaseUnit):
     
-    def __init__(self, unit_id: int, unit_team: Team, usingAI = False, visible = True):
+    def __init__(self, unit_id: int, unit_team: Team, usingAI=False, visible=True,
+                 ai_intelligence_level=DEFAULT_AI_INTELLIGENCE_LEVEL):
         
         self.unit_type = 'plane'
         self.body_image_path = 'Unit/Plane/plane.png'
@@ -22,8 +23,8 @@ class Plane(BaseUnit):
         self.min_acceleration_rate = 0.0
         self.max_angular_speed_rate = 0.0
         self.turret_angular_speed_rate = 0.5
-        self.max_health_rate = 4.0
-        self.sight_range = 300
+        self.max_health_rate = 3.0
+        self.sight_range = 200
         self.communication_range = 200
         self.armor_type = ArmorType.HEAVY                                                        # 护甲类型
         self.ammunition_types = ['heavy_shell']                                                      # 单位拥有弹种
@@ -37,6 +38,7 @@ class Plane(BaseUnit):
                          size=(32.0, 32.0) if unit_team == Team.ENEMY else (30.0, 31.0),
                          collision_size=(32.0, 32.0) if unit_team == Team.ENEMY else (30.0, 31.0),
                          visible=self.visible,
+                         ai_intelligence_level=ai_intelligence_level,
                          max_speed_rate=self.max_speed_rate, 
                          max_acceleration_rate=self.max_acceleration_rate, 
                          min_acceleration_rate=self.min_acceleration_rate, 
@@ -49,18 +51,21 @@ class Plane(BaseUnit):
                          ammunition_types=self.ammunition_types, 
                          ammo_switch_time=self.ammo_switch_time)
 
-def create_plane(unit_id, unit_team, position=(0, 0), usingAI = False, visible = True):
+def create_plane(unit_id, unit_team, position=(0, 0), usingAI=False, visible=True,
+                 ai_intelligence_level=DEFAULT_AI_INTELLIGENCE_LEVEL):
     # 示例：plane = create_plane(1, Team.PLAYER, position=(400, 300))
-    plane = Plane(unit_id, unit_team, usingAI, visible)
+    plane = Plane(unit_id, unit_team, usingAI, visible, ai_intelligence_level)
     plane.position = position
     return plane            
 
-def create_enemy_plane(unit_id, position=(0, 0), usingAI = False, visible = True):
-    enemy = Plane(unit_id, Team.ENEMY, usingAI, visible)
+def create_enemy_plane(unit_id, position=(0, 0), usingAI=False, visible=True,
+                       ai_intelligence_level=DEFAULT_AI_INTELLIGENCE_LEVEL):
+    enemy = Plane(unit_id, Team.ENEMY, usingAI, visible, ai_intelligence_level)
     enemy.position = position
     return enemy
 
-def create_player_plane(unit_id, position=(0, 0), usingAI = False, visible = True):
-    player = Plane(unit_id, Team.PLAYER, usingAI, visible)
+def create_player_plane(unit_id, position=(0, 0), usingAI=False, visible=True,
+                        ai_intelligence_level=DEFAULT_AI_INTELLIGENCE_LEVEL):
+    player = Plane(unit_id, Team.PLAYER, usingAI, visible, ai_intelligence_level)
     player.position = position
     return player

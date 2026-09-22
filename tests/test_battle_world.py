@@ -20,7 +20,7 @@ from game.BattleWorld import BattleWorld
 from game.BattleState import CombatEvent, WorldSnapshot
 from game.Bullet.BulletManager import BulletManager
 from game.Map.GameMap import GameMap
-from game.Parameter import Team
+from game.Parameter import DEFAULT_AI_INTELLIGENCE_LEVEL, Team
 from game.Unit.UnitManager import UnitManager
 
 
@@ -353,6 +353,10 @@ class BattleWorldTests(unittest.TestCase):
                 self.assertEqual(unit.position, (123.0, 234.0))
                 self.assertFalse(hasattr(unit, "body_image"))
                 self.assertFalse(hasattr(unit, "turret_image"))
+                self.assertEqual(
+                    unit.ai_intelligence_level,
+                    DEFAULT_AI_INTELLIGENCE_LEVEL,
+                )
                 self.assertLessEqual(abs(unit.bounding_box.centerx - 123), 1)
                 self.assertLessEqual(abs(unit.bounding_box.centery - 234), 1)
 
@@ -390,6 +394,41 @@ class BattleWorldTests(unittest.TestCase):
         self.assertAlmostEqual(unit.get_weapon_spec().speed, 600.0)
         self.assertEqual(len(world.unit_manager.enemy_ais), 1)
         self.assertEqual(world.unit_manager.enemy_ais[0].fire_angle_tolerance, 3.0)
+
+    def test_ai_intelligence_level_defaults_overrides_and_validates(self) -> None:
+        world = BattleWorld(GameMap())
+        default_unit = world.create_unit(
+            "tank",
+            Team.ENEMY,
+            (100.0, 100.0),
+            unit_id=1,
+            using_ai=True,
+        )
+        custom_unit = world.create_unit(
+            "archie",
+            Team.ENEMY,
+            (200.0, 100.0),
+            unit_id=2,
+            using_ai=True,
+            ai_intelligence_level=8,
+        )
+
+        self.assertEqual(
+            default_unit.ai_intelligence_level,
+            DEFAULT_AI_INTELLIGENCE_LEVEL,
+        )
+        self.assertEqual(custom_unit.ai_intelligence_level, 8)
+        self.assertEqual(
+            [ai.intelligence_level for ai in world.unit_manager.enemy_ais],
+            [DEFAULT_AI_INTELLIGENCE_LEVEL, 8],
+        )
+        with self.assertRaisesRegex(ValueError, "between 1 and 9"):
+            UnitManager.create_unit(
+                "plane",
+                3,
+                Team.ENEMY,
+                ai_intelligence_level=10,
+            )
 
     def test_world_command_interface_controls_and_fires_unit(self) -> None:
         world = BattleWorld(GameMap())

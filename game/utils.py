@@ -20,7 +20,14 @@ def centered_rect(
     if width <= 0.0 or height <= 0.0:
         raise ValueError("rect size dimensions must be > 0")
     x, y = float(position[0]), float(position[1])
-    return pygame.Rect(x - width / 2, y - height / 2, width, height)
+    rect = pygame.Rect(
+        0,
+        0,
+        max(1, int(round(width))),
+        max(1, int(round(height))),
+    )
+    rect.center = (round(x), round(y))
+    return rect
 
 
 class SpatialIndex(Generic[T]):

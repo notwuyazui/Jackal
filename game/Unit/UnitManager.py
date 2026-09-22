@@ -8,7 +8,7 @@ import pygame
 
 import game.GameMode as GameMode
 from game.BattleState import CombatEvent
-from game.Parameter import Team
+from game.Parameter import DEFAULT_AI_INTELLIGENCE_LEVEL, Team
 from game.utils import SpatialIndex
 
 if TYPE_CHECKING:
@@ -100,6 +100,7 @@ class UnitManager:
         *,
         using_ai: bool = False,
         visible: bool = True,
+        ai_intelligence_level: int = DEFAULT_AI_INTELLIGENCE_LEVEL,
     ) -> BaseUnit:
         """创建一个单位；调用方完成配置后再将其加入战场。"""
 
@@ -128,6 +129,7 @@ class UnitManager:
             position=(float(position[0]), float(position[1])),
             usingAI=bool(using_ai),
             visible=bool(visible),
+            ai_intelligence_level=ai_intelligence_level,
         )
         if unit is None:
             raise RuntimeError(f"Unit builder returned None for {normalized_type!r}")
@@ -151,7 +153,15 @@ class UnitManager:
         self._unit_index_valid = False
         self.invalidate_perception_cache()
         if unit.usingAI:
-            self.enemy_ais.append(EnemyAI(unit, self, bullet_manager, game_map))
+            self.enemy_ais.append(
+                EnemyAI(
+                    unit,
+                    self,
+                    bullet_manager,
+                    game_map,
+                    intelligence_level=unit.ai_intelligence_level,
+                )
+            )
 
     def update(
         self,
@@ -163,10 +173,17 @@ class UnitManager:
         # keeping this conditional preserves the original disabled-path cost.
         if self.enable_unit_collision:
             self.rebuild_unit_spatial_index(game_map)
-        # Updates use stable ids to avoid insertion-order drift.
-        for ai in sorted(self.enemy_ais, key=lambda item: item.unit.id):
+        # Interleave teams and reverse the complete order every tick. This keeps
+        # deterministic updates without permanently granting one id range the
+        # first decision, movement, communication, and collision opportunity.
+        ai_order = self._fair_update_order(self.enemy_ais)
+        for ai in ai_order:
             ai.update()
-        for unit in sorted(self.units, key=lambda item: item.id):
+        # Firing is committed only after every controller has decided, so later
+        # controllers cannot react to bullets created earlier in the same tick.
+        for ai in ai_order:
+            ai.commit_fire()
+        for unit in self._fair_update_order(self.units):
             unit.update(delta_time, self, bullet_manager, game_map)
 
         if self.auto_communicate_enabled:
@@ -176,6 +193,27 @@ class UnitManager:
         if dead_units:
             self.enemy_ais = [ai for ai in self.enemy_ais if ai.unit not in dead_units]
         self.rebuild_unit_spatial_index(game_map)
+
+    def _fair_update_order(self, items):
+        """Return a deterministic, team-interleaved order that alternates by tick."""
+
+        groups: dict[Any, list[Any]] = {}
+        for item in items:
+            unit = getattr(item, "unit", item)
+            groups.setdefault(unit.team, []).append(item)
+        for group in groups.values():
+            group.sort(key=lambda item: getattr(item, "unit", item).id)
+
+        teams = sorted(groups, key=lambda team: (getattr(team, "value", 0), str(team)))
+        order = [
+            groups[team][rank]
+            for rank in range(max((len(group) for group in groups.values()), default=0))
+            for team in teams
+            if rank < len(groups[team])
+        ]
+        if self.current_tick % 2 == 0:
+            order.reverse()
+        return order
 
     @staticmethod
     def _entity_rect(entity) -> pygame.Rect:

@@ -3,7 +3,7 @@ import datetime
 from typing import Optional
 
 import game.GameMode as GameMode
-from game.Parameter import BULLET_SPEED
+from game.Parameter import BULLET_SPEED, DEFAULT_AI_INTELLIGENCE_LEVEL
 from game.Map.GameMap import GameMap
 from game.Bullet.BulletManager import BulletManager
 from game.BattleState import WorldSnapshot
@@ -73,6 +73,7 @@ class JackalEnv:
         use_tear_drop_vision=None,
         auto_communicate=None,
         collision_scale=1.0,
+        enemy_ai_intelligence_level=DEFAULT_AI_INTELLIGENCE_LEVEL,
     ):
         self.headless = headless
         self.delta_time = fixed_delta_time
@@ -148,6 +149,9 @@ class JackalEnv:
             raise ValueError("n_agents must be >= 1")
         if self.n_enemies <= 0:
             raise ValueError("n_enemies must be >= 1")
+        self.enemy_ai_intelligence_level = int(enemy_ai_intelligence_level)
+        if not 1 <= self.enemy_ai_intelligence_level <= 9:
+            raise ValueError("enemy_ai_intelligence_level must be between 1 and 9")
 
         ally_positions = (
             [tuple(pos) for pos in ally_positions]
@@ -201,6 +205,7 @@ class JackalEnv:
             ally_unit_types=ally_unit_types,
             enemy_unit_types=enemy_unit_types,
             enemy_use_ai=bool(enemy_use_ai),
+            enemy_ai_intelligence_level=self.enemy_ai_intelligence_level,
             ally_unit_scales=ally_unit_scales or {},
             enemy_unit_scales=enemy_unit_scales or {},
             ally_unit_type_scales=ally_unit_type_scales or {},

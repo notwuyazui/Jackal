@@ -17,10 +17,11 @@ UNIT_ANGULAR_SPEED = 100.0              # 单位的基础旋转速度
 UNIT_TURRET_ANGULAR_SPEED = 100.0       # 单位炮塔的基础旋转速度
 UNIT_AMMO_SWITCH_TIME = 0.5             # 单位切换弹药的时间
 UNIT_MIN_SIGHT_RATIO = 0.4              # 当单位应用水滴形视野时，最小视野（向后视野）范围与最大视野（向前视野）的比值.此值不应低于0.4，否则视野范围将不再是凸的
+DEFAULT_AI_INTELLIGENCE_LEVEL = 5        # EnemyAI 默认智能等级，取值范围为 1-9
 
-BULLET_SPEED = 400.0        # 子弹的基础速度
-BULLET_DAMAGE = 10          # 子弹的基础伤害
-BULLET_COOLDOWN = 1.0       # 子弹的基础冷却时间
+BULLET_SPEED = 300.0        # 子弹的基础速度
+BULLET_DAMAGE = 8          # 子弹的基础伤害
+BULLET_COOLDOWN = 1.5       # 子弹的基础冷却时间
 BULLET_EXPLOSION_DAMAGE_APPLY_DISTANT_FACTOR = False   # 子弹爆炸造成的伤害是否与距离有关
 EXPLOSION_IMAGE_ADAPT_TO_RANGE = False               # 爆炸图片是否根据爆炸范围调整大小
 

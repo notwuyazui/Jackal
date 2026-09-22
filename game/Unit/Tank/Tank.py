@@ -12,7 +12,8 @@ class Tank(BaseUnit):
     # 敌方保持原有转速，避免整体难度和行为模式突变
     ENEMY_TURRET_SPEED_RATE = 1.0
     
-    def __init__(self, unit_id: int, unit_team: Team, usingAI = False, visible = True):
+    def __init__(self, unit_id: int, unit_team: Team, usingAI=False, visible=True,
+                 ai_intelligence_level=DEFAULT_AI_INTELLIGENCE_LEVEL):
         
         self.unit_type = 'tank'
         self.body_image_path = 'Unit/Tank/tank.png'
@@ -24,12 +25,15 @@ class Tank(BaseUnit):
         self.max_acceleration_rate = 1.0
         self.min_acceleration_rate = -1.0
         self.max_angular_speed_rate = 1.0
-        if unit_team == Team.PLAYER:
+        # Keep the responsive turret for externally controlled player tanks,
+        # while AI-vs-AI battles use identical physical capabilities on both
+        # teams so intelligence comparisons are not confounded by team color.
+        if unit_team == Team.PLAYER and not usingAI:
             self.turret_angular_speed_rate = self.PLAYER_TURRET_SPEED_RATE
         else:
             self.turret_angular_speed_rate = self.ENEMY_TURRET_SPEED_RATE
         self.max_health_rate = 1.0
-        self.sight_range = 200
+        self.sight_range = 250
         self.communication_range = 200
         self.armor_type = ArmorType.LIGHT                                                        # 护甲类型
         self.ammunition_types = ['normal_shell','rocket_shell','heavy_shell']                                                      # 单位拥有弹种
@@ -43,6 +47,7 @@ class Tank(BaseUnit):
                          size=(16.0, 23.0),
                          collision_size=(16.0, 23.0),
                          visible=self.visible,
+                         ai_intelligence_level=ai_intelligence_level,
                          max_speed_rate=self.max_speed_rate, 
                          max_acceleration_rate=self.max_acceleration_rate, 
                          min_acceleration_rate=self.min_acceleration_rate, 
@@ -55,18 +60,21 @@ class Tank(BaseUnit):
                          ammunition_types=self.ammunition_types, 
                          ammo_switch_time=self.ammo_switch_time)
 
-def create_tank(unit_id, unit_team, position=(0, 0), usingAI = False, visible = True):
+def create_tank(unit_id, unit_team, position=(0, 0), usingAI=False, visible=True,
+                ai_intelligence_level=DEFAULT_AI_INTELLIGENCE_LEVEL):
     # 示例：tank = create_tank(1, Team.PLAYER, position=(400, 300))
-    tank = Tank(unit_id, unit_team, usingAI, visible)
+    tank = Tank(unit_id, unit_team, usingAI, visible, ai_intelligence_level)
     tank.position = position
     return tank            
 
-def create_enemy_tank(unit_id, position=(0, 0), usingAI = False, visible = True):
-    enemy = Tank(unit_id, Team.ENEMY, usingAI, visible)
+def create_enemy_tank(unit_id, position=(0, 0), usingAI=False, visible=True,
+                      ai_intelligence_level=DEFAULT_AI_INTELLIGENCE_LEVEL):
+    enemy = Tank(unit_id, Team.ENEMY, usingAI, visible, ai_intelligence_level)
     enemy.position = position
     return enemy
 
-def create_player_tank(unit_id, position=(0, 0), usingAI = False, visible = True):
-    player = Tank(unit_id, Team.PLAYER, usingAI, visible)
+def create_player_tank(unit_id, position=(0, 0), usingAI=False, visible=True,
+                       ai_intelligence_level=DEFAULT_AI_INTELLIGENCE_LEVEL):
+    player = Tank(unit_id, Team.PLAYER, usingAI, visible, ai_intelligence_level)
     player.position = position
     return player

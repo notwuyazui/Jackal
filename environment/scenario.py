@@ -13,7 +13,7 @@ from game.Map.GameMap import (
     create_map_from_file,
     create_map_from_strings,
 )
-from game.Parameter import Team
+from game.Parameter import DEFAULT_AI_INTELLIGENCE_LEVEL, Team
 from game.Unit.UnitManager import UnitManager
 
 
@@ -48,6 +48,7 @@ class ScenarioConfig:
     enable_unit_collision: bool | None = None
     use_tear_drop_vision: bool | None = None
     auto_communicate: bool | None = None
+    enemy_ai_intelligence_level: int = DEFAULT_AI_INTELLIGENCE_LEVEL
 
 
 @dataclass(frozen=True)
@@ -182,6 +183,11 @@ def _create_unit(
         )
 
     cooldown = _resolve_fire_cooldown(config, unit_type, enemy=enemy)
+    ai_options = (
+        {"ai_intelligence_level": config.enemy_ai_intelligence_level}
+        if enemy
+        else {}
+    )
     try:
         return world.create_unit(
             unit_type,
@@ -199,6 +205,7 @@ def _create_unit(
                 config.enemy_fire_angle_tolerance if enemy else None
             ),
             collision_scale=config.collision_scale,
+            **ai_options,
         )
     except ValueError as exc:
         side = "enemy" if enemy else "ally"

@@ -9,6 +9,7 @@ from typing import Any, Iterable, Optional, Tuple, TypeGuard
 
 import pygame
 
+from game.Parameter import DEFAULT_AI_INTELLIGENCE_LEVEL
 from game.Unit.BaseUnit import BaseUnit
 
 
@@ -18,14 +19,15 @@ Vector = Tuple[float, float]
 class EnemyAI:
     """Control one unit using only direct or communicated target information.
 
-    ``INTELLIGENCE_LEVEL`` is the single global skill control. Values from 1
-    through 9 progressively improve communication frequency, target memory,
-    route replanning, threat avoidance, and low-health kiting. Unit and weapon
+    ``INTELLIGENCE_LEVEL`` is the default skill level. Each controller can
+    override it through ``intelligence_level``. Values from 1 through 9
+    progressively improve communication frequency, target memory, route
+    replanning, threat avoidance, and low-health kiting. Unit and weapon
     attributes remain authoritative; the AI does not maintain separate combat
     ranges or cooldowns.
     """
 
-    INTELLIGENCE_LEVEL = 7
+    INTELLIGENCE_LEVEL = DEFAULT_AI_INTELLIGENCE_LEVEL
 
     SAFE_MARGIN = 2.0
     SEPARATION_DISTANCE = 72.0
@@ -51,7 +53,11 @@ class EnemyAI:
         self.bullet_manager = bullet_manager
         self.game_map = game_map
 
-        level = self.INTELLIGENCE_LEVEL if intelligence_level is None else int(intelligence_level)
+        level = (
+            self.INTELLIGENCE_LEVEL
+            if intelligence_level is None
+            else int(intelligence_level)
+        )
         if not 1 <= level <= 9:
             raise ValueError("EnemyAI intelligence_level must be between 1 and 9")
         self.intelligence_level = level
@@ -60,8 +66,13 @@ class EnemyAI:
         self.fire_angle_tolerance = float(
             getattr(self.unit, "ai_fire_angle_tolerance", 10.0)
         )
-        self.strafe_sign = 1.0 if self.unit.id % 2 == 0 else -1.0
+        tile_size = max(1.0, float(getattr(self.game_map, "tile_size", 64)))
+        self._decision_phase = int(self.unit.position[1] // tile_size)
+        map_width, _ = self.game_map.get_map_size()
+        self._mirror_sign = 1.0 if self.unit.position[0] <= map_width * 0.5 else -1.0
+        self.strafe_sign = self._initial_lateral_sign()
         self._avoidance_sign = self.strafe_sign
+        self._fire_requested = False
 
         self.target_unit: Optional[BaseUnit] = None
         self.last_known_target_position: Optional[Vector] = None
@@ -71,7 +82,8 @@ class EnemyAI:
         self._frame_count = 0
         self._last_communication_frame = -10_000
         self._communication_interval = max(6, 50 - 5 * level)
-        self._tactical_interval = max(2, 4 - level // 4)
+        self._tactical_interval = max(1, 10 - level)
+        self._aim_interval = max(1, 10 - level)
         self._last_tactical_frame = -10_000
         self._cached_known_enemies: tuple[BaseUnit, ...] = ()
         self._cached_regroup_ally: Optional[BaseUnit] = None
@@ -126,6 +138,7 @@ class EnemyAI:
     # Main decision loop
     # ------------------------------------------------------------------
     def update(self) -> None:
+        self._fire_requested = False
         self._frame_count += 1
         self._update_unit_radius()
         self._update_stuck_state()
@@ -133,10 +146,11 @@ class EnemyAI:
         self._exchange_information()
 
         visible_enemies = self._get_visible_enemy_units()
+        previous_target = self.target_unit
         has_live_target = self._is_valid_enemy(self.target_unit)
         tactical_due = (
             self._last_tactical_frame < 0
-            or (self._frame_count + int(self.unit.id)) % self._tactical_interval == 0
+            or (self._frame_count + self._decision_phase) % self._tactical_interval == 0
             or (not has_live_target and bool(visible_enemies))
         )
         if tactical_due:
@@ -184,7 +198,11 @@ class EnemyAI:
             return
 
         if target_known_now:
-            self._aim_at_target(current_target)
+            if (
+                current_target is not previous_target
+                or (self._frame_count + self._decision_phase) % self._aim_interval == 0
+            ):
+                self._aim_at_target(current_target)
             self._try_fire(current_target, target_known_now=True)
         elif self.last_known_target_position is not None:
             self._aim_at_position(self.last_known_target_position)
@@ -316,6 +334,19 @@ class EnemyAI:
             return min(enemies, key=self._distance_to)
 
         weapon_range = max(1.0, float(self.unit.weapon_range()))
+        enemy_ids = {enemy.id for enemy in enemies}
+        friendly_focus: dict[int, int] = {}
+        if self.intelligence_level >= 6:
+            for friendly_ai in self._friendly_ai_controllers():
+                friendly_target = friendly_ai.target_unit
+                if (
+                    friendly_target is not None
+                    and friendly_target.is_alive
+                    and friendly_target.id in enemy_ids
+                ):
+                    friendly_focus[friendly_target.id] = (
+                        friendly_focus.get(friendly_target.id, 0) + 1
+                    )
 
         def score(enemy: BaseUnit) -> tuple[float, int]:
             distance = self._distance_to(enemy)
@@ -329,6 +360,16 @@ class EnemyAI:
                 value -= 25.0 + 5.0 * self.intelligence_level
             if enemy is self.target_unit:
                 value -= 18.0 + 3.0 * self.intelligence_level
+            if self.intelligence_level >= 6:
+                # Coordinated focus removes enemy guns sooner. The health term
+                # avoids scattering fire while the focus term keeps teammates
+                # on an already shared target.
+                value -= (1.0 - health_ratio) * (
+                    18.0 + 6.0 * self.intelligence_level
+                )
+                value -= friendly_focus.get(enemy.id, 0) * (
+                    14.0 + 4.0 * self.intelligence_level
+                )
             return value, int(enemy.id)
 
         return min(enemies, key=score)
@@ -511,8 +552,15 @@ class EnemyAI:
             self._combat_power(ally) for ally in local_allies
         )
         enemy_power = sum(self._combat_power(enemy) for enemy in attackers.values())
-        pressure_threshold = 2.10 - 0.065 * self.intelligence_level
-        outnumbered = len(attackers) >= len(local_allies) + 2
+        pressure_threshold = 1.35 + 0.05 * self.intelligence_level
+        health_ratio = float(self.unit.health) / max(1.0, float(self.unit.max_health))
+        outnumbered = (
+            len(attackers) >= len(local_allies) + 2
+            and (
+                health_ratio < 0.62
+                or enemy_power > friendly_power * 1.20
+            )
+        )
         overpowered = enemy_power > friendly_power * pressure_threshold
         strongest_enemy = max(
             (self._combat_power(enemy) for enemy in attackers.values()),
@@ -522,7 +570,6 @@ class EnemyAI:
             not local_allies
             and strongest_enemy > self_power * (pressure_threshold + 0.18)
         )
-        health_ratio = float(self.unit.health) / max(1.0, float(self.unit.max_health))
         wounded_and_alone = not local_allies and health_ratio < 0.38
         if not (outnumbered or overpowered or badly_matched or wounded_and_alone):
             return None
@@ -536,8 +583,9 @@ class EnemyAI:
         if self._distance_to(anchor) <= rally_distance:
             return None
         self._regroup_ally_id = int(anchor.id)
-        self._regroup_until_frame = self._frame_count + 90 + 15 * self.intelligence_level
-        self._next_regroup_frame = self._regroup_until_frame + 240
+        regroup_duration = max(60, 150 - 8 * self.intelligence_level)
+        self._regroup_until_frame = self._frame_count + regroup_duration
+        self._next_regroup_frame = self._regroup_until_frame + 150
         return anchor
 
     def _regroup_anchor_score(self, ally: BaseUnit) -> tuple[float, int]:
@@ -577,8 +625,8 @@ class EnemyAI:
         preferred = self._preferred_combat_distance()
         health_ratio = float(self.unit.health) / max(1.0, float(self.unit.max_health))
         target_health_ratio = float(target.health) / max(1.0, float(target.max_health))
-        low_health_threshold = 0.22 + 0.025 * self.intelligence_level
-        disadvantaged = health_ratio + 0.10 < target_health_ratio
+        low_health_threshold = 0.20 + 0.01 * self.intelligence_level
+        disadvantaged = health_ratio + 0.18 < target_health_ratio
         should_kite = (
             self.intelligence_level >= 5
             and health_ratio < low_health_threshold
@@ -645,15 +693,76 @@ class EnemyAI:
             float(target.position[1]),
         )
         if self.intelligence_level >= 6:
-            projectile_speed = max(1.0, float(self.unit.get_weapon_spec().speed))
-            travel_time = min(1.25, self._distance_to(target) / projectile_speed)
-            lead_factor = (self.intelligence_level - 5) / 4.0
+            spec = self.unit.get_weapon_spec()
+            projectile_speed = max(1.0, float(spec.speed))
+            relative = (
+                float(target.position[0] - self.unit.position[0]),
+                float(target.position[1] - self.unit.position[1]),
+            )
             velocity = getattr(target, "velocity", (0.0, 0.0))
+            velocity = (float(velocity[0]), float(velocity[1]))
+            a = self._dot(velocity, velocity) - projectile_speed * projectile_speed
+            b = 2.0 * self._dot(relative, velocity)
+            c = self._dot(relative, relative)
+            travel_time = self._positive_intercept_time(a, b, c)
+            if travel_time is None:
+                travel_time = math.sqrt(c) / projectile_speed
+            travel_time = min(float(spec.lifetime), 1.5, travel_time)
+            lead_factor = (self.intelligence_level - 5) / 4.0
+            turn_ratio = abs(float(getattr(target, "angular_speed", 0.0))) / max(
+                1.0,
+                float(getattr(target, "max_angular_speed", 1.0)),
+            )
+            acceleration_ratio = abs(float(getattr(target, "acceleration", 0.0))) / max(
+                1.0,
+                abs(float(getattr(target, "max_acceleration", 1.0))),
+            )
+            motion_confidence = max(
+                0.25,
+                1.0 - 0.55 * turn_ratio - 0.25 * acceleration_ratio,
+            )
+            lead_factor *= motion_confidence
             aim_position = (
                 target.position[0] + velocity[0] * travel_time * lead_factor,
                 target.position[1] + velocity[1] * travel_time * lead_factor,
             )
         self._aim_at_position(aim_position)
+        if self.intelligence_level < 6:
+            # Lower levels estimate target position less precisely. The error is
+            # deterministic and mirrored so it changes skill without restoring
+            # a left/right bias or adding nondeterministic training noise.
+            target_lane = int(
+                target.position[1]
+                // max(1.0, float(getattr(self.game_map, "tile_size", 64)))
+            )
+            phase = (
+                self._frame_count * 0.31
+                + self._decision_phase * 1.17
+                + target_lane * 0.73
+            )
+            error_amplitude = float(6 - self.intelligence_level)
+            self.unit.turret_target_angle = (
+                self.unit.turret_target_angle
+                + self._mirror_sign * math.sin(phase) * error_amplitude
+            ) % 360.0
+
+    @staticmethod
+    def _positive_intercept_time(a: float, b: float, c: float) -> Optional[float]:
+        if abs(a) <= 1e-9:
+            if abs(b) <= 1e-9:
+                return None
+            time = -c / b
+            return time if time > 0.0 else None
+        discriminant = b * b - 4.0 * a * c
+        if discriminant < 0.0:
+            return None
+        root = math.sqrt(discriminant)
+        times = [
+            time
+            for time in ((-b - root) / (2.0 * a), (-b + root) / (2.0 * a))
+            if time > 0.0
+        ]
+        return min(times) if times else None
 
     def _aim_at_position(self, position: Vector) -> None:
         dx = position[0] - self.unit.position[0]
@@ -675,6 +784,15 @@ class EnemyAI:
         )
         if abs(angle_diff) > self.fire_angle_tolerance:
             return False
+        self._fire_requested = True
+        return True
+
+    def commit_fire(self) -> bool:
+        """Commit a shot after every AI has completed the decision phase."""
+
+        if not self._fire_requested:
+            return False
+        self._fire_requested = False
         return self.bullet_manager.fire(self.unit) is not None
 
     # ------------------------------------------------------------------
@@ -770,6 +888,8 @@ class EnemyAI:
             and self.unit.id < partner_ai.unit.id
             and self._frame_count >= self._next_pair_split_frame
             and self._search_coverage() < 0.55
+            and math.hypot(*self.game_map.get_map_size())
+            > float(self.unit.sight_range) * 4.0
         )
         if may_split:
             split_until = self._frame_count + max(90, 210 - 10 * effective_level)
@@ -830,7 +950,7 @@ class EnemyAI:
                 ),
                 fallback=partner_ai._unit_forward_vector(),
             )
-            side = 1.0 if self.unit.id % 2 == 0 else -1.0
+            side = self.strafe_sign
             formation_position = (
                 partner_ai.unit.position[0] - heading[0] * spacing
                 - heading[1] * spacing * 0.35 * side,
@@ -1024,16 +1144,27 @@ class EnemyAI:
             position = ((cell[0] + 0.5) * tile_size, (cell[1] + 0.5) * tile_size)
             return self.game_map.can_place_unit(position, self.unit.collision_size)
 
-        frontier: list[tuple[float, float, tuple[int, int]]] = [(0.0, 0.0, start)]
+        frontier: list[tuple[float, float, int, tuple[int, int]]] = [
+            (0.0, 0.0, 0, start)
+        ]
+        push_order = 0
         came_from: dict[tuple[int, int], Optional[tuple[int, int]]] = {start: None}
         cost_so_far = {start: 0.0}
         while frontier:
-            _, current_cost, current = heapq.heappop(frontier)
+            _, current_cost, _, current = heapq.heappop(frontier)
             if current == goal:
                 break
             if current_cost > cost_so_far.get(current, float("inf")):
                 continue
-            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            x_step = 1 if goal[0] >= current[0] else -1
+            y_step = 1 if goal[1] >= current[1] else -1
+            directions = (
+                (x_step, 0),
+                (0, y_step),
+                (-x_step, 0),
+                (0, -y_step),
+            )
+            for dx, dy in directions:
                 neighbour = (current[0] + dx, current[1] + dy)
                 if not (0 <= neighbour[0] < width and 0 <= neighbour[1] < height):
                     continue
@@ -1044,7 +1175,11 @@ class EnemyAI:
                     continue
                 cost_so_far[neighbour] = new_cost
                 priority = new_cost + abs(goal[0] - neighbour[0]) + abs(goal[1] - neighbour[1])
-                heapq.heappush(frontier, (priority, new_cost, neighbour))
+                push_order += 1
+                heapq.heappush(
+                    frontier,
+                    (priority, new_cost, push_order, neighbour),
+                )
                 came_from[neighbour] = current
 
         if goal not in came_from:
@@ -1072,11 +1207,11 @@ class EnemyAI:
         steering_due = (
             self._cached_steering_direction is None
             or direction_changed
-            or (self._frame_count + int(self.unit.id)) % self._steering_interval == 0
+            or (self._frame_count + self._decision_phase) % self._steering_interval == 0
         )
         if steering_due:
             desired = self._blend_separation(requested)
-            if self.intelligence_level >= 7:
+            if self.intelligence_level >= 8:
                 evade = self._get_bullet_evasion_direction(desired)
                 if evade is not None:
                     desired = evade
@@ -1242,7 +1377,7 @@ class EnemyAI:
             weight = (self.SEPARATION_DISTANCE - distance) / self.SEPARATION_DISTANCE
             repel_x += dx / distance * weight
             repel_y += dy / distance * weight
-        separation_weight = 0.55 + 0.06 * self.intelligence_level
+        separation_weight = 0.55 + 0.06 * min(self.intelligence_level, 6)
         mixed = (
             desired[0] + repel_x * separation_weight,
             desired[1] + repel_y * separation_weight,
@@ -1257,6 +1392,13 @@ class EnemyAI:
         if not threats:
             return None
         bullet = min(threats, key=lambda item: math.dist(item.position, self.unit.position))
+        expected_damage = float(getattr(bullet, "base_damage", 0.0))
+        if getattr(bullet, "is_explosive", False):
+            expected_damage += float(getattr(bullet, "explosion_damage_rate", 0.0)) * 10.0
+        damage_fraction = expected_damage / max(1.0, float(self.unit.health))
+        required_fraction = max(0.16, 0.34 - 0.015 * self.intelligence_level)
+        if damage_fraction < required_fraction:
+            return None
         velocity = self._normalize(
             (float(bullet.velocity[0]), float(bullet.velocity[1]))
         )
@@ -1309,6 +1451,16 @@ class EnemyAI:
     def _update_unit_radius(self) -> None:
         width, height = self.unit.collision_size
         self.unit_radius = math.hypot(width, height) / 2.0
+
+    def _initial_lateral_sign(self) -> float:
+        """Choose mirrored lateral motion from spawn side and formation lane."""
+
+        map_width, _ = self.game_map.get_map_size()
+        tile_size = max(1.0, float(getattr(self.game_map, "tile_size", 64)))
+        side_sign = 1.0 if self.unit.position[0] <= map_width * 0.5 else -1.0
+        lane = int(self.unit.position[1] // tile_size)
+        lane_sign = 1.0 if lane % 2 == 0 else -1.0
+        return side_sign * lane_sign
 
     def _distance_to(self, target: BaseUnit) -> float:
         return self._distance_to_position(target.position)

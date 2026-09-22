@@ -14,7 +14,13 @@ from game.BattleState import (
 from game.Bullet.BulletManager import BulletManager
 import game.GameMode as GameMode
 from game.Map.GameMap import GameMap, create_builtin_map, create_empty_map
-from game.Parameter import ACC, Direction, Team, UNIT_MIN_SIGHT_RATIO
+from game.Parameter import (
+    ACC,
+    DEFAULT_AI_INTELLIGENCE_LEVEL,
+    Direction,
+    Team,
+    UNIT_MIN_SIGHT_RATIO,
+)
 from game.Unit.UnitManager import UnitManager
 from game.utils import centered_rect
 
@@ -149,6 +155,7 @@ class BattleWorld:
         *,
         unit_id: int | None = None,
         using_ai: bool = False,
+        ai_intelligence_level: int = DEFAULT_AI_INTELLIGENCE_LEVEL,
         visible: bool = True,
         sight_range: float | None = None,
         communication_range: float | None = None,
@@ -172,6 +179,7 @@ class BattleWorld:
             team,
             position,
             using_ai=using_ai,
+            ai_intelligence_level=ai_intelligence_level,
             visible=visible,
         )
         if sight_range is not None:

@@ -18,7 +18,7 @@ _PROJECTILE_SEQUENCE = count()
 class BaseUnit:
     def __init__(self, unit_id, unit_team, usingAI, unit_type, body_image_path, turret_image_path,
                  size=(1.0, 1.0),
-                 visible=True, 
+                 visible=True,
                  max_speed_rate=1.0, 
                  max_acceleration_rate=INF, 
                  min_acceleration_rate=-INF, 
@@ -30,7 +30,8 @@ class BaseUnit:
                  armor_type=ArmorType.NONE, 
                  ammunition_types=None,
                  ammo_switch_time=UNIT_AMMO_SWITCH_TIME,
-                 collision_size=None):
+                 collision_size=None,
+                 ai_intelligence_level=DEFAULT_AI_INTELLIGENCE_LEVEL):
         
         # 基本信息
         self.id: int = unit_id
@@ -48,7 +49,10 @@ class BaseUnit:
             raise ValueError("collision_size dimensions must be > 0")
         self.collision_scale = 1.0
         self.collision_size = self.base_collision_size
-        self.usingAI = usingAI
+        self.usingAI: bool = bool(usingAI)
+        self.ai_intelligence_level = int(ai_intelligence_level)
+        if not 1 <= self.ai_intelligence_level <= 9:
+            raise ValueError("ai_intelligence_level must be between 1 and 9")
         self.visible = visible
         
         # 基本属性
@@ -380,9 +384,7 @@ class BaseUnit:
     
     def _update_bounding_box(self) -> None:
         if self.size[0] > 0 and self.size[1] > 0:
-            x, y = self.position
-            width, height = self.size
-            self.bounding_box = pygame.Rect(x - width / 2, y - height / 2, width, height)
+            self.bounding_box = centered_rect(self.position, self.size)
 
     def _update_collision_box(self) -> None:
         self.collision_box = centered_rect(self.position, self.collision_size)

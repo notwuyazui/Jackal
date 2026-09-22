@@ -43,9 +43,12 @@ class BulletManager:
         unit_manager: UnitManager,
         game_map: GameMap,
     ) -> None:
+        update_order = list(self.bullets)
+        if getattr(unit_manager, "current_tick", 0) % 2 == 0:
+            update_order.reverse()
         inactive = [
             bullet
-            for bullet in self.bullets
+            for bullet in update_order
             if not bullet.update(delta_time, unit_manager, game_map)
         ]
         if inactive:

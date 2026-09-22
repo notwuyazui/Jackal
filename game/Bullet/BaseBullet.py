@@ -95,14 +95,7 @@ class BaseBullet:
     
     def _update_bounding_box(self) -> pygame.Rect:
         """更新碰撞箱"""
-        x, y = self.position
-        width, height = self.size
-        self.bounding_box = pygame.Rect(
-            x - width / 2,
-            y - height / 2,
-            width,
-            height
-        )
+        self.bounding_box = centered_rect(self.position, self.size)
         return self.bounding_box
     
     def update(self, delta_time: float, unit_manager, game_map) -> bool:
@@ -174,16 +167,27 @@ class BaseBullet:
     
     def _check_unit_collision(self, unit_manager, game_map):
         """检查与单位的碰撞"""
+        colliding_enemies = []
         for unit in unit_manager.get_candidate_units(self.bounding_box):
             # 跳过无效单位
             if not hasattr(unit, 'is_alive') or not unit.is_alive:
                 continue
-                
+            if getattr(unit, 'team', self.shooter_team) == self.shooter_team:
+                continue
+
             # 检查碰撞
             if (hasattr(unit, 'bounding_box') and unit.bounding_box and 
                 self.bounding_box.colliderect(unit.bounding_box)):
-                return unit
-        return None
+                colliding_enemies.append(unit)
+        if not colliding_enemies:
+            return None
+        return min(
+            colliding_enemies,
+            key=lambda unit: (
+                math.dist(self.position, unit.position),
+                int(unit.id),
+            ),
+        )
     
     def _handle_obstacle_collision(self):
         
