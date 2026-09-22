@@ -10,130 +10,18 @@
     "use_video": false,
     "video_dir": "artifacts/videos/marl2_eval",
     "auto_aim": true,
-    "map_name": "valley",
+    "game_state_file": "valley_map_5v5_1",
     "include_map_features": true,
     "obs_map_grid_size": 7,
     "obs_map_cell_size": 64,
     "state_map_grid_size": 10,
-    "n_agents": 5,
-    "n_enemies": 5,
-    "unit_sight_range": 420.0,
-    "ally_unit_types": [
-      "tank",
-      "tank",
-      "tank",
-      "archie",
-      "archie"
-    ],
-    "enemy_unit_types": [
-      "tank",
-      "tank",
-      "tank",
-      "archie",
-      "archie"
-    ],
     "unit_type_names": [
       "tank",
       "archie"
     ],
     "include_unit_type_onehot": true,
-    "ally_positions": [
-      [
-        330,
-        170
-      ],
-      [
-        416,
-        320
-      ],
-      [
-        330,
-        470
-      ],
-      [
-        260,
-        112
-      ],
-      [
-        260,
-        528
-      ]
-    ],
-    "enemy_positions": [
-      [
-        630,
-        170
-      ],
-      [
-        544,
-        320
-      ],
-      [
-        630,
-        470
-      ],
-      [
-        700,
-        112
-      ],
-      [
-        700,
-        528
-      ]
-    ],
-    "ally_initial_headings": [
-      90.0,
-      90.0,
-      90.0,
-      90.0,
-      90.0
-    ],
-    "enemy_initial_headings": [
-      270.0,
-      270.0,
-      270.0,
-      270.0,
-      270.0
-    ],
     "max_steps": 2200,
     "enemy_use_ai": true,
-    "ally_unit_type_scales": {
-      "tank": {
-        "health": 2.5
-      },
-      "archie": {
-        "health": 2.0,
-        "turret_turn": 3.6
-      }
-    },
-    "enemy_unit_type_scales": {
-      "tank": {
-        "health": 2.5,
-        "turret_turn": 2.25
-      },
-      "archie": {
-        "health": 2.0,
-        "turret_turn": 3.6
-      }
-    },
-    "agent_fire_cooldown_by_type": {
-      "tank": 1.0,
-      "archie": 1.6
-    },
-    "enemy_ai_fire_cooldown_by_type": {
-      "tank": 1.5,
-      "archie": 2.0
-    },
-    "enemy_ai_fire_angle_tolerance": 5.0,
-    "bullet_overrides_by_unit_type": {
-      "archie": {
-        "rocket_shell": {
-          "damage_rate": 1.25,
-          "explosion_damage_rate": 1.25,
-          "explosion_radius": 65.0
-        }
-      }
-    },
     "reward_config": {
       "auto_aim": {
         "enemy_limit_scale": 0.0026,

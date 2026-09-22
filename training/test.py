@@ -15,63 +15,26 @@ from environment.rendering import PygameRenderer
 
 def init_game(map_name="test_map"):
     world = BattleWorld()
-    enemy_ai_intelligence_level = 9
-    player_ai_intelligence_level = 1
-    if map_name == "test_map":
-        world.load_builtin_map("test_map")
-        units = [
-            ("tank", 0, Team.PLAYER, (100, 500), False),
-            ("tank", 101, Team.PLAYER, (256, 448), True),
-            ("tank", 102, Team.PLAYER, (480, 512), True),
-            ("tank", 103, Team.PLAYER, (768, 448), True),
-            ("archie", 104, Team.PLAYER, (256, 512), True),
-            ("plane", 105, Team.PLAYER, (480, 448), True),
-            ("archie", 106, Team.PLAYER, (768, 512), True),
-            ("archie", 201, Team.ENEMY, (256, 192), True),
-            ("archie", 202, Team.ENEMY, (480, 128), True),
-            ("archie", 203, Team.ENEMY, (768, 192), True),
-            ("tank", 204, Team.ENEMY, (256, 128), True),
-            ("plane", 205, Team.ENEMY, (480, 192), True),
-            ("tank", 206, Team.ENEMY, (768, 128), True),
-        ]
-    elif map_name == "big_map_test":
-        world.load_builtin_map("big_map_test")
-        units = [
-            ("tank", 0, Team.PLAYER, (100, 100), False),
-            ("tank", 109, Team.PLAYER, (480, 416), True),
-            ("plane", 101, Team.PLAYER, (652, 512), True),
-            ("archie", 102, Team.PLAYER, (672, 160), True),
-            ("archie", 103, Team.PLAYER, (672, 352), True),
-            ("archie", 104, Team.PLAYER, (672, 672), True),
-            ("archie", 105, Team.PLAYER, (672, 864), True),
-            ("tank", 106, Team.PLAYER, (352, 96), True),
-            ("tank", 107, Team.PLAYER, (480, 608), True),
-            ("tank", 108, Team.PLAYER, (352, 928), True),
-            ("tank", 201, Team.ENEMY, (1120, 416), True),
-            ("plane", 202, Team.ENEMY, (948, 512), True),
-            ("archie", 203, Team.ENEMY, (928, 160), True),
-            ("archie", 204, Team.ENEMY, (928, 352), True),
-            ("archie", 205, Team.ENEMY, (928, 672), True),
-            ("archie", 206, Team.ENEMY, (928, 864), True),
-            ("tank", 207, Team.ENEMY, (1248, 96), True),
-            ("tank", 208, Team.ENEMY, (1120, 608), True),
-            ("tank", 209, Team.ENEMY, (1248, 928), True),
-        ]
-    else:
+    state_names = {
+        "test_map": ("test_map_7v7_1", (100, 500)),
+        "big_map_test": ("big_map_test_9v9_1", (100, 100)),
+    }
+    if map_name not in state_names:
         raise ValueError(
             f"Unsupported test map {map_name!r}; "
             "expected 'test_map' or 'big_map_test'"
         )
-
-    for unit_type, unit_id, team, position, using_ai in units:
-        world.create_unit(
-            unit_type,
-            team,
-            position,
-            unit_id=unit_id,
-            using_ai=using_ai,
-            ai_intelligence_level=player_ai_intelligence_level if team == Team.PLAYER else enemy_ai_intelligence_level
-        )
+    state_name, keyboard_spawn = state_names[map_name]
+    world.load_game_state(state_name)
+    # unit_id=0 is intentionally local to keyboard play and never belongs to a
+    # reusable game-state file or a reinforcement-learning episode.
+    world.create_unit(
+        "tank",
+        Team.PLAYER,
+        keyboard_spawn,
+        unit_id=0,
+        using_ai=False,
+    )
     return world
 
 if __name__ == "__main__":

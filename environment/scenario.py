@@ -22,6 +22,7 @@ class ScenarioConfig:
     map_name: str
     map_file: str | None
     map_data: Sequence[str] | None
+    game_state_file: str | None
     map_tile_size: int
     arena_size: tuple[float, float]
     ally_positions: Sequence[Sequence[float]]
@@ -102,6 +103,33 @@ def build_episode(
         use_tear_drop_vision=config.use_tear_drop_vision,
         auto_communicate=config.auto_communicate,
     )
+    if config.game_state_file:
+        world = BattleWorld(unit_manager=unit_manager)
+        world.load_game_state(
+            config.game_state_file,
+            using_ai_by_team={
+                Team.PLAYER: False,
+                Team.ENEMY: config.enemy_use_ai,
+            },
+            ai_intelligence_by_team={
+                Team.ENEMY: config.enemy_ai_intelligence_level,
+            },
+            position_jitter=config.position_jitter,
+            heading_jitter=config.heading_jitter,
+        )
+        allies = [
+            unit
+            for unit in world.unit_manager.units
+            if unit.team == Team.PLAYER
+        ]
+        enemies = [
+            unit
+            for unit in world.unit_manager.units
+            if unit.team == Team.ENEMY
+        ]
+        world.refresh_vision()
+        return EpisodeScenario(world, allies, enemies)
+
     world = BattleWorld(
         game_map
         if game_map is not None

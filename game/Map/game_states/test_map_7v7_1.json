@@ -1,0 +1,129 @@
+{
+  "format": "jackal-game-state",
+  "version": 1,
+  "map": {
+    "tile_size": 64,
+    "tiles": [
+      "xxxxxxxxxxxxxxx",
+      "xooooooooooooox",
+      "xooooooooooooox",
+      "xooooooooooooox",
+      "xwwwwooooowwwwx",
+      "xwwwwooooowwwwx",
+      "xooooooooooooox",
+      "xooooooooooooox",
+      "xooooooooooooox",
+      "xxxxxxxxxxxxxxx"
+    ]
+  },
+  "rules": {
+    "enable_unit_collision": true,
+    "use_tear_drop_vision": false,
+    "auto_communicate": false
+  },
+  "world": {
+    "tick": 0,
+    "elapsed_time": 0.0,
+    "print_record_timer": 0.0,
+    "camera_offset": [0.0, 0.0]
+  },
+  "units": [
+    {
+      "unit_id": 101,
+      "unit_type": "tank",
+      "team": "PLAYER",
+      "position": [256.0, 448.0],
+      "using_ai": true,
+      "ai_intelligence_level": 5
+    },
+    {
+      "unit_id": 102,
+      "unit_type": "tank",
+      "team": "PLAYER",
+      "position": [480.0, 512.0],
+      "using_ai": true,
+      "ai_intelligence_level": 5
+    },
+    {
+      "unit_id": 103,
+      "unit_type": "tank",
+      "team": "PLAYER",
+      "position": [768.0, 448.0],
+      "using_ai": true,
+      "ai_intelligence_level": 5
+    },
+    {
+      "unit_id": 104,
+      "unit_type": "archie",
+      "team": "PLAYER",
+      "position": [256.0, 512.0],
+      "using_ai": true,
+      "ai_intelligence_level": 5
+    },
+    {
+      "unit_id": 105,
+      "unit_type": "plane",
+      "team": "PLAYER",
+      "position": [480.0, 448.0],
+      "using_ai": true,
+      "ai_intelligence_level": 5
+    },
+    {
+      "unit_id": 106,
+      "unit_type": "archie",
+      "team": "PLAYER",
+      "position": [768.0, 512.0],
+      "using_ai": true,
+      "ai_intelligence_level": 5
+    },
+    {
+      "unit_id": 201,
+      "unit_type": "archie",
+      "team": "ENEMY",
+      "position": [256.0, 192.0],
+      "using_ai": true,
+      "ai_intelligence_level": 5
+    },
+    {
+      "unit_id": 202,
+      "unit_type": "archie",
+      "team": "ENEMY",
+      "position": [480.0, 128.0],
+      "using_ai": true,
+      "ai_intelligence_level": 5
+    },
+    {
+      "unit_id": 203,
+      "unit_type": "archie",
+      "team": "ENEMY",
+      "position": [768.0, 192.0],
+      "using_ai": true,
+      "ai_intelligence_level": 5
+    },
+    {
+      "unit_id": 204,
+      "unit_type": "tank",
+      "team": "ENEMY",
+      "position": [256.0, 128.0],
+      "using_ai": true,
+      "ai_intelligence_level": 5
+    },
+    {
+      "unit_id": 205,
+      "unit_type": "plane",
+      "team": "ENEMY",
+      "position": [480.0, 192.0],
+      "using_ai": true,
+      "ai_intelligence_level": 5
+    },
+    {
+      "unit_id": 206,
+      "unit_type": "tank",
+      "team": "ENEMY",
+      "position": [768.0, 128.0],
+      "using_ai": true,
+      "ai_intelligence_level": 5
+    }
+  ],
+  "bullets": []
+}

@@ -3,7 +3,7 @@ import datetime
 from typing import Optional
 
 import game.GameMode as GameMode
-from game.Parameter import BULLET_SPEED, DEFAULT_AI_INTELLIGENCE_LEVEL
+from game.Parameter import BULLET_SPEED, DEFAULT_AI_INTELLIGENCE_LEVEL, Team
 from game.Map.GameMap import GameMap
 from game.Bullet.BulletManager import BulletManager
 from game.BattleState import WorldSnapshot
@@ -32,6 +32,7 @@ class JackalEnv:
         map_name="border",
         map_file=None,
         map_data=None,
+        game_state_file=None,
         map_tile_size=64,
         viewport_width=960,
         viewport_height=640,
@@ -119,18 +120,66 @@ class JackalEnv:
         if self.viewport_width <= 0 or self.viewport_height <= 0:
             raise ValueError("viewport dimensions must be > 0")
 
+        self.game_state_file = (
+            None if game_state_file is None else str(game_state_file)
+        )
         resolved_map_name = str(map_name or "border").lower()
         resolved_map_tile_size = int(map_tile_size)
-        map_layout = create_scenario_map(
-            map_name=resolved_map_name,
-            map_file=map_file,
-            map_data=map_data,
-            map_tile_size=resolved_map_tile_size,
-        )
+        state_allies = []
+        state_enemies = []
+        if self.game_state_file:
+            # The environment only asks the world boundary to restore state;
+            # it never constructs maps, units, or bullets from the JSON itself.
+            probe_world = BattleWorld(
+                unit_manager=UnitManager(
+                    enable_unit_collision=self.enable_unit_collision,
+                    use_tear_drop_vision=self.use_tear_drop_vision,
+                    auto_communicate=self.auto_communicate,
+                )
+            )
+            probe_world.load_game_state(
+                self.game_state_file,
+                using_ai_by_team={
+                    Team.PLAYER: False,
+                    Team.ENEMY: bool(enemy_use_ai),
+                },
+                ai_intelligence_by_team={
+                    Team.ENEMY: int(enemy_ai_intelligence_level),
+                },
+            )
+            self.enable_unit_collision = (
+                probe_world.unit_manager.enable_unit_collision
+            )
+            self.use_tear_drop_vision = (
+                probe_world.unit_manager.use_tear_drop_vision
+            )
+            self.auto_communicate = (
+                probe_world.unit_manager.auto_communicate_enabled
+            )
+            map_layout = probe_world.game_map
+            state_allies = [
+                unit
+                for unit in probe_world.unit_manager.units
+                if unit.team == Team.PLAYER
+            ]
+            state_enemies = [
+                unit
+                for unit in probe_world.unit_manager.units
+                if unit.team == Team.ENEMY
+            ]
+        else:
+            map_layout = create_scenario_map(
+                map_name=resolved_map_name,
+                map_file=map_file,
+                map_data=map_data,
+                map_tile_size=resolved_map_tile_size,
+            )
         self.world_width, self.world_height = map_layout.get_map_size()
         if self.world_width <= 0 or self.world_height <= 0:
             raise ValueError("map dimensions must be > 0")
-        self._initial_map: Optional[GameMap] = map_layout
+        self._initial_map: Optional[GameMap] = (
+            None if self.game_state_file else map_layout
+        )
 
         self.renderer = (
             PygameRenderer(
@@ -143,8 +192,8 @@ class JackalEnv:
             else None
         )
 
-        self.n_agents = int(n_agents)
-        self.n_enemies = int(n_enemies)
+        self.n_agents = len(state_allies) if self.game_state_file else int(n_agents)
+        self.n_enemies = len(state_enemies) if self.game_state_file else int(n_enemies)
         if self.n_agents <= 0:
             raise ValueError("n_agents must be >= 1")
         if self.n_enemies <= 0:
@@ -153,19 +202,34 @@ class JackalEnv:
         if not 1 <= self.enemy_ai_intelligence_level <= 9:
             raise ValueError("enemy_ai_intelligence_level must be between 1 and 9")
 
-        ally_positions = (
-            [tuple(pos) for pos in ally_positions]
-            if ally_positions is not None
-            else default_positions(self.n_agents, enemy=False)
-        )
-        enemy_positions = (
-            [tuple(pos) for pos in enemy_positions]
-            if enemy_positions is not None
-            else default_positions(self.n_enemies, enemy=True)
-        )
+        if self.game_state_file:
+            ally_positions = [tuple(unit.position) for unit in state_allies]
+            enemy_positions = [tuple(unit.position) for unit in state_enemies]
+            ally_unit_types = [unit.unit_type for unit in state_allies]
+            enemy_unit_types = [unit.unit_type for unit in state_enemies]
+        else:
+            ally_positions = (
+                [tuple(pos) for pos in ally_positions]
+                if ally_positions is not None
+                else default_positions(self.n_agents, enemy=False)
+            )
+            enemy_positions = (
+                [tuple(pos) for pos in enemy_positions]
+                if enemy_positions is not None
+                else default_positions(self.n_enemies, enemy=True)
+            )
         self.max_steps = int(max_steps)
 
-        self.unit_type_names = list(unit_type_names) if unit_type_names is not None else ["tank", "archie"]
+        if unit_type_names is not None:
+            self.unit_type_names = list(unit_type_names)
+        elif self.game_state_file:
+            self.unit_type_names = list(
+                dict.fromkeys(
+                    [unit.unit_type for unit in state_allies + state_enemies]
+                )
+            )
+        else:
+            self.unit_type_names = ["tank", "archie"]
         self.include_unit_type_onehot = bool(include_unit_type_onehot)
         self.unit_type_dim = len(self.unit_type_names) if self.include_unit_type_onehot else 0
         ally_unit_types = normalize_unit_types(
@@ -198,6 +262,7 @@ class JackalEnv:
             map_name=resolved_map_name,
             map_file=map_file,
             map_data=map_data,
+            game_state_file=self.game_state_file,
             map_tile_size=resolved_map_tile_size,
             arena_size=(self.world_width, self.world_height),
             ally_positions=ally_positions,
@@ -228,7 +293,11 @@ class JackalEnv:
         )
         self.max_obs_bullets = 3
         self.max_state_bullets = 10
-        self.obs_sight_range = float(unit_sight_range)
+        self.obs_sight_range = (
+            max(float(unit.sight_range) for unit in state_allies)
+            if state_allies
+            else float(unit_sight_range)
+        )
         self.bullet_norm_speed = max(1.0, float(BULLET_SPEED))
 
         observation_config = ObservationConfig(

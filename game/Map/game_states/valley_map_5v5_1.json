@@ -1,0 +1,118 @@
+{
+  "format": "jackal-game-state",
+  "version": 1,
+  "map": {
+    "tile_size": 64,
+    "tiles": [
+      "xxxxxxxxxxxxxxx",
+      "xoooooxxxooooox",
+      "xooooooooooooox",
+      "xwwwwwooowwwwwx",
+      "xxxxwwoxowwxxxx",
+      "xxxxwwoxowwxxxx",
+      "xwwwwwooowwwwwx",
+      "xooooooooooooox",
+      "xoooooxxxooooox",
+      "xxxxxxxxxxxxxxx"
+    ]
+  },
+  "rules": {
+    "enable_unit_collision": true,
+    "use_tear_drop_vision": false,
+    "auto_communicate": false
+  },
+  "world": {
+    "tick": 0,
+    "elapsed_time": 0.0,
+    "print_record_timer": 0.0,
+    "unit_collision_count": 0,
+    "camera_offset": [0.0, 0.0]
+  },
+  "units": [
+    {
+      "unit_id": 1, "unit_type": "tank", "team": "PLAYER",
+      "position": [330.0, 170.0], "using_ai": false, "ai_intelligence_level": 5,
+      "sight_range": 420.0, "communication_range": 420.0,
+      "max_health": 250.0, "health": 250.0, "turret_angular_speed": 150.0,
+      "fire_cooldown_override": 1.0,
+      "direction_angle": 90.0, "turret_direction_angle": 90.0, "turret_target_angle": 90.0
+    },
+    {
+      "unit_id": 2, "unit_type": "tank", "team": "PLAYER",
+      "position": [416.0, 320.0], "using_ai": false, "ai_intelligence_level": 5,
+      "sight_range": 420.0, "communication_range": 420.0,
+      "max_health": 250.0, "health": 250.0, "turret_angular_speed": 150.0,
+      "fire_cooldown_override": 1.0,
+      "direction_angle": 90.0, "turret_direction_angle": 90.0, "turret_target_angle": 90.0
+    },
+    {
+      "unit_id": 3, "unit_type": "tank", "team": "PLAYER",
+      "position": [330.0, 470.0], "using_ai": false, "ai_intelligence_level": 5,
+      "sight_range": 420.0, "communication_range": 420.0,
+      "max_health": 250.0, "health": 250.0, "turret_angular_speed": 150.0,
+      "fire_cooldown_override": 1.0,
+      "direction_angle": 90.0, "turret_direction_angle": 90.0, "turret_target_angle": 90.0
+    },
+    {
+      "unit_id": 4, "unit_type": "archie", "team": "PLAYER",
+      "position": [260.0, 112.0], "using_ai": false, "ai_intelligence_level": 5,
+      "sight_range": 420.0, "communication_range": 420.0,
+      "max_health": 400.0, "health": 400.0, "turret_angular_speed": 216.0,
+      "fire_cooldown_override": 1.6,
+      "projectile_overrides": {"rocket_shell": {"damage_rate": 1.25, "explosion_damage_rate": 1.25, "explosion_radius": 65.0}},
+      "direction_angle": 90.0, "turret_direction_angle": 90.0, "turret_target_angle": 90.0
+    },
+    {
+      "unit_id": 5, "unit_type": "archie", "team": "PLAYER",
+      "position": [260.0, 528.0], "using_ai": false, "ai_intelligence_level": 5,
+      "sight_range": 420.0, "communication_range": 420.0,
+      "max_health": 400.0, "health": 400.0, "turret_angular_speed": 216.0,
+      "fire_cooldown_override": 1.6,
+      "projectile_overrides": {"rocket_shell": {"damage_rate": 1.25, "explosion_damage_rate": 1.25, "explosion_radius": 65.0}},
+      "direction_angle": 90.0, "turret_direction_angle": 90.0, "turret_target_angle": 90.0
+    },
+    {
+      "unit_id": 100, "unit_type": "tank", "team": "ENEMY",
+      "position": [630.0, 170.0], "using_ai": true, "ai_intelligence_level": 5,
+      "sight_range": 420.0, "communication_range": 420.0,
+      "max_health": 250.0, "health": 250.0, "turret_angular_speed": 225.0,
+      "fire_cooldown_override": 1.5, "ai_fire_angle_tolerance": 5.0,
+      "direction_angle": 270.0, "turret_direction_angle": 270.0, "turret_target_angle": 270.0
+    },
+    {
+      "unit_id": 101, "unit_type": "tank", "team": "ENEMY",
+      "position": [544.0, 320.0], "using_ai": true, "ai_intelligence_level": 5,
+      "sight_range": 420.0, "communication_range": 420.0,
+      "max_health": 250.0, "health": 250.0, "turret_angular_speed": 225.0,
+      "fire_cooldown_override": 1.5, "ai_fire_angle_tolerance": 5.0,
+      "direction_angle": 270.0, "turret_direction_angle": 270.0, "turret_target_angle": 270.0
+    },
+    {
+      "unit_id": 102, "unit_type": "tank", "team": "ENEMY",
+      "position": [630.0, 470.0], "using_ai": true, "ai_intelligence_level": 5,
+      "sight_range": 420.0, "communication_range": 420.0,
+      "max_health": 250.0, "health": 250.0, "turret_angular_speed": 225.0,
+      "fire_cooldown_override": 1.5, "ai_fire_angle_tolerance": 5.0,
+      "direction_angle": 270.0, "turret_direction_angle": 270.0, "turret_target_angle": 270.0
+    },
+    {
+      "unit_id": 103, "unit_type": "archie", "team": "ENEMY",
+      "position": [700.0, 112.0], "using_ai": true, "ai_intelligence_level": 5,
+      "sight_range": 420.0, "communication_range": 420.0,
+      "max_health": 400.0, "health": 400.0, "turret_angular_speed": 216.0,
+      "fire_cooldown_override": 2.0, "ai_fire_angle_tolerance": 5.0,
+      "projectile_overrides": {"rocket_shell": {"damage_rate": 1.25, "explosion_damage_rate": 1.25, "explosion_radius": 65.0}},
+      "direction_angle": 270.0, "turret_direction_angle": 270.0, "turret_target_angle": 270.0
+    },
+    {
+      "unit_id": 104, "unit_type": "archie", "team": "ENEMY",
+      "position": [700.0, 528.0], "using_ai": true, "ai_intelligence_level": 5,
+      "sight_range": 420.0, "communication_range": 420.0,
+      "max_health": 400.0, "health": 400.0, "turret_angular_speed": 216.0,
+      "fire_cooldown_override": 2.0, "ai_fire_angle_tolerance": 5.0,
+      "projectile_overrides": {"rocket_shell": {"damage_rate": 1.25, "explosion_damage_rate": 1.25, "explosion_radius": 65.0}},
+      "direction_angle": 270.0, "turret_direction_angle": 270.0, "turret_target_angle": 270.0
+    }
+  ],
+  "bullets": []
+}

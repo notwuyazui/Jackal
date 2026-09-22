@@ -651,7 +651,10 @@ def main(argv=None, *, prog=None):
             ),
         }
 
-    print(f"[Train] device={device} n_agents={env_info['n_agents']} n_enemies={cfg['env'].get('n_enemies')} n_actions={env_info['n_actions']}")
+    print(
+        f"[Train] device={device} n_agents={env_info['n_agents']} "
+        f"n_enemies={env_info['n_enemies']} n_actions={env_info['n_actions']}"
+    )
     print(f"[Train] t_max={t_max} episode_limit={env_info['episode_limit']} exp={exp_name}")
     if runner_is_parallel:
         print(f"[Train] runner=parallel parallel_envs={parallel_envs} start_method={parallel_start_method}")
