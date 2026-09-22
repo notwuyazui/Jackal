@@ -21,9 +21,9 @@ class Plane(BaseUnit):
         self.max_acceleration_rate = 0.0
         self.min_acceleration_rate = 0.0
         self.max_angular_speed_rate = 0.0
-        self.turret_angular_speed_rate = 1.0
-        self.max_health_rate = 5.0
-        self.sight_range = 200
+        self.turret_angular_speed_rate = 0.5
+        self.max_health_rate = 4.0
+        self.sight_range = 300
         self.communication_range = 200
         self.armor_type = ArmorType.HEAVY                                                        # 护甲类型
         self.ammunition_types = ['heavy_shell']                                                      # 单位拥有弹种

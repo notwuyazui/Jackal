@@ -8,9 +8,9 @@ from game.Parameter import *
 
 class Tank(BaseUnit):
     # 玩家坦克炮塔转速倍率（相对 Parameter.UNIT_TURRET_ANGULAR_SPEED）
-    PLAYER_TURRET_SPEED_RATE = 1.8
+    PLAYER_TURRET_SPEED_RATE = 1.5
     # 敌方保持原有转速，避免整体难度和行为模式突变
-    ENEMY_TURRET_SPEED_RATE = 0.8
+    ENEMY_TURRET_SPEED_RATE = 1.0
     
     def __init__(self, unit_id: int, unit_team: Team, usingAI = False, visible = True):
         

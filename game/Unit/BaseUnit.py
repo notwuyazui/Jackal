@@ -444,13 +444,13 @@ class BaseUnit:
         bullet_direction = (math.cos(turret_angle_rad), math.sin(turret_angle_rad))
         
         try:
-            bullet_kwargs = dict(
-                projectile_id=f"bullet_{self.id}_{next(_PROJECTILE_SEQUENCE)}",
-                shooter=self,
-                shooter_team=self.team,
-                position=(bullet_start_x, bullet_start_y),
-                velocity_direction=bullet_direction,
-            )
+            bullet_kwargs: dict[str, Any] = {
+                "projectile_id": f"bullet_{self.id}_{next(_PROJECTILE_SEQUENCE)}",
+                "shooter": self,
+                "shooter_team": self.team,
+                "position": (bullet_start_x, bullet_start_y),
+                "velocity_direction": bullet_direction,
+            }
             if bullet_class is registered_bullet_class:
                 bullet_kwargs["spec"] = self.get_weapon_spec()
             bullet = bullet_class(**bullet_kwargs)

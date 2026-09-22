@@ -35,20 +35,24 @@ def init_game(map_name="test_map"):
     elif map_name == "big_map_test":
         world.load_builtin_map("big_map_test")
         units = [
-            ("tank", 0, Team.PLAYER, (544, 480), False),
-            ("archie", 101, Team.PLAYER, (224, 160), True),
-            ("plane", 102, Team.PLAYER, (352, 352), True),
-            ("tank", 103, Team.PLAYER, (224, 480), True),
-            ("archie", 104, Team.PLAYER, (416, 608), True),
-            ("plane", 105, Team.PLAYER, (544, 736), True),
-            ("tank", 106, Team.PLAYER, (352, 864), True),
-            ("tank", 201, Team.ENEMY, (1056, 480), True),
-            ("archie", 202, Team.ENEMY, (1376, 160), True),
-            ("plane", 203, Team.ENEMY, (1248, 352), True),
-            ("tank", 204, Team.ENEMY, (1376, 480), True),
-            ("archie", 205, Team.ENEMY, (1184, 608), True),
-            ("plane", 206, Team.ENEMY, (1056, 736), True),
-            ("tank", 207, Team.ENEMY, (1248, 864), True),
+            ("tank", 0, Team.PLAYER, (480, 416), False),
+            ("plane", 101, Team.PLAYER, (652, 512), True),
+            ("archie", 102, Team.PLAYER, (672, 160), True),
+            ("archie", 103, Team.PLAYER, (672, 352), True),
+            ("archie", 104, Team.PLAYER, (672, 672), True),
+            ("archie", 105, Team.PLAYER, (672, 864), True),
+            ("tank", 106, Team.PLAYER, (352, 96), True),
+            ("tank", 107, Team.PLAYER, (480, 608), True),
+            ("tank", 108, Team.PLAYER, (352, 928), True),
+            ("tank", 201, Team.ENEMY, (1120, 416), True),
+            ("plane", 202, Team.ENEMY, (948, 512), True),
+            ("archie", 203, Team.ENEMY, (928, 160), True),
+            ("archie", 204, Team.ENEMY, (928, 352), True),
+            ("archie", 205, Team.ENEMY, (928, 672), True),
+            ("archie", 206, Team.ENEMY, (928, 864), True),
+            ("tank", 207, Team.ENEMY, (1248, 96), True),
+            ("tank", 208, Team.ENEMY, (1120, 608), True),
+            ("tank", 209, Team.ENEMY, (1248, 928), True),
         ]
     else:
         raise ValueError(
@@ -72,7 +76,7 @@ if __name__ == "__main__":
     clock = pygame.time.Clock()
     
     # 添加地图和单位
-    map_name = sys.argv[1] if len(sys.argv) > 1 else "big_map_test"
+    map_name = sys.argv[1] if len(sys.argv) > 1 else "test_map"
     game_manager = init_game(map_name)
     
     action = Action()
