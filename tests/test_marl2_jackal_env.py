@@ -9,6 +9,7 @@ from training.marl2.envs.jackal_env import JackalMultiAgentEnv
 class _FakeJackalEnv:
     def __init__(self, **kwargs):
         self.reset_calls = 0
+        self.last_seed = None
 
     def get_env_info(self):
         return {
@@ -20,16 +21,18 @@ class _FakeJackalEnv:
             "episode_limit": 10,
         }
 
-    def reset(self):
+    def reset(self, seed=None):
         self.reset_calls += 1
+        self.last_seed = seed
         obs = [np.zeros(3, dtype=np.float32) for _ in range(2)]
         state = np.zeros(5, dtype=np.float32)
         return obs, state
 
 
 class _MismatchedJackalEnv(_FakeJackalEnv):
-    def reset(self):
+    def reset(self, seed=None):
         self.reset_calls += 1
+        self.last_seed = seed
         obs = [np.zeros(2, dtype=np.float32) for _ in range(2)]
         state = np.zeros(5, dtype=np.float32)
         return obs, state
@@ -42,9 +45,10 @@ class JackalMultiAgentEnvResetTests(unittest.TestCase):
 
         self.assertEqual(env.env.reset_calls, 0)
 
-        obs, state = env.reset()
+        obs, state = env.reset(seed=123)
 
         self.assertEqual(env.env.reset_calls, 1)
+        self.assertEqual(env.env.last_seed, 123)
         self.assertEqual(obs[0].shape, (3,))
         self.assertEqual(state.shape, (5,))
 

@@ -122,17 +122,21 @@ def evaluate(
                 episode_offset += batch_episodes
         else:
             for idx in range(int(n_episodes)):
-                if use_seed:
-                    ep_seed = resolved_seed_base + idx
+                ep_seed = resolved_seed_base + idx if use_seed else None
+                if ep_seed is not None:
                     random.seed(ep_seed)
-                    np.random.seed(ep_seed)
+                    np.random.seed(ep_seed % (2**32))
                     torch.manual_seed(ep_seed)
                     if device is not None and device.type == "cuda":
                         torch.cuda.manual_seed_all(ep_seed)
                     elif device is not None and device.type == "mps":
                         torch.mps.manual_seed(ep_seed)
 
-                _, stats = runner.run(test_mode=True, epsilon=0.0)
+                _, stats = runner.run(
+                    test_mode=True,
+                    epsilon=0.0,
+                    episode_seed=ep_seed,
+                )
                 returns.append(stats["episode_return"])
                 lengths.append(stats["episode_length"])
                 wins += int(stats["battle_won"])
@@ -322,10 +326,17 @@ def main(argv=None, *, prog=None):
 
     env_name = cfg["env"].get("name", "jackal")
     env_cls = ENV_REGISTRY[env_name]
-    train_env: Any = env_cls(cfg["env"])
+    train_env_args = dict(cfg["env"])
+    train_env_args.setdefault("seed", seed)
+    train_env: Any = env_cls(train_env_args)
     env_info = train_env.get_env_info()
     eval_env_override = cfg.get("eval_env", train_cfg.get("eval_env", {}))
-    eval_env_cfg = merge_dict(cfg["env"], eval_env_override) if eval_env_override else cfg["env"]
+    eval_env_cfg = (
+        merge_dict(cfg["env"], eval_env_override)
+        if eval_env_override
+        else dict(cfg["env"])
+    )
+    eval_env_cfg.setdefault("seed", seed + 100000)
 
     mac = BasicMAC(
         n_agents=env_info["n_agents"],
@@ -383,7 +394,7 @@ def main(argv=None, *, prog=None):
     if runner_type == "parallel" and parallel_envs > 1:
         runner: Any = ParallelEpisodeRunner(
             env_cls=env_cls,
-            env_args=cfg["env"],
+            env_args=train_env_args,
             mac=mac,
             n_envs=parallel_envs,
             seed=seed,

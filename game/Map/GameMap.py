@@ -1,4 +1,5 @@
 import pygame
+from random import Random
 from game.Map.BaseTile import BaseTile
 from game.Map.FlatTile.FlatTile import *
 from game.Map.BarrierTile.BarrierTile import *
@@ -9,7 +10,6 @@ from typing import Callable, Dict, List, Optional, Tuple
 import os
 from game.Parameter import *
 from game.utils import *
-import random
 
 CHAR_TO_TILE = {
     'o': FlatTile,
@@ -364,7 +364,13 @@ def create_four_blocks_map() -> Optional[GameMap]:
     """从 saved/07_four_blocks_map.txt 创建田字形地图。"""
     return GameMap.load_from_file("07_four_blocks_map.txt")
 
-def create_random_map(width: int = 15, height: int = 10, density: float = 0.3) -> GameMap:
+def create_random_map(
+    width: int = 15,
+    height: int = 10,
+    density: float = 0.3,
+    rng: Random | None = None,
+) -> GameMap:
+    map_rng = rng if rng is not None else Random()
     map_data = []
     for y in range(height):
         row = []
@@ -373,18 +379,18 @@ def create_random_map(width: int = 15, height: int = 10, density: float = 0.3) -
             if is_border:
                 row.append('x')
             else:
-                row.append('x' if random.random() < density else 'o')
+                row.append('x' if map_rng.random() < density else 'o')
         map_data.append(''.join(row))
     return GameMap(map_data)
 
 
-def create_builtin_map(name: str) -> GameMap:
+def create_builtin_map(name: str, *, rng: Random | None = None) -> GameMap:
     """按稳定名称创建项目内置地图。"""
     factories: Dict[str, Callable[[], Optional[GameMap]]] = {
         "border": create_border_map,
         "empty": create_empty_map,
         "maze": create_maze_map,
-        "random": create_random_map,
+        "random": lambda: create_random_map(rng=rng),
         "test": create_test_map,
         "big_map_test": create_big_map_test_map,
         "valley": create_valley_map,

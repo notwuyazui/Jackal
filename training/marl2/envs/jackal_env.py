@@ -20,8 +20,8 @@ class JackalMultiAgentEnv:
         self.episode_limit = int(env_info["episode_limit"])
         self._reset_shapes_validated = False
 
-    def reset(self):
-        obs, state = self.env.reset()
+    def reset(self, seed: int | None = None):
+        obs, state = self.env.reset(seed=seed)
         if not self._reset_shapes_validated:
             if obs[0].shape[0] != self.obs_shape or state.shape[0] != self.state_shape:
                 raise RuntimeError("Environment metadata does not match reset output shapes")

@@ -2,7 +2,10 @@ import unittest
 
 import numpy as np
 
-from training.marl2.runners.parallel_episode_runner import ParallelEpisodeRunner
+from training.marl2.runners.parallel_episode_runner import (
+    ParallelEpisodeRunner,
+    _derive_worker_seed,
+)
 
 
 class _FakeConnection:
@@ -36,7 +39,10 @@ class _FakeConnection:
                 (
                     1.0,
                     terminated,
-                    {"battle_won": terminated},
+                    {
+                        "battle_won": terminated,
+                        "episode_seed": self.reset_seeds[-1],
+                    },
                     np.full((1, 1), self.step, dtype=np.float32),
                     np.full(1, self.step, dtype=np.float32),
                     next_avail_actions,
@@ -103,6 +109,15 @@ class ParallelEpisodeRunnerTests(unittest.TestCase):
         self.assertEqual(len(stats), 1)
         self.assertEqual(runner.parent_conns[0].reset_seeds, [123])
         self.assertEqual(runner.parent_conns[1].reset_seeds, [])
+        self.assertEqual(stats[0]["episode_seed"], 123)
+
+    def test_worker_seeds_are_distinct_and_reproducible(self) -> None:
+        first = [_derive_worker_seed(42, index) for index in range(16)]
+        second = [_derive_worker_seed(42, index) for index in range(16)]
+
+        self.assertEqual(first, second)
+        self.assertEqual(len(set(first)), 16)
+        self.assertNotEqual(first, [_derive_worker_seed(43, index) for index in range(16)])
 
 
 if __name__ == "__main__":

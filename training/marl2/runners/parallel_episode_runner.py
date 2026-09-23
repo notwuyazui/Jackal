@@ -6,6 +6,15 @@ import numpy as np
 import torch
 
 
+def _derive_worker_seed(
+    base_seed: int | None,
+    worker_index: int,
+) -> int | None:
+    if base_seed is None:
+        return None
+    return (int(base_seed) + int(worker_index)) % (2**32)
+
+
 def _env_worker(remote, parent_remote, env_cls, env_args, seed):
     parent_remote.close()
 
@@ -14,7 +23,10 @@ def _env_worker(remote, parent_remote, env_cls, env_args, seed):
         np.random.seed(seed)
         torch.manual_seed(seed)
 
-    env = env_cls(env_args)
+    worker_env_args = dict(env_args)
+    if seed is not None:
+        worker_env_args["seed"] = int(seed)
+    env = env_cls(worker_env_args)
 
     try:
         while True:
@@ -24,12 +36,13 @@ def _env_worker(remote, parent_remote, env_cls, env_args, seed):
                 break
 
             if cmd == "reset":
+                episode_seed = None
                 if data is not None:
                     episode_seed = int(data)
                     random.seed(episode_seed)
-                    np.random.seed(episode_seed)
+                    np.random.seed(episode_seed % (2**32))
                     torch.manual_seed(episode_seed)
-                obs, state = env.reset()
+                obs, state = env.reset(seed=episode_seed)
                 remote.send((obs, state, env.get_avail_actions()))
             elif cmd == "step":
                 reward, terminated, info, next_obs, next_state = env.step(data)
@@ -77,10 +90,11 @@ class ParallelEpisodeRunner:
         self.parent_conns = []
         self.processes = []
         self.closed = False
+        base_seed = seed if seed is not None else self.env_args.get("seed")
 
         for idx in range(self.n_envs):
             parent_conn, worker_conn = self._ctx.Pipe()
-            worker_seed = None if seed is None else int(seed) + idx + 1
+            worker_seed = _derive_worker_seed(base_seed, idx)
             process = self._ctx.Process(
                 target=_env_worker,
                 args=(worker_conn, parent_conn, self.env_cls, self.env_args, worker_seed),
@@ -240,6 +254,7 @@ class ParallelEpisodeRunner:
                 "battle_won": bool(final_infos[env_idx].get("battle_won", False)),
                 "episode_limit": bool(final_infos[env_idx].get("episode_limit", False)),
                 "no_kill_timeout": bool(final_infos[env_idx].get("no_kill_timeout", False)),
+                "episode_seed": final_infos[env_idx].get("episode_seed"),
             }
             for env_idx in range(run_count)
         ]

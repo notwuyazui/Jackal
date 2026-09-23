@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+from random import Random
 import sys
 import tempfile
 import unittest
@@ -19,6 +20,30 @@ from training.test import init_game
 
 
 class GameStateTests(unittest.TestCase):
+    def test_game_state_jitter_uses_supplied_rng(self) -> None:
+        first = BattleWorld().load_game_state(
+            "test_map_7v7_1",
+            position_jitter=1.0,
+            heading_jitter=2.0,
+            rng=Random(123),
+        )
+        second = BattleWorld().load_game_state(
+            "test_map_7v7_1",
+            position_jitter=1.0,
+            heading_jitter=2.0,
+            rng=Random(123),
+        )
+
+        first_state = [
+            (unit.id, unit.position, unit.direction_angle)
+            for unit in first.unit_manager.units
+        ]
+        second_state = [
+            (unit.id, unit.position, unit.direction_angle)
+            for unit in second.unit_manager.units
+        ]
+        self.assertEqual(first_state, second_state)
+
     def test_valley_training_config_loads_5v5_state(self) -> None:
         project_root = Path(__file__).resolve().parents[1]
         config_path = (

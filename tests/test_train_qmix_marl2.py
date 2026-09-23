@@ -39,6 +39,22 @@ class _FakeParallelEvalRunner(ParallelEpisodeRunner):
         return None, stats
 
 
+class _FakeSerialEvalRunner:
+    def __init__(self) -> None:
+        self.seeds = []
+
+    def run(self, test_mode=False, epsilon=0.0, *, episode_seed=None):
+        self.seeds.append(episode_seed)
+        return None, {
+            "episode_return": float(episode_seed),
+            "episode_length": 10,
+            "battle_won": False,
+            "episode_limit": False,
+            "no_kill_timeout": False,
+            "episode_seed": episode_seed,
+        }
+
+
 class ExtraEvaluationConfigurationTests(unittest.TestCase):
     def test_non_positive_episode_count_disables_extra_evaluation(self) -> None:
         self.assertFalse(_should_run_extra_evaluation(0, 64))
@@ -67,6 +83,14 @@ class ParallelEvaluationTests(unittest.TestCase):
         )
         self.assertAlmostEqual(stats["return_mean"], 12.0)
         self.assertAlmostEqual(stats["battle_won_mean"], 0.4)
+
+    def test_serial_evaluation_passes_exact_episode_seeds_to_environment(self) -> None:
+        runner = _FakeSerialEvalRunner()
+
+        stats = evaluate(runner, n_episodes=3, seed_base=50)
+
+        self.assertEqual(runner.seeds, [50, 51, 52])
+        self.assertAlmostEqual(stats["return_mean"], 51.0)
 
 
 class PerformanceMetricsTests(unittest.TestCase):

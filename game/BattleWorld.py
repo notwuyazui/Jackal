@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-import random
+from random import Random
 from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
 from game.BattleState import (
@@ -120,6 +120,7 @@ class BattleWorld:
         ai_intelligence_by_team: Mapping[Team, int] | None = None,
         position_jitter: float = 0.0,
         heading_jitter: float = 0.0,
+        rng: Random | None = None,
     ) -> BattleWorld:
         """Replace this world with a versioned map/unit/bullet state.
 
@@ -128,6 +129,7 @@ class BattleWorld:
         initial states.
         """
 
+        state_rng = rng if rng is not None else Random()
         path = self.game_state_path(file_name)
         try:
             with path.open("r", encoding="utf-8") as file:
@@ -149,7 +151,9 @@ class BattleWorld:
             )
 
         self.clear()
-        self.set_game_map(self._map_from_game_state(payload.get("map"), path))
+        self.set_game_map(
+            self._map_from_game_state(payload.get("map"), path, rng=state_rng)
+        )
         self._load_rules(payload.get("rules", {}), path)
 
         world_state = payload.get("world", {})
@@ -185,6 +189,7 @@ class BattleWorld:
                 ai_intelligence_by_team=ai_intelligence_by_team,
                 position_jitter=float(position_jitter),
                 heading_jitter=float(heading_jitter),
+                rng=state_rng,
             )
 
         bullets = payload.get("bullets", [])
@@ -252,7 +257,12 @@ class BattleWorld:
         return path
 
     @staticmethod
-    def _map_from_game_state(map_state: Any, path: Path) -> GameMap:
+    def _map_from_game_state(
+        map_state: Any,
+        path: Path,
+        *,
+        rng: Random | None = None,
+    ) -> GameMap:
         if not isinstance(map_state, Mapping):
             raise ValueError(f"map must be an object in {path}")
         tile_size = int(map_state.get("tile_size", 64))
@@ -270,7 +280,7 @@ class BattleWorld:
             return GameMap(tiles, tile_size=tile_size)
         builtin = map_state.get("builtin")
         if builtin:
-            game_map = create_builtin_map(str(builtin))
+            game_map = create_builtin_map(str(builtin), rng=rng)
             if game_map.tile_size != tile_size:
                 rows = ["".join(tile.letter for tile in row) for row in game_map.tiles]
                 game_map = GameMap(rows, tile_size=tile_size)
@@ -311,6 +321,7 @@ class BattleWorld:
         ai_intelligence_by_team: Mapping[Team, int] | None,
         position_jitter: float,
         heading_jitter: float,
+        rng: Random,
     ) -> None:
         unit_id = int(state["unit_id"])
         position = state.get("position", (0.0, 0.0))
@@ -321,13 +332,13 @@ class BattleWorld:
         position = (float(position[0]), float(position[1]))
         if position_jitter > 0.0:
             position = (
-                position[0] + random.uniform(-position_jitter, position_jitter),
-                position[1] + random.uniform(-position_jitter, position_jitter),
+                position[0] + rng.uniform(-position_jitter, position_jitter),
+                position[1] + rng.uniform(-position_jitter, position_jitter),
             )
         base_direction = float(state.get("direction_angle", 0.0))
         heading_offset = 0.0
         if heading_jitter > 0.0:
-            heading_offset = random.uniform(-heading_jitter, heading_jitter)
+            heading_offset = rng.uniform(-heading_jitter, heading_jitter)
         direction = base_direction + heading_offset
         team = self._team_from_game_state(state.get("team"), path)
         using_ai = bool(state.get("using_ai", False))

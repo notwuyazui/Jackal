@@ -12,8 +12,8 @@ class EpisodeRunner:
         self.state_shape = env_info["state_shape"]
         self.episode_limit = env_info["episode_limit"]
 
-    def run(self, test_mode=False, epsilon=0.0):
-        obs, state = self.env.reset()
+    def run(self, test_mode=False, epsilon=0.0, *, episode_seed=None):
+        obs, state = self.env.reset(seed=episode_seed)
         self.mac.init_hidden(batch_size=1)
 
         episode_batch = {
@@ -76,6 +76,7 @@ class EpisodeRunner:
             "battle_won": bool(final_info.get("battle_won", False)),
             "episode_limit": bool(final_info.get("episode_limit", False)),
             "no_kill_timeout": bool(final_info.get("no_kill_timeout", False)),
+            "episode_seed": final_info.get("episode_seed"),
         }
         return episode_batch, stats
 

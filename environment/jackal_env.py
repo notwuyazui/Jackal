@@ -1,5 +1,6 @@
 import os
 import datetime
+from random import Random
 from typing import Optional
 
 import game.GameMode as GameMode
@@ -75,9 +76,12 @@ class JackalEnv:
         auto_communicate=None,
         collision_scale=1.0,
         enemy_ai_intelligence_level=DEFAULT_AI_INTELLIGENCE_LEVEL,
+        seed: Optional[int] = None,
     ):
         self.headless = headless
         self.delta_time = fixed_delta_time
+        self._rng = Random(None if seed is None else int(seed))
+        self._episode_seed: Optional[int] = None
         
         self.use_video = use_video
         self.video_dir = video_dir
@@ -177,10 +181,17 @@ class JackalEnv:
         self.world_width, self.world_height = map_layout.get_map_size()
         if self.world_width <= 0 or self.world_height <= 0:
             raise ValueError("map dimensions must be > 0")
-        self._initial_map: Optional[GameMap] = (
-            None if self.game_state_file else map_layout
+        random_builtin_map = (
+            not self.game_state_file
+            and map_file is None
+            and not map_data
+            and resolved_map_name.removesuffix("_map") == "random"
         )
-
+        self._initial_map: Optional[GameMap] = (
+            None
+            if self.game_state_file or random_builtin_map
+            else map_layout
+        )
         self.renderer = (
             PygameRenderer(
                 self.viewport_width,
@@ -364,12 +375,26 @@ class JackalEnv:
         if reward_config:
             merge_reward_config(self.reward_config, reward_config)
 
-    def reset(self):
+    def reset(self, seed: Optional[int] = None):
+        """Start an episode, optionally reproducing it from an exact seed."""
+
+        if seed is not None:
+            actual_seed = int(seed)
+            self._rng.seed(actual_seed)
+        else:
+            actual_seed = self._rng.getrandbits(63)
+        self._episode_seed = actual_seed
+        episode_rng = Random(actual_seed)
+
         self.steps = 0
         self.reward_manager.reset()
         initial_map = self._initial_map
         self._initial_map = None
-        episode = build_episode(self.scenario_config, game_map=initial_map)
+        episode = build_episode(
+            self.scenario_config,
+            game_map=initial_map,
+            rng=episode_rng,
+        )
         self._world = episode.world
         self._world.set_camera_viewport(
             (self.viewport_width, self.viewport_height)
@@ -435,6 +460,7 @@ class JackalEnv:
         info["unit_collision_count"] = tuple(
             int(agent.unit_collision_count) for agent in self.snapshot.allies
         )
+        info["episode_seed"] = self._episode_seed
         done = self._check_done()
         
         return (
@@ -489,6 +515,7 @@ class JackalEnv:
             "unit_collision_count": tuple(
                 int(agent.unit_collision_count) for agent in self.snapshot.allies
             ),
+            "episode_seed": self._episode_seed,
         }
 
     def get_obs(self):

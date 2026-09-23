@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-import random
+from random import Random
 from typing import Any, Mapping, Sequence
 
 from game.BattleWorld import BattleWorld
@@ -95,9 +95,12 @@ def normalize_unit_types(
 def build_episode(
     config: ScenarioConfig,
     game_map: GameMap | None = None,
+    *,
+    rng: Random | None = None,
 ) -> EpisodeScenario:
     """Create and configure a fresh battle world without depending on JackalEnv."""
 
+    episode_rng = rng if rng is not None else Random()
     unit_manager = UnitManager(
         enable_unit_collision=config.enable_unit_collision,
         use_tear_drop_vision=config.use_tear_drop_vision,
@@ -116,6 +119,7 @@ def build_episode(
             },
             position_jitter=config.position_jitter,
             heading_jitter=config.heading_jitter,
+            rng=episode_rng,
         )
         allies = [
             unit
@@ -138,15 +142,32 @@ def build_episode(
             map_file=config.map_file,
             map_data=config.map_data,
             map_tile_size=config.map_tile_size,
+            rng=episode_rng,
         ),
         unit_manager=unit_manager,
     )
     allies = [
-        _create_unit(world, config, Team.PLAYER, index, unit_type, enemy=False)
+        _create_unit(
+            world,
+            config,
+            Team.PLAYER,
+            index,
+            unit_type,
+            enemy=False,
+            rng=episode_rng,
+        )
         for index, unit_type in enumerate(config.ally_unit_types)
     ]
     enemies = [
-        _create_unit(world, config, Team.ENEMY, index, unit_type, enemy=True)
+        _create_unit(
+            world,
+            config,
+            Team.ENEMY,
+            index,
+            unit_type,
+            enemy=True,
+            rng=episode_rng,
+        )
         for index, unit_type in enumerate(config.enemy_unit_types)
     ]
     world.refresh_vision()
@@ -159,8 +180,13 @@ def create_scenario_map(
     map_file: str | None,
     map_data: Sequence[str] | None,
     map_tile_size: int,
+    rng: Random | None = None,
 ) -> GameMap:
-    """Create the map described by an environment scenario."""
+    """Create the map described by a scenario.
+
+    ``rng`` is the single extension point for future randomized map selection.
+    Current built-in and file-backed maps are deterministic.
+    """
 
     if map_data:
         return create_map_from_strings(
@@ -175,7 +201,7 @@ def create_scenario_map(
         if game_map is None:
             raise ValueError(f"Failed to load map_file: {map_file}")
         return game_map
-    return create_builtin_map(map_name)
+    return create_builtin_map(map_name, rng=rng)
 
 
 def _create_unit(
@@ -186,6 +212,7 @@ def _create_unit(
     unit_type: str,
     *,
     enemy: bool,
+    rng: Random,
 ):
     positions = config.enemy_positions if enemy else config.ally_positions
     default = (740, 220 + index * 100) if enemy else (220, 220 + index * 100)
@@ -194,6 +221,7 @@ def _create_unit(
         position,
         config.position_jitter,
         config.arena_size,
+        rng,
     )
     team_scales = config.enemy_unit_scales if enemy else config.ally_unit_scales
     type_scales = (
@@ -205,7 +233,7 @@ def _create_unit(
     headings = config.enemy_initial_headings if enemy else config.ally_initial_headings
     initial_heading = float(headings[index]) if index < len(headings) else None
     if config.heading_jitter > 0.0:
-        initial_heading = (initial_heading or 0.0) + random.uniform(
+        initial_heading = (initial_heading or 0.0) + rng.uniform(
             -config.heading_jitter,
             config.heading_jitter,
         )
@@ -246,12 +274,13 @@ def _jitter_position(
     position: Sequence[float],
     jitter: float,
     arena_size: tuple[float, float],
+    rng: Random,
 ) -> tuple[float, float]:
     if jitter <= 0.0:
         return float(position[0]), float(position[1])
     margin = 50.0
-    x = float(position[0]) + random.uniform(-jitter, jitter)
-    y = float(position[1]) + random.uniform(-jitter, jitter)
+    x = float(position[0]) + rng.uniform(-jitter, jitter)
+    y = float(position[1]) + rng.uniform(-jitter, jitter)
     return (
         min(max(x, margin), arena_size[0] - margin),
         min(max(y, margin), arena_size[1] - margin),

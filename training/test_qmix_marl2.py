@@ -76,14 +76,18 @@ def main():
     for ep in range(1, args.episodes + 1):
         ep_seed = seed_base + (ep - 1)
         random.seed(ep_seed)
-        np.random.seed(ep_seed)
+        np.random.seed(ep_seed % (2**32))
         torch.manual_seed(ep_seed)
         if device.type == "cuda":
             torch.cuda.manual_seed_all(ep_seed)
         elif device.type == "mps":
             torch.mps.manual_seed(ep_seed)
 
-        _, stats = runner.run(test_mode=True, epsilon=0.0)
+        _, stats = runner.run(
+            test_mode=True,
+            epsilon=0.0,
+            episode_seed=ep_seed,
+        )
         returns.append(stats["episode_return"])
         lengths.append(stats["episode_length"])
         wins += int(stats["battle_won"])
@@ -91,7 +95,8 @@ def main():
             f"[Test] ep={ep}/{args.episodes} "
             f"ret={stats['episode_return']:.2f} "
             f"len={stats['episode_length']} "
-            f"win={int(stats['battle_won'])}"
+            f"win={int(stats['battle_won'])} "
+            f"seed={stats['episode_seed']}"
         )
 
     n = max(1, len(returns))
