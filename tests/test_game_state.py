@@ -22,13 +22,13 @@ from training.test import init_game
 class GameStateTests(unittest.TestCase):
     def test_game_state_jitter_uses_supplied_rng(self) -> None:
         first = BattleWorld().load_game_state(
-            "test_map_7v7_1",
+            "test_map_3t2a1p_vs_2t3a1p",
             position_jitter=1.0,
             heading_jitter=2.0,
             rng=Random(123),
         )
         second = BattleWorld().load_game_state(
-            "test_map_7v7_1",
+            "test_map_3t2a1p_vs_2t3a1p",
             position_jitter=1.0,
             heading_jitter=2.0,
             rng=Random(123),
@@ -54,7 +54,10 @@ class GameStateTests(unittest.TestCase):
             / "jackal_autoaim_5v5_etdqmix_hetero_valley_mapfeat7_10m_v2.json"
         )
         config = json.loads(config_path.read_text(encoding="utf-8"))
-        self.assertEqual(config["env"]["game_state_file"], "valley_map_5v5_1")
+        self.assertEqual(
+            config["env"]["game_state_file"],
+            "valley_map_3t2a_vs_3t2a",
+        )
 
         env = JackalMultiAgentEnv(config["env"])
         try:
@@ -79,8 +82,8 @@ class GameStateTests(unittest.TestCase):
 
     def test_builtin_initial_states_exclude_keyboard_unit(self) -> None:
         cases = (
-            ("test_map_7v7_1", 12, (960, 640)),
-            ("big_map_test_9v9_1", 18, (1600, 1024)),
+            ("test_map_3t2a1p_vs_2t3a1p", 12, (960, 640)),
+            ("big_map_test_4t4a1p_vs_4t4a1p", 18, (1600, 1024)),
         )
         for state_name, unit_count, map_size in cases:
             with self.subTest(state_name=state_name):
@@ -144,7 +147,7 @@ class GameStateTests(unittest.TestCase):
 
     def test_environment_uses_state_but_keeps_agents_externally_controlled(self) -> None:
         env = JackalEnv(
-            game_state_file="test_map_7v7_1",
+            game_state_file="test_map_3t2a1p_vs_2t3a1p",
             headless=True,
             max_steps=2,
             enemy_use_ai=True,

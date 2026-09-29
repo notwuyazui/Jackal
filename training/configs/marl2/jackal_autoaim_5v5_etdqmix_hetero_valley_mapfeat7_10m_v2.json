@@ -10,7 +10,7 @@
     "use_video": false,
     "video_dir": "artifacts/videos/marl2_eval",
     "auto_aim": true,
-    "game_state_file": "valley_map_5v5_1",
+    "game_state_file": "valley_map_3t2a_vs_3t2a",
     "position_jitter": 3.0,
     "heading_jitter": 3.0,
     "include_map_features": true,

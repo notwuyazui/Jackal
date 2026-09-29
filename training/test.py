@@ -16,8 +16,8 @@ from environment.rendering import PygameRenderer
 def init_game(map_name="test_map"):
     world = BattleWorld()
     state_names = {
-        "test_map": ("test_map_7v7_1", (100, 500)),
-        "big_map_test": ("big_map_test_9v9_1", (100, 100)),
+        "test_map": ("test_map_3t2a1p_vs_2t3a1p", (100, 500)),
+        "big_map_test": ("big_map_test_4t4a1p_vs_4t4a1p", (100, 100)),
     }
     if map_name not in state_names:
         raise ValueError(

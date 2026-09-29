@@ -10,10 +10,7 @@
     "use_video": false,
     "video_dir": "artifacts/videos/marl2_eval",
     "auto_aim": true,
-    "n_agents": 3,
-    "n_enemies": 3,
-    "ally_positions": [[220, 220], [220, 320], [220, 420]],
-    "enemy_positions": [[740, 220], [740, 320], [740, 420]],
+    "game_state_file": "border_map_3t_vs_3t",
     "max_steps": 700,
     "reward_config": {
       "auto_aim": {
