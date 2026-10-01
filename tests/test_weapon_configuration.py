@@ -2,6 +2,7 @@ import os
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
@@ -9,6 +10,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from environment.jackal_env import JackalEnv
 from game.Bullet.weapon_specs import get_projectile_spec
+from game.Parameter import Team
+from game.Unit.Tank.Tank import create_tank
 
 
 class ProjectileSpecTests(unittest.TestCase):
@@ -29,6 +32,80 @@ class ProjectileSpecTests(unittest.TestCase):
                 "normal_shell",
                 {"speed": 600.0, "speed_rate": 1.5},
             )
+
+    def test_cooldown_configuration_uses_rates(self) -> None:
+        for ammunition, rate in (("normal_shell", 0.8), ("rocket_shell", 1.2),
+                                 ("heavy_shell", 2.0)):
+            with self.subTest(ammunition=ammunition):
+                spec = get_projectile_spec(ammunition)
+                self.assertEqual(spec.cooldown_rate, rate)
+                self.assertFalse(hasattr(spec, "cooldown"))
+        self.assertEqual(
+            get_projectile_spec("normal_shell", {"cooldown_rate": "1.25"}).cooldown_rate,
+            1.25,
+        )
+        with self.assertRaisesRegex(ValueError, "cooldown_rate"):
+            get_projectile_spec("normal_shell", {"cooldown_rate": -1.0})
+
+
+class UnitCooldownRateTests(unittest.TestCase):
+    def test_global_base_multiplies_each_ammunition_rate(self) -> None:
+        with patch("game.Unit.BaseUnit.BULLET_COOLDOWN", 2.0):
+            for ammunition, expected in (("normal_shell", 1.6), ("rocket_shell", 2.4),
+                                        ("heavy_shell", 4.0)):
+                with self.subTest(ammunition=ammunition):
+                    unit = create_tank(1, Team.PLAYER)
+                    unit.current_ammunition = ammunition
+                    self.assertAlmostEqual(unit.fire_cooldown_duration(), expected)
+                    bullet = unit.fire()
+                    self.assertIsNotNone(bullet)
+                    assert bullet is not None
+                    self.assertAlmostEqual(bullet.cooldown, expected)
+                    self.assertAlmostEqual(unit.fire_cooldown, expected)
+                    self.assertAlmostEqual(unit.fire_cooldown_ratio(), 1.0)
+                    self.assertFalse(unit.can_fire())
+                    unit._update_fire_cooldown(expected)
+                    self.assertTrue(unit.can_fire())
+
+    def test_projectile_rate_override_changes_actual_cooldown(self) -> None:
+        unit = create_tank(1, Team.PLAYER)
+        unit.configure_weapon(projectile_overrides={"normal_shell": {"cooldown_rate": 0.5}})
+        with patch("game.Unit.BaseUnit.BULLET_COOLDOWN", 2.0):
+            self.assertEqual(unit.get_weapon_spec().cooldown_rate, 0.5)
+            self.assertEqual(unit.fire_cooldown_duration(), 1.0)
+            bullet = unit.fire()
+        self.assertIsNotNone(bullet)
+        assert bullet is not None
+        self.assertEqual(bullet.cooldown, 1.0)
+        self.assertEqual(unit.fire_cooldown, 1.0)
+
+    def test_absolute_unit_override_still_takes_precedence(self) -> None:
+        unit = create_tank(1, Team.PLAYER)
+        unit.configure_weapon(
+            fire_cooldown=0.35,
+            projectile_overrides={"normal_shell": {"cooldown_rate": 2.0}},
+        )
+        for base in (0.0, 1.0, 2.0):
+            with self.subTest(base=base), patch("game.Unit.BaseUnit.BULLET_COOLDOWN", base):
+                unit.fire_cooldown = 0.0
+                self.assertEqual(unit.fire_cooldown_duration(), 0.35)
+                bullet = unit.fire()
+                self.assertIsNotNone(bullet)
+                assert bullet is not None
+                self.assertEqual(bullet.cooldown, 0.35)
+                self.assertEqual(unit.fire_cooldown, 0.35)
+
+    def test_zero_rate_or_zero_base_allows_immediate_refire(self) -> None:
+        for base, rate in ((2.0, 0.0), (0.0, 0.8)):
+            with self.subTest(base=base, rate=rate), patch("game.Unit.BaseUnit.BULLET_COOLDOWN", base):
+                unit = create_tank(1, Team.PLAYER)
+                unit.configure_weapon(projectile_overrides={"cooldown_rate": rate})
+                bullet = unit.fire()
+                self.assertIsNotNone(bullet)
+                assert bullet is not None
+                self.assertEqual(bullet.cooldown, 0.0)
+                self.assertEqual(unit.fire_cooldown, 0.0)
+                self.assertTrue(unit.can_fire())
 
 
 class EnvironmentWeaponIntegrationTests(unittest.TestCase):

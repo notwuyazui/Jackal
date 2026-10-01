@@ -39,6 +39,8 @@ class EnemyAI:
     PAIR_MIN_INTELLIGENCE = 3
     SEARCH_SHARE_MIN_INTELLIGENCE = 4
     REGROUP_MIN_INTELLIGENCE = 5
+    FOCUS_MIN_INTELLIGENCE = 4
+    MANEUVER_MIN_INTELLIGENCE = 5
 
     def __init__(
         self,
@@ -87,6 +89,25 @@ class EnemyAI:
         self._last_tactical_frame = -10_000
         self._cached_known_enemies: tuple[BaseUnit, ...] = ()
         self._cached_regroup_ally: Optional[BaseUnit] = None
+        self._cached_combat_allies: tuple[BaseUnit, ...] = ()
+        self._focus_target_id: Optional[int] = None
+        self._focus_lock_until_frame = 0
+
+        # Feedback uses observed health and successfully committed shots, not
+        # hidden enemy orders or a per-frame projectile/trajectory simulation.
+        self._last_health = float(self.unit.health)
+        self._recent_damage_fraction = 0.0
+        self._feedback_target_id: Optional[int] = None
+        self._last_target_health = 0.0
+        self._last_target_progress_frame = 0
+        self._shots_since_progress = 0
+        self._ineffective_target_id: Optional[int] = None
+        self._avoid_target_until_frame = 0
+        self._combat_destination: Optional[Vector] = None
+        self._combat_move_until_frame = 0
+        self._next_combat_move_frame = 0
+        self._last_combat_plan_frame = -10_000
+        self._combat_move_reason = "reposition"
 
         # One broad spatial query is shared by perception, separation, and all
         # collision probes performed during this AI update.
@@ -140,6 +161,12 @@ class EnemyAI:
     def update(self) -> None:
         self._fire_requested = False
         self._frame_count += 1
+        health = float(self.unit.health)
+        self._recent_damage_fraction = (
+            self._recent_damage_fraction * 0.98
+            + max(0.0, self._last_health - health) / max(1.0, float(self.unit.max_health))
+        )
+        self._last_health = health
         self._update_unit_radius()
         self._update_stuck_state()
         self._refresh_nearby_unit_cache()
@@ -156,6 +183,11 @@ class EnemyAI:
         if tactical_due:
             known_enemies = self._get_known_enemy_units(visible_enemies)
             self._cached_known_enemies = tuple(known_enemies)
+            self._cached_combat_allies = tuple(
+                other for other in self._nearby_units_for_update()
+                if other is not self.unit and other.is_alive and other.visible
+                and other.team == self.unit.team
+            )
             current_target = self._select_target(known_enemies)
             self._last_tactical_frame = self._frame_count
         else:
@@ -198,6 +230,8 @@ class EnemyAI:
             return
 
         if target_known_now:
+            assert current_target is not None
+            self._update_combat_feedback(current_target)
             if (
                 current_target is not previous_target
                 or (self._frame_count + self._decision_phase) % self._aim_interval == 0
@@ -216,6 +250,9 @@ class EnemyAI:
 
         if tactical_due:
             self._cached_regroup_ally = self._select_regroup_ally(known_enemies)
+            if target_known_now and self._cached_regroup_ally is None:
+                assert current_target is not None
+                self._plan_combat_movement(current_target)
         regroup_ally = self._cached_regroup_ally
         if (
             regroup_ally is not None
@@ -293,6 +330,7 @@ class EnemyAI:
         )
         query_radius = max(
             float(self.unit.sight_range),
+            float(self.unit.communication_range),
             self.SEPARATION_DISTANCE,
             collision_reach,
         )
@@ -334,29 +372,29 @@ class EnemyAI:
             return min(enemies, key=self._distance_to)
 
         weapon_range = max(1.0, float(self.unit.weapon_range()))
-        enemy_ids = {enemy.id for enemy in enemies}
-        friendly_focus: dict[int, int] = {}
-        if self.intelligence_level >= 6:
-            for friendly_ai in self._friendly_ai_controllers():
-                friendly_target = friendly_ai.target_unit
-                if (
-                    friendly_target is not None
-                    and friendly_target.is_alive
-                    and friendly_target.id in enemy_ids
-                ):
-                    friendly_focus[friendly_target.id] = (
-                        friendly_focus.get(friendly_target.id, 0) + 1
-                    )
+        if (self.intelligence_level >= self.FOCUS_MIN_INTELLIGENCE
+                and self._frame_count < self._focus_lock_until_frame):
+            locked = next((enemy for enemy in enemies if enemy.id == self._focus_target_id), None)
+            if (locked is not None
+                    and not (locked.id == self._ineffective_target_id
+                             and self._frame_count < self._avoid_target_until_frame)
+                    and self._distance_to(locked) <= weapon_range
+                    and self.unit_manager.has_line_of_sight(self.game_map, self.unit, locked)):
+                return locked
+        reachable = {
+            enemy.id for enemy in enemies
+            if self._distance_to(enemy) <= weapon_range
+            and self.unit_manager.has_line_of_sight(self.game_map, self.unit, enemy)
+        }
+        focus = self._select_focus_target(enemies, reachable)
+        if focus is not None:
+            return focus
 
         def score(enemy: BaseUnit) -> tuple[float, int]:
             distance = self._distance_to(enemy)
             health_ratio = float(enemy.health) / max(1.0, float(enemy.max_health))
             value = distance + health_ratio * (8.0 * self.intelligence_level)
-            if distance <= weapon_range and self.unit_manager.has_line_of_sight(
-                self.game_map,
-                self.unit,
-                enemy,
-            ):
+            if enemy.id in reachable:
                 value -= 25.0 + 5.0 * self.intelligence_level
             if enemy is self.target_unit:
                 value -= 18.0 + 3.0 * self.intelligence_level
@@ -367,12 +405,68 @@ class EnemyAI:
                 value -= (1.0 - health_ratio) * (
                     18.0 + 6.0 * self.intelligence_level
                 )
-                value -= friendly_focus.get(enemy.id, 0) * (
-                    14.0 + 4.0 * self.intelligence_level
-                )
+            if (
+                enemy.id == self._ineffective_target_id
+                and self._frame_count < self._avoid_target_until_frame
+            ):
+                value += 180.0
             return value, int(enemy.id)
 
         return min(enemies, key=score)
+
+    def _select_focus_target(
+        self, enemies: list[BaseUnit], reachable: set[int],
+    ) -> Optional[BaseUnit]:
+        """Share a short-lived firing plan only with nearby communicating AIs."""
+
+        if self.intelligence_level < self.FOCUS_MIN_INTELLIGENCE:
+            return None
+        ally_ids = {ally.id for ally in self._cached_combat_allies}
+        squad = [self] + [
+            ai for ai in self._friendly_ai_controllers()
+            if ai.unit.id in ally_ids
+            and ai.intelligence_level >= self.FOCUS_MIN_INTELLIGENCE
+            and self._distance_to(ai.unit) <= min(
+                float(self.unit.communication_range), float(ai.unit.communication_range)
+            )
+            and ai._cached_regroup_ally is None
+        ]
+        if len(squad) < 2:
+            return None
+        # Never give up an immediately shootable target to chase an unreachable
+        # team order. A target id also cannot reveal enemies absent from vision.
+        candidates = [enemy for enemy in enemies if not reachable or enemy.id in reachable]
+        candidates = [
+            enemy for enemy in candidates
+            if not (enemy.id == self._ineffective_target_id
+                    and self._frame_count < self._avoid_target_until_frame)
+        ]
+        if not candidates:
+            return None
+        for enemy in candidates:
+            if (enemy.id == self._focus_target_id
+                    and self._frame_count < self._focus_lock_until_frame):
+                return enemy
+
+        def score(enemy: BaseUnit) -> tuple[float, float, float]:
+            distances = [math.dist(ai.unit.position, enemy.position) for ai in squad]
+            support = sum(
+                distance <= float(ai.unit.weapon_range())
+                and self.unit_manager.has_line_of_sight(self.game_map, ai.unit, enemy)
+                for ai, distance in zip(squad, distances)
+            )
+            health_ratio = float(enemy.health) / max(1.0, float(enemy.max_health))
+            value = (sum(distances) / len(squad) * 0.18
+                     + health_ratio * (60.0 + 10.0 * self.intelligence_level)
+                     - support * (45.0 + 8.0 * self.intelligence_level))
+            width, _ = self.game_map.get_map_size()
+            return value, float(enemy.position[1]), abs(enemy.position[0] - width * 0.5)
+
+        target = min(candidates, key=score)
+        for ai in squad:
+            ai._focus_target_id = target.id
+            ai._focus_lock_until_frame = ai._frame_count + 45 + 5 * self.intelligence_level
+        return target
 
     def _clear_target_memory(self) -> None:
         had_target_memory = (
@@ -382,6 +476,9 @@ class EnemyAI:
         self.target_unit = None
         self.last_known_target_position = None
         self._target_memory_age = 0
+        self._combat_destination = None
+        self._focus_target_id = None
+        self._focus_lock_until_frame = 0
         if had_target_memory:
             self._path.clear()
             self._path_goal = None
@@ -486,11 +583,8 @@ class EnemyAI:
 
         allies = [
             other
-            for other in self.unit_manager.units
-            if other is not self.unit
-            and other.is_alive
-            and other.visible
-            and other.team == self.unit.team
+            for other in self._cached_combat_allies
+            if other.is_alive
         ]
         active_anchor = next(
             (other for other in allies if other.id == self._regroup_ally_id),
@@ -552,7 +646,7 @@ class EnemyAI:
             self._combat_power(ally) for ally in local_allies
         )
         enemy_power = sum(self._combat_power(enemy) for enemy in attackers.values())
-        pressure_threshold = 1.35 + 0.05 * self.intelligence_level
+        pressure_threshold = 1.75 - 0.05 * self.intelligence_level
         health_ratio = float(self.unit.health) / max(1.0, float(self.unit.max_health))
         outnumbered = (
             len(attackers) >= len(local_allies) + 2
@@ -571,7 +665,12 @@ class EnemyAI:
             and strongest_enemy > self_power * (pressure_threshold + 0.18)
         )
         wounded_and_alone = not local_allies and health_ratio < 0.38
-        if not (outnumbered or overpowered or badly_matched or wounded_and_alone):
+        taking_focus_fire = (
+            len(attackers) >= 2 and health_ratio < 0.80
+            and self._recent_damage_fraction >= 0.10 - 0.005 * self.intelligence_level
+        )
+        if not (outnumbered or overpowered or badly_matched or wounded_and_alone
+                or taking_focus_fire):
             return None
 
         partner_ai = self._get_pair_partner()
@@ -591,7 +690,7 @@ class EnemyAI:
     def _regroup_anchor_score(self, ally: BaseUnit) -> tuple[float, int]:
         nearby_support = sum(
             1
-            for other in self.unit_manager.units
+            for other in self._cached_combat_allies
             if other is not ally
             and other.is_alive
             and other.team == self.unit.team
@@ -606,7 +705,7 @@ class EnemyAI:
         health_ratio = float(unit.health) / max(1.0, float(unit.max_health))
         try:
             spec = unit.get_weapon_spec()
-            damage_rate = float(spec.damage_rate) / max(0.15, float(spec.cooldown))
+            damage_rate = float(spec.damage_rate) / max(0.15, unit.fire_cooldown_duration(spec))
         except (AttributeError, ValueError):
             damage_rate = 0.5
         durability = math.sqrt(max(1.0, float(unit.max_health)) / 100.0)
@@ -615,6 +714,100 @@ class EnemyAI:
     # ------------------------------------------------------------------
     # Combat
     # ------------------------------------------------------------------
+    def _update_combat_feedback(self, target: BaseUnit) -> None:
+        health = float(target.health)
+        if target.id != self._feedback_target_id:
+            self._feedback_target_id = target.id
+            self._shots_since_progress = 0
+            self._last_target_progress_frame = self._frame_count
+            self._combat_destination = None
+        elif health < self._last_target_health - 1e-6:
+            self._last_target_progress_frame = self._frame_count
+            self._shots_since_progress = 0
+        self._last_target_health = health
+
+    def _plan_combat_movement(self, target: BaseUnit) -> None:
+        """Occasionally select one short safe move; do not orbit continuously."""
+
+        if (self.intelligence_level < self.MANEUVER_MIN_INTELLIGENCE
+                or self.unit.max_speed <= 0.0 or self._combat_destination is not None
+                or self._frame_count < self._next_combat_move_frame
+                or self._frame_count - self._last_combat_plan_frame < 6):
+            return
+        self._last_combat_plan_frame = self._frame_count
+        weapon_range = float(self.unit.weapon_range())
+        if (self._distance_to(target) > weapon_range
+                or not self.unit_manager.has_line_of_sight(self.game_map, self.unit, target)):
+            return
+        target_dir = self._vector_to_target(target)
+        target_distance = self._distance_to(target)
+        lateral = (-target_dir[1] * self.strafe_sign, target_dir[0] * self.strafe_sign)
+        health_ratio = float(self.unit.health) / max(1.0, float(self.unit.max_health))
+        pressured = (health_ratio < 0.80 and self._recent_damage_fraction
+                     >= 0.10 - 0.005 * self.intelligence_level)
+        stalled = (
+            self._shots_since_progress >= 3
+            and self._frame_count - self._last_target_progress_frame
+            >= max(90, 300 - 18 * self.intelligence_level)
+        )
+        crowded_ally = None
+        blocked_lane = False
+        for ally in self._cached_combat_allies:
+            if not ally.is_alive:
+                continue
+            offset = (ally.position[0] - self.unit.position[0],
+                      ally.position[1] - self.unit.position[1])
+            distance = math.hypot(*offset)
+            if distance < max(44.0, self.unit_radius * 2.0 + 12.0):
+                # Only one of two crowded friends yields, with a mirror-neutral
+                # lane ordering instead of making both dodge simultaneously.
+                width, _ = self.game_map.get_map_size()
+                if (self.unit.position[1], abs(self.unit.position[0] - width * 0.5), self.unit.id) > (
+                    ally.position[1], abs(ally.position[0] - width * 0.5), ally.id
+                ):
+                    crowded_ally = ally
+            projection = self._dot(offset, target_dir)
+            if (20.0 < projection < target_distance - 20.0
+                    and abs(offset[0] * target_dir[1] - offset[1] * target_dir[0])
+                    < max(ally.collision_size) * 0.5 + 8.0):
+                blocked_lane = True
+        if not (pressured or stalled or crowded_ally is not None or blocked_lane):
+            return
+
+        if pressured:
+            desired = self._normalize((-target_dir[0] + 0.65 * lateral[0],
+                                       -target_dir[1] + 0.65 * lateral[1]))
+            reason = "relieve_pressure"
+        elif crowded_ally is not None:
+            desired = self._normalize((self.unit.position[0] - crowded_ally.position[0],
+                                       self.unit.position[1] - crowded_ally.position[1]))
+            reason = "spread_formation"
+        else:
+            desired = self._normalize((lateral[0] + 0.35 * target_dir[0],
+                                       lateral[1] + 0.35 * target_dir[1]))
+            reason = "reposition_stalled" if stalled else "clear_fire_lane"
+        travel = max(36.0, min(64.0, float(self.unit.max_speed) * 0.65))
+        for direction in (desired, (-lateral[0], -lateral[1])):
+            destination = (self.unit.position[0] + travel * direction[0],
+                           self.unit.position[1] + travel * direction[1])
+            if (math.dist(destination, target.position) > weapon_range * 0.95
+                    or not self._is_path_safe(direction, travel)
+                    or not self.game_map.has_line_of_sight(destination, target.position)):
+                continue
+            self._combat_destination = destination
+            self._combat_move_reason = reason
+            self._combat_move_until_frame = self._frame_count + 120
+            break
+        # Cool down even if boxed in: failed maneuvers must not trigger repeated
+        # path searches. A different known target may be tried on the next plan.
+        self._next_combat_move_frame = self._frame_count + max(150, 330 - 15 * self.intelligence_level)
+        if stalled:
+            self._ineffective_target_id = target.id
+            self._avoid_target_until_frame = self._next_combat_move_frame
+            self._focus_lock_until_frame = 0
+            self._shots_since_progress = 0
+            self._last_target_progress_frame = self._frame_count
+
     def _engage_target(self, target: BaseUnit) -> None:
         distance = self._distance_to(target)
         has_line_of_sight = self.unit_manager.has_line_of_sight(
@@ -634,9 +827,18 @@ class EnemyAI:
         )
 
         if not has_line_of_sight:
+            self._combat_destination = None
             self.ai_state = "flank"
             self._navigate_to(target.position, force_path=True)
             return
+
+        if self._combat_destination is not None:
+            if (self._frame_count < self._combat_move_until_frame
+                    and self._distance_to_position(self._combat_destination) > 12.0):
+                self.ai_state = self._combat_move_reason
+                self._move_in_direction(self._direction_to_position(self._combat_destination))
+                return
+            self._combat_destination = None
 
         if should_kite:
             sustainable_range = 0.85 * min(
@@ -793,7 +995,10 @@ class EnemyAI:
         if not self._fire_requested:
             return False
         self._fire_requested = False
-        return self.bullet_manager.fire(self.unit) is not None
+        fired = self.bullet_manager.fire(self.unit) is not None
+        if fired:
+            self._shots_since_progress += 1
+        return fired
 
     # ------------------------------------------------------------------
     # Search and navigation

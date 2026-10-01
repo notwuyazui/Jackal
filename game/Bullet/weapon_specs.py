@@ -22,7 +22,7 @@ class ProjectileSpec:
     lifetime: float
     speed_rate: float
     damage_rate: float
-    cooldown: float
+    cooldown_rate: float
     penetration: tuple[float, float, float]
     is_explosive: bool = False
     explosion_radius: float = 0.0
@@ -36,11 +36,11 @@ class ProjectileSpec:
             raise ValueError(
                 f"Invalid projectile penetration for {self.name}: {self.penetration}"
             )
-        if self.lifetime <= 0 or self.speed_rate <= 0 or self.cooldown < 0:
+        if self.lifetime <= 0 or self.speed_rate <= 0 or self.cooldown_rate < 0:
             raise ValueError(
                 f"Invalid projectile timing for {self.name}: "
                 f"lifetime={self.lifetime}, speed_rate={self.speed_rate}, "
-                f"cooldown={self.cooldown}"
+                f"cooldown_rate={self.cooldown_rate}"
             )
         if self.damage_rate < 0 or self.explosion_damage_rate < 0:
             raise ValueError(f"Projectile damage rates must be >= 0 for {self.name}")
@@ -72,7 +72,7 @@ class ProjectileSpec:
             "lifetime",
             "speed_rate",
             "damage_rate",
-            "cooldown",
+            "cooldown_rate",
             "penetration",
             "is_explosive",
             "explosion_radius",
@@ -91,7 +91,7 @@ class ProjectileSpec:
             "lifetime",
             "speed_rate",
             "damage_rate",
-            "cooldown",
+            "cooldown_rate",
             "explosion_radius",
             "explosion_damage_rate",
         ):
@@ -109,7 +109,7 @@ PROJECTILE_SPECS: dict[str, ProjectileSpec] = {
         lifetime=1.2,
         speed_rate=1.0,
         damage_rate=1.0,
-        cooldown=0.8,
+        cooldown_rate=0.8,
         penetration=(1.0, 0.9, 0.8),
     ),
     "rocket_shell": ProjectileSpec(
@@ -119,7 +119,7 @@ PROJECTILE_SPECS: dict[str, ProjectileSpec] = {
         lifetime=1.5,
         speed_rate=1.5,
         damage_rate=0.75,
-        cooldown=1.2,
+        cooldown_rate=1.2,
         penetration=(0.9, 1.0, 1.1),
         is_explosive=True,
         explosion_radius=50.0,
@@ -133,7 +133,7 @@ PROJECTILE_SPECS: dict[str, ProjectileSpec] = {
         lifetime=8.0,
         speed_rate=0.5,
         damage_rate=1.0,
-        cooldown=2.0,
+        cooldown_rate=2.0,
         penetration=(0.8, 1.0, 1.2),
         is_explosive=True,
         explosion_radius=100.0,

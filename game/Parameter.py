@@ -21,7 +21,7 @@ DEFAULT_AI_INTELLIGENCE_LEVEL = 5        # EnemyAI 默认智能等级，取值�
 
 BULLET_SPEED = 300.0        # 子弹的基础速度
 BULLET_DAMAGE = 8          # 子弹的基础伤害
-BULLET_COOLDOWN = 1.5       # 子弹的基础冷却时间
+BULLET_COOLDOWN = 1.2       # 子弹的基础冷却时间
 BULLET_EXPLOSION_DAMAGE_APPLY_DISTANT_FACTOR = False   # 子弹爆炸造成的伤害是否与距离有关
 EXPLOSION_IMAGE_ADAPT_TO_RANGE = False               # 爆炸图片是否根据爆炸范围调整大小
 

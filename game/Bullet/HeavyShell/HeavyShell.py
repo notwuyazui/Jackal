@@ -4,7 +4,7 @@
 from game.Bullet.BaseBullet import BaseBullet
 from game.Bullet.weapon_specs import ProjectileSpec, get_projectile_spec
 from typing import Optional, Tuple
-from game.Parameter import Team
+from game.Parameter import BULLET_COOLDOWN, Team
 
 class HeavyShell(BaseBullet):
     def __init__(self, 
@@ -26,7 +26,7 @@ class HeavyShell(BaseBullet):
             lifetime=spec.lifetime,
             speed_rate=spec.speed_rate,
             damage_rate=spec.damage_rate,
-            cooldown=spec.cooldown,
+            cooldown=BULLET_COOLDOWN * spec.cooldown_rate,
             penetration=list(spec.penetration),
             is_explosive=spec.is_explosive,
             explosion_radius=spec.explosion_radius,

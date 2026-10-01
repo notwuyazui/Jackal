@@ -476,7 +476,7 @@ class BattleWorld:
             lifetime=float(spec_state.get("lifetime", default_spec.lifetime)),
             speed_rate=float(spec_state.get("speed_rate", default_spec.speed_rate)),
             damage_rate=float(spec_state.get("damage_rate", default_spec.damage_rate)),
-            cooldown=float(spec_state.get("cooldown", default_spec.cooldown)),
+            cooldown_rate=float(spec_state.get("cooldown_rate", default_spec.cooldown_rate)),
             penetration=(
                 float(penetration_value[0]),
                 float(penetration_value[1]),
@@ -507,6 +507,9 @@ class BattleWorld:
             velocity_direction=(float(direction[0]), float(direction[1])),
             spec=spec,
         )
+        # Runtime cooldown is stored in seconds, including historical unit
+        # overrides. Preserve it when loading existing game-state files.
+        bullet.cooldown = float(spec_state.get("cooldown", bullet.cooldown))
         bullet.lifetime = float(state.get("remaining_lifetime", bullet.lifetime))
         bullet.is_active = bool(state.get("is_active", True))
         bullet.has_collided = bool(state.get("has_collided", False))

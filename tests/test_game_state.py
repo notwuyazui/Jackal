@@ -7,6 +7,7 @@ from random import Random
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
@@ -166,6 +167,30 @@ class GameStateTests(unittest.TestCase):
             )
         finally:
             env.close()
+
+    def test_state_restores_bullet_cooldown_seconds_and_unit_rate_override(self) -> None:
+        world = BattleWorld()
+        ally = world.create_unit(
+            "tank", Team.PLAYER, (256.0, 256.0), unit_id=1,
+            projectile_overrides={"normal_shell": {"cooldown_rate": 0.5}},
+        )
+        bullet = world.fire_weapon(ally)
+        self.assertIsNotNone(bullet)
+        assert bullet is not None
+        original_cooldown = bullet.cooldown
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "cooldown_state.json"
+            world.save_game_state(path)
+            # The saved projectile's actual duration is historical state, not
+            # a fresh calculation using a possibly changed global setting.
+            with patch("game.Unit.BaseUnit.BULLET_COOLDOWN", 3.0):
+                restored = BattleWorld().load_game_state(path)
+                unit = restored.get_unit(1)
+                assert unit is not None
+                self.assertEqual(unit.get_weapon_spec().cooldown_rate, 0.5)
+                self.assertEqual(unit.fire_cooldown_duration(), 1.5)
+                self.assertEqual(unit.fire_cooldown, original_cooldown)
+                self.assertEqual(restored.bullet_manager.bullets[0].cooldown, original_cooldown)
 
 
 if __name__ == "__main__":

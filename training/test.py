@@ -43,7 +43,7 @@ if __name__ == "__main__":
     clock = pygame.time.Clock()
     
     # 添加地图和单位
-    map_name = sys.argv[1] if len(sys.argv) > 1 else "big_map_test"
+    map_name = sys.argv[1] if len(sys.argv) > 1 else "test_map"
     game_manager = init_game(map_name)
     
     action = Action()

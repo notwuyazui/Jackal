@@ -297,19 +297,23 @@ class BaseUnit:
         """Return the effective, validated spec for this unit's ammunition."""
 
         ammo_name = str(ammunition or self.current_ammunition).lower()
-        spec = get_projectile_spec(
+        return get_projectile_spec(
             ammo_name,
             self._current_projectile_overrides(ammo_name),
         )
-        if self.fire_cooldown_override is not None:
-            spec = spec.with_overrides({"cooldown": self.fire_cooldown_override})
-        return spec
 
     def weapon_range(self) -> float:
         return self.get_weapon_spec().max_range if self.current_ammunition else 0.0
 
-    def fire_cooldown_duration(self) -> float:
-        return self.get_weapon_spec().cooldown if self.current_ammunition else 0.0
+    def fire_cooldown_duration(self, spec: Optional[ProjectileSpec] = None) -> float:
+        """实际冷却秒数；单位级覆盖优先，否则使用基础冷却乘弹种倍率。"""
+
+        if not self.current_ammunition:
+            return 0.0
+        if self.fire_cooldown_override is not None:
+            return self.fire_cooldown_override
+        spec = spec if spec is not None else self.get_weapon_spec()
+        return BULLET_COOLDOWN * spec.cooldown_rate
 
     def fire_cooldown_ratio(self) -> float:
         duration = max(1e-6, self.fire_cooldown_duration())
@@ -453,9 +457,13 @@ class BaseUnit:
                 "position": (bullet_start_x, bullet_start_y),
                 "velocity_direction": bullet_direction,
             }
+            weapon_spec = None
             if bullet_class is registered_bullet_class:
-                bullet_kwargs["spec"] = self.get_weapon_spec()
+                weapon_spec = self.get_weapon_spec()
+                bullet_kwargs["spec"] = weapon_spec
             bullet = bullet_class(**bullet_kwargs)
+            if weapon_spec is not None:
+                bullet.cooldown = self.fire_cooldown_duration(weapon_spec)
             self.fire_cooldown = bullet.cooldown        # 设置开火冷却时间
                 
             return bullet
