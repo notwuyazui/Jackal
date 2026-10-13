@@ -23,7 +23,7 @@ text = '''
 - environment：场景构建、reset/step、动作掩码、观测、奖励、终止、评估会话与键盘交互。
 - render：统一接口 render/api.py，含 render2D、render3D 和快照传输。
 - training：训练算法、网络、回放、配置，以及模型评估和环境冒烟脚本。
-- test：单元、集成和绘制回归；test/evaluation 仅兼容旧命令。
+- test：单元、集成和绘制回归。
 - artifacts：生成的日志、检查点、视频和报告，不提交 Git。
 
 训练层通过 environment 使用底层能力。物理对象、渲染快照和窗口由环境内部管理；
@@ -103,7 +103,6 @@ text = '''
 | 路径 | 职责 |
 | --- | --- |
 | `test/__init__.py` | Python 测试包标识，支持 unittest 测试发现。 |
-| `test/evaluation/` | 旧评估命令的兼容入口，转发到 training；不保留模型评估主体。 |
 | `test/fixtures/` | 固定回归数据，保存物理帧、观测、奖励和动作掩码等参考结果。 |
 | `test/integration/` | 跨模块回归，检查环境随机性、存档、训练入口、并行采样、评估会话、分层依赖和物理行为一致性。 |
 | `test/rendering/` | 渲染与传输回归，检查窗口关闭、视频、帧流、2D 内嵌画面、3D 映射及录制结果。 |

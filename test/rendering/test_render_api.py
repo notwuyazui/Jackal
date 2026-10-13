@@ -171,7 +171,6 @@ class RenderAPITests(unittest.TestCase):
 
     def test_production_callers_use_the_public_api(self):
         paths = list((ROOT / "environment").rglob("*.py")) + list((ROOT / "training").rglob("*.py"))
-        paths += list((ROOT / "test/evaluation").glob("*.py"))
         for path in paths:
             tree = ast.parse(path.read_text())
             for node in ast.walk(tree):
