@@ -1,0 +1,272 @@
+import os
+import unittest
+from unittest.mock import patch
+
+os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+
+from environment.jackal_env import JackalEnv
+from engine.projectiles.weapon_specs import get_projectile_spec
+from engine.parameters import Team, BULLET_SPEED, BULLET_DAMAGE
+from engine.units.tank.tank import create_tank
+
+
+class ProjectileSpecTests(unittest.TestCase):
+    def test_nonfinite_overrides_are_rejected_before_changing_the_weapon(self):
+        unit = create_tank(1, Team.PLAYER)
+        unit.configure_weapon(fire_cooldown=.35, projectile_overrides={'speed_rate': 1.5})
+        original = unit.to_game_state()
+        for field in ('lifetime', 'speed_rate', 'damage_rate', 'cooldown_rate',
+                      'explosion_radius', 'explosion_damage_rate'):
+            for value in (float('nan'), float('inf')):
+                with self.subTest(field=field, value=value), self.assertRaises(ValueError):
+                    unit.configure_weapon(fire_cooldown=2., projectile_overrides={field: value})
+                self.assertEqual(unit.to_game_state(), original)
+        for overrides in ({'size': [6., float('nan')]}, {'penetration': [1., 1., float('inf')]}):
+            with self.assertRaises(ValueError):
+                get_projectile_spec('normal_shell', overrides)
+
+    def test_canonical_ranges_match_projectile_motion(self) -> None:
+        self.assertEqual(get_projectile_spec("normal_shell").max_range, BULLET_SPEED * 1.2)
+        self.assertEqual(get_projectile_spec("rocket_shell").max_range, BULLET_SPEED * 1.5 * 1.5)
+        self.assertEqual(get_projectile_spec("heavy_shell").max_range, BULLET_SPEED * 0.5 * 8.0)
+
+    def test_absolute_speed_override_updates_derived_range(self) -> None:
+        spec = get_projectile_spec("normal_shell", {"speed": 600.0})
+
+        self.assertEqual(spec.speed, 600.0)
+        self.assertEqual(spec.max_range, 720.0)
+
+    def test_conflicting_speed_overrides_are_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            get_projectile_spec(
+                "normal_shell",
+                {"speed": 600.0, "speed_rate": 1.5},
+            )
+
+    def test_cooldown_configuration_uses_rates(self) -> None:
+        for ammunition, rate in (("normal_shell", 0.8), ("rocket_shell", 1.2),
+                                 ("heavy_shell", 2.0)):
+            with self.subTest(ammunition=ammunition):
+                spec = get_projectile_spec(ammunition)
+                self.assertEqual(spec.cooldown_rate, rate)
+                self.assertFalse(hasattr(spec, "cooldown"))
+        self.assertEqual(
+            get_projectile_spec("normal_shell", {"cooldown_rate": "1.25"}).cooldown_rate,
+            1.25,
+        )
+        with self.assertRaisesRegex(ValueError, "cooldown_rate"):
+            get_projectile_spec("normal_shell", {"cooldown_rate": -1.0})
+
+
+class UnitCooldownRateTests(unittest.TestCase):
+    def test_global_base_multiplies_each_ammunition_rate(self) -> None:
+        with patch("engine.units.base_unit.BULLET_COOLDOWN", 2.0):
+            for ammunition, expected in (("normal_shell", 1.6), ("rocket_shell", 2.4),
+                                        ("heavy_shell", 4.0)):
+                with self.subTest(ammunition=ammunition):
+                    unit = create_tank(1, Team.PLAYER)
+                    unit.current_ammunition = ammunition
+                    self.assertAlmostEqual(unit.fire_cooldown_duration(), expected)
+                    bullet = unit.fire()
+                    self.assertIsNotNone(bullet)
+                    assert bullet is not None
+                    self.assertAlmostEqual(bullet.cooldown, expected)
+                    self.assertAlmostEqual(unit.fire_cooldown, expected)
+                    self.assertAlmostEqual(unit.fire_cooldown_ratio(), 1.0)
+                    self.assertFalse(unit.can_fire())
+                    unit._update_fire_cooldown(expected)
+                    self.assertTrue(unit.can_fire())
+
+    def test_projectile_rate_override_changes_actual_cooldown(self) -> None:
+        unit = create_tank(1, Team.PLAYER)
+        unit.configure_weapon(projectile_overrides={"normal_shell": {"cooldown_rate": 0.5}})
+        with patch("engine.units.base_unit.BULLET_COOLDOWN", 2.0):
+            self.assertEqual(unit.get_weapon_spec().cooldown_rate, 0.5)
+            self.assertEqual(unit.fire_cooldown_duration(), 1.0)
+            bullet = unit.fire()
+        self.assertIsNotNone(bullet)
+        assert bullet is not None
+        self.assertEqual(bullet.cooldown, 1.0)
+        self.assertEqual(unit.fire_cooldown, 1.0)
+
+    def test_absolute_unit_override_still_takes_precedence(self) -> None:
+        unit = create_tank(1, Team.PLAYER)
+        unit.configure_weapon(
+            fire_cooldown=0.35,
+            projectile_overrides={"normal_shell": {"cooldown_rate": 2.0}},
+        )
+        for base in (0.0, 1.0, 2.0):
+            with self.subTest(base=base), patch("engine.units.base_unit.BULLET_COOLDOWN", base):
+                unit.fire_cooldown = 0.0
+                self.assertEqual(unit.fire_cooldown_duration(), 0.35)
+                bullet = unit.fire()
+                self.assertIsNotNone(bullet)
+                assert bullet is not None
+                self.assertEqual(bullet.cooldown, 0.35)
+                self.assertEqual(unit.fire_cooldown, 0.35)
+
+    def test_zero_rate_or_zero_base_allows_immediate_refire(self) -> None:
+        for base, rate in ((2.0, 0.0), (0.0, 0.8)):
+            with self.subTest(base=base, rate=rate), patch("engine.units.base_unit.BULLET_COOLDOWN", base):
+                unit = create_tank(1, Team.PLAYER)
+                unit.configure_weapon(projectile_overrides={"cooldown_rate": rate})
+                bullet = unit.fire()
+                self.assertIsNotNone(bullet)
+                assert bullet is not None
+                self.assertEqual(bullet.cooldown, 0.0)
+                self.assertEqual(unit.fire_cooldown, 0.0)
+                self.assertTrue(unit.can_fire())
+
+
+class EnvironmentWeaponIntegrationTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.env = JackalEnv(
+            headless=True,
+            auto_aim=False,
+            enemy_use_ai=True,
+            agent_fire_cooldown_by_type={"tank": 0.35},
+            enemy_ai_fire_cooldown_by_type={"tank": 0.45},
+            bullet_overrides_by_unit_type={
+                "tank": {
+                    "normal_shell": {
+                        "speed_rate": 1.5,
+                        "damage_rate": 3.0,
+                    }
+                }
+            },
+        )
+        self.env.reset()
+
+    def tearDown(self) -> None:
+        self.env.close()
+
+    def test_unit_is_single_source_for_cooldown_range_and_overrides(self) -> None:
+        agent = self.env.agents[0]
+        enemy = self.env.enemies[0]
+
+        self.assertIsNone(self.env.renderer)
+        self.assertEqual(agent.fire_cooldown_duration(), 0.35)
+        self.assertEqual(enemy.fire_cooldown_duration(), 0.45)
+        self.assertEqual(agent.weapon_range(), BULLET_SPEED * 1.5 * 1.2)
+        self.assertEqual(agent.get_weapon_spec("rocket_shell").speed, get_projectile_spec("rocket_shell").speed)
+        self.assertTrue(agent.can_fire())
+
+        bullet = agent.fire()
+
+        self.assertIsNotNone(bullet)
+        assert bullet is not None
+        self.assertEqual(bullet.cooldown, 0.35)
+        self.assertEqual(bullet.speed, BULLET_SPEED * 1.5)
+        self.assertEqual(bullet.base_damage, BULLET_DAMAGE * 3.0)
+        self.assertEqual(agent.fire_cooldown, bullet.cooldown)
+        self.assertFalse(agent.can_fire())
+        self.assertFalse(hasattr(self.env, "agent_fire_cooldowns"))
+        self.assertTrue(
+            all(not hasattr(ai, "fire_cooldown") for ai in self.env.unit_manager.enemy_ais)
+        )
+
+    def test_environment_step_advances_the_unit_cooldown_once(self) -> None:
+        agent = self.env.agents[0]
+        assert self.env.world is not None
+
+        self.env.step([27])
+
+        player_bullets = [
+            bullet
+            for bullet in self.env.bullet_manager.bullets
+            if bullet.shooter is agent
+        ]
+        self.assertEqual(len(player_bullets), 1)
+        self.assertEqual(player_bullets[0].cooldown, 0.35)
+        self.assertAlmostEqual(agent.fire_cooldown, 0.32)
+        self.assertEqual(self.env.world.tick, 1)
+        self.assertAlmostEqual(self.env.world.elapsed_time, 0.03)
+        self.assertIs(self.env.game_map, self.env.world.game_map)
+        self.assertIs(self.env.unit_manager, self.env.world.unit_manager)
+        self.assertIs(self.env.bullet_manager, self.env.world.bullet_manager)
+
+        self.env.step([0])
+        self.assertAlmostEqual(agent.fire_cooldown, 0.29)
+
+    def test_environment_metadata_matches_observation_outputs(self) -> None:
+        obs, state = self.env.reset()
+        info = self.env.get_env_info()
+
+        self.assertEqual(info["n_agents"], len(obs))
+        self.assertEqual(info["obs_shape"], obs[0].shape[0])
+        self.assertEqual(info["state_shape"], state.shape[0])
+        self.assertEqual(info["n_actions"], self.env.n_actions)
+
+        runtime_info = self.env.get_runtime_info()
+        self.assertEqual(runtime_info["steps"], 0)
+        self.assertEqual(runtime_info["world_tick"], 0)
+        self.assertEqual(runtime_info["active_allies"], 1)
+        self.assertEqual(runtime_info["active_enemies"], 1)
+        self.assertEqual(runtime_info["active_bullets"], 0)
+
+    def test_collision_configuration_preserves_environment_shapes(self) -> None:
+        collision_env = JackalEnv(
+            headless=True,
+            auto_aim=False,
+            enable_unit_collision=True,
+            use_tear_drop_vision=True,
+            auto_communicate=True,
+            collision_scale=1.5,
+        )
+        try:
+            obs, state = collision_env.reset()
+            info = collision_env.get_env_info()
+            baseline_info = self.env.get_env_info()
+
+            self.assertTrue(info["enable_unit_collision"])
+            self.assertTrue(info["use_tear_drop_vision"])
+            self.assertTrue(info["auto_communicate"])
+            self.assertTrue(collision_env.unit_manager.enable_unit_collision)
+            self.assertTrue(collision_env.unit_manager.use_tear_drop_vision)
+            self.assertTrue(collision_env.unit_manager.auto_communicate_enabled)
+            self.assertEqual(info["n_actions"], baseline_info["n_actions"])
+            self.assertEqual(info["obs_shape"], baseline_info["obs_shape"])
+            self.assertEqual(info["state_shape"], baseline_info["state_shape"])
+            self.assertEqual(obs[0].shape[0], baseline_info["obs_shape"])
+            self.assertEqual(state.shape[0], baseline_info["state_shape"])
+            self.assertEqual(collision_env.agents[0].size, (16.0, 23.0))
+            self.assertEqual(collision_env.agents[0].collision_size, (24.0, 34.5))
+
+            runtime_info = collision_env.get_runtime_info()
+            self.assertEqual(runtime_info["blocked_by_unit"], (False,))
+            self.assertEqual(runtime_info["unit_collision_count"], (0,))
+        finally:
+            collision_env.close()
+
+    def test_reset_rejects_spawn_on_impassable_terrain(self) -> None:
+        invalid_env = JackalEnv(
+            headless=True,
+            map_data=("xxx", "xox", "xxx"),
+            map_tile_size=64,
+            ally_positions=((32.0, 32.0),),
+            enemy_positions=((96.0, 96.0),),
+        )
+        try:
+            with self.assertRaisesRegex(ValueError, "impassable terrain"):
+                invalid_env.reset()
+        finally:
+            invalid_env.close()
+
+    def test_default_five_vs_five_spawns_are_valid(self) -> None:
+        env = JackalEnv(
+            headless=True,
+            n_agents=5,
+            n_enemies=5,
+            enemy_use_ai=False,
+        )
+        try:
+            obs, _ = env.reset()
+            self.assertEqual(len(obs), 5)
+            self.assertEqual(len(env.world.unit_manager.units), 10)
+        finally:
+            env.close()
+
+
+if __name__ == "__main__":
+    unittest.main()

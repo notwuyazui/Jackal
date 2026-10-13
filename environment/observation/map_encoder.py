@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, List
 
-from game.BattleState import MapSnapshot, UnitSnapshot
+from engine.contracts.state import MapSnapshot, UnitSnapshot
 
 if TYPE_CHECKING:
     from environment.observation.manager import ObservationConfig

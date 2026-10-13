@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import math
+import operator
 from typing import Sequence
 
-from game.BattleState import UnitSnapshot, WorldSnapshot
-from game.BattleWorld import BattleWorld
+from engine.contracts.state import UnitSnapshot, WorldSnapshot
+from engine.battle_world import BattleWorld
 
 
 _CHASSIS_COMMANDS = (
@@ -37,8 +38,8 @@ class ActionController:
         self.fire_angle_tolerance = fire_angle_tolerance
         self.auto_fire_when_ready = bool(auto_fire_when_ready)
         self.delta_time = float(delta_time)
-        if self.delta_time <= 0.0:
-            raise ValueError("delta_time must be > 0")
+        if not math.isfinite(self.delta_time) or self.delta_time <= 0.0:
+            raise ValueError("delta_time must be finite and > 0")
         self.n_actions = 10 if self.auto_aim else 28
 
     def available_actions(
@@ -85,6 +86,7 @@ class ActionController:
         snapshot: WorldSnapshot,
         actions: Sequence[int],
     ) -> None:
+        actions = self.validate_actions(snapshot, actions)
         enemies = snapshot.enemies
         for agent_id, agent in enumerate(snapshot.allies):
             if not agent.alive:
@@ -94,6 +96,21 @@ class ActionController:
                 self._apply_auto_aim(world, agent, enemies, action)
             else:
                 self._apply_manual(world, agent, action)
+
+    def validate_actions(self, snapshot: WorldSnapshot, actions: Sequence[int]) -> tuple[int, ...]:
+        """Reject a malformed batch before applying any unit command."""
+        if len(actions) != len(snapshot.allies):
+            raise ValueError(f"Expected {len(snapshot.allies)} actions, received {len(actions)}")
+        result = []
+        for i, action in enumerate(actions):
+            try:
+                value = operator.index(action)
+            except TypeError as exc:
+                raise ValueError(f"Action for agent {i} must be an integer") from exc
+            if isinstance(action, bool) or not 0 <= value < self.n_actions:
+                raise ValueError(f"Action for agent {i} must be in [0, {self.n_actions})")
+            result.append(value)
+        return tuple(result)
 
     @staticmethod
     def _chassis_action_is_available(

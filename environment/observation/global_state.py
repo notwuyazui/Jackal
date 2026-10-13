@@ -12,7 +12,7 @@ from environment.observation.feature_normalizer import (
     normalize_speed,
 )
 from environment.observation.map_encoder import MapFeatureEncoder
-from game.BattleState import WorldSnapshot
+from engine.contracts.state import WorldSnapshot
 
 if TYPE_CHECKING:
     from environment.observation.manager import ObservationConfig

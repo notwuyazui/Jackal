@@ -1,0 +1,138 @@
+// One analytic contour drives the bank mesh, wet material and gameplay
+// queries. No renderer, retained contour buffers, global cache or GPU resources.
+export const SHORELINE_SEGMENTS = 64;
+const TAU = Math.PI * 2;
+
+/** Sixteen authored radial stations, starting east and winding toward +Z.
+ * Shared by all consumers; never expanded into a second retained contour. */
+export type ShorelineRadii = readonly [number, number, number, number,
+  number, number, number, number, number, number, number, number,
+  number, number, number, number];
+
+export interface ShorelineDisc {
+  x: number;
+  z: number;
+  r: number;
+  radii?: ShorelineRadii;
+  /** Round 40 (2026-09-22): the wet shelf's width in METRES from the authored shoreline to the waterline. By default
+   * the waterline sits at 0.80 of the local radius, so a 250 m bay carries a 30–50 m shelf of water-level sand that
+   * no 19 m jetty can cross; a large authored bay states its shelf like a real beach instead. */
+  shelfM?: number;
+}
+
+function authoredRadiusAt(radii: ShorelineRadii, angle: number): number {
+  const turns = angle / TAU;
+  const sample = (turns - Math.floor(turns)) * 16;
+  const station = Math.floor(sample), fraction = sample - station;
+  const a = radii[station & 15], b = radii[(station + 1) & 15];
+  // Periodic monotone Hermite interpolation: the old straight chords made
+  // sixteen visible corners in every authored bay. Harmonic tangents keep
+  // coves smooth without overshooting a protected channel or narrow bank.
+  const before = a - radii[(station + 15) & 15];
+  const delta = b - a, after = radii[(station + 2) & 15] - b;
+  const m0 = before * delta > 0 ? 2 * before * delta / (before + delta) : 0;
+  const m1 = delta * after > 0 ? 2 * delta * after / (delta + after) : 0;
+  const t = fraction, t2 = t * t, t3 = t2 * t;
+  return (2 * t3 - 3 * t2 + 1) * a + (t3 - 2 * t2 + t) * m0
+    + (-2 * t3 + 3 * t2) * b + (t3 - t2) * m1;
+}
+
+/** Construction-only bank grading must use the narrowest authored cove. */
+export function minimumShorelineRadius(disc: ShorelineDisc): number {
+  if (!disc.radii) return disc.r * 0.8;
+  let minimum = 1;
+  for (const radius of disc.radii) minimum = Math.min(minimum, radius);
+  return disc.r * minimum;
+}
+
+function hash(value: number): number {
+  value = Math.imul(value ^ (value >>> 16), 0x45d9f3b);
+  value = Math.imul(value ^ (value >>> 16), 0x45d9f3b);
+  return (value ^ (value >>> 16)) >>> 0;
+}
+
+/** Round 47: the plain disc's two contour phases (the terrain shader redraws the same capes and coves past the square). */
+export function shorelinePhases(disc: ShorelineDisc): readonly [number, number] {
+  const seed = hash(Math.imul(Math.round(disc.x * 16), 73856093)
+    ^ Math.imul(Math.round(disc.z * 16), 19349663));
+  return [(seed & 0xffff) / 65536 * TAU, (seed >>> 16) / 65536 * TAU];
+}
+
+/** Center-seeded capes, coves and smaller bank cuts, inside the authored disc. */
+export function shorelineRadiusAt(disc: ShorelineDisc, angle: number): number {
+  if (disc.radii) return disc.r * authoredRadiusAt(disc.radii, angle);
+  const [phaseA, phaseB] = shorelinePhases(disc);
+  // One-sided coves cut into a broad shore instead of inflating matching
+  // rounded lobes. Folded banks add corners between those larger inlets.
+  // Keep three trig evaluations, 64 shared samples and the same 0.8–1.0
+  // envelope: channel overlap and adaptive bank support depend on that floor.
+  // Concentric beach aprons retain identical phases, independent of radius.
+  const broad = Math.sin(angle * 3 + phaseA) * 0.025;
+  const cove = Math.max(0, Math.sin(angle * 5 - phaseB));
+  const bank = Math.abs(Math.sin(angle * 11 + phaseA + phaseB)) * 0.04;
+  return disc.r * Math.min(1, Math.max(0.80, 0.99 + broad - cove * cove * 0.12 - bank));
+}
+
+/**
+ * Radial distance in units of the authored radius. Callers supply their
+ * outermost useful band so distant queries skip both sqrt and atan2.
+ */
+export function shorelineDistance(
+  disc: ShorelineDisc,
+  x: number,
+  z: number,
+  outerBand = 1.32,
+): number {
+  const dx = x - disc.x, dz = z - disc.z;
+  const bound = disc.r * outerBand;
+  if (Math.abs(dx) >= bound || Math.abs(dz) >= bound) return Infinity;
+  const squared = dx * dx + dz * dz;
+  if (squared >= bound * bound) return Infinity;
+  if (squared < 1e-12) return 0;
+  const radius = shorelineRadiusAt(disc, Math.atan2(dz, dx));
+  return Math.sqrt(squared) / Math.max(0.001, radius);
+}
+
+/** Wet-mask value, consumed both by the existing splat bake and water wakes. */
+export function shorelineWetness(
+  disc: ShorelineDisc,
+  x: number,
+  z: number,
+  lake: boolean,
+): number {
+  const distance = shorelineDistance(disc, x, z, 1);
+  if (lake && disc.shelfM !== undefined && Number.isFinite(distance)) {
+    // an authored shelf width: the waterline is `shelfM` inside the local shoreline radius, the dry beach still ends
+    // at 0.96 of it (the plain-disc law is the 0.80 → 0.96 ramp below)
+    const radius = shorelineRadiusAt(disc, Math.atan2(z - disc.z, x - disc.x));
+    return shorelineWetnessFromDistance(distance, lake, Math.min(0.94, 1 - disc.shelfM / Math.max(1, radius)));
+  }
+  return shorelineWetnessFromDistance(distance, lake);
+}
+
+/** Reuse an already evaluated contour while applying terrain constraints. */
+export function shorelineWetnessFromDistance(distance: number, lake: boolean, lakeStart = 0.80): number {
+  const start = lake ? lakeStart : 0.45;
+  const end = lake ? 0.96 : 1;
+  const t = Math.max(0, Math.min(1, (distance - start) / (end - start)));
+  return 1 - t * t * (3 - 2 * t);
+}
+
+/** Union coverage is order-independent, including overlapping sea sheets. */
+export function sampleShorelineMask(
+  marshes: readonly ShorelineDisc[],
+  lakes: readonly ShorelineDisc[],
+  x: number,
+  z: number,
+): number {
+  let wetness = 0;
+  for (let i = 0; i < lakes.length; i++) {
+    wetness = Math.max(wetness, shorelineWetness(lakes[i], x, z, true));
+    if (wetness === 1) return 1;
+  }
+  for (let i = 0; i < marshes.length; i++) {
+    wetness = Math.max(wetness, shorelineWetness(marshes[i], x, z, false));
+    if (wetness === 1) return 1;
+  }
+  return wetness;
+}

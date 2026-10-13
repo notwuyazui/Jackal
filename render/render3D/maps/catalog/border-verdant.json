@@ -1,0 +1,25 @@
+{
+  "id": "border-verdant",
+  "name": "翠原野 · Border",
+  "builder": "verdant",
+  "meters_per_pixel": 0.25,
+  "unit_models": {
+    "tank": "m1a1"
+  },
+  "layout": {
+    "tile_size": 64,
+    "tiles": [
+      "xxxxxxxxxxxxxxx",
+      "xooooooooooooox",
+      "xooooooooooooox",
+      "xooooooooooooox",
+      "xooooooooooooox",
+      "xooooooooooooox",
+      "xooooooooooooox",
+      "xooooooooooooox",
+      "xooooooooooooox",
+      "xxxxxxxxxxxxxxx"
+    ]
+  },
+  "default_state": "engine/scenarios/game_states/border_map_3t_vs_3t.json"
+}

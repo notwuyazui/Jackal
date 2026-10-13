@@ -1,0 +1,129 @@
+// Import-free ownership manifest for the demand-loaded procedural builders.
+// It is deliberately plain data so asking which chunk owns a tank never
+// downloads or evaluates that chunk.
+export const FLEET_GROUP_IDS = Object.freeze({
+  dardo: Object.freeze(['dardo']),
+  lrmvLynx: Object.freeze(['lrmv_lynx']),
+  borsuk: Object.freeze(['borsuk']),
+  pumaS1SourceX: Object.freeze(['spz_puma_s1_x']),
+  cv9040CSourceX: Object.freeze(['cv90_x']),
+  type89SourceX: Object.freeze(['type89_x']),
+  griffinViper: Object.freeze(['griffin_viper']),
+  tos1aTagil: Object.freeze(['tos1a_tagil']),
+  aresApcX: Object.freeze(['ares_apc_x']),
+  leopardA6X: Object.freeze(['leo2a6_x']),
+  k1a1X: Object.freeze(['k1a1_x']),
+  amx30X: Object.freeze(['amx30_x']),
+  t62mv1X: Object.freeze(['t62mv1_x']),
+  t72b1987X: Object.freeze(['t72b_1987_x']),
+  t80uX: Object.freeze(['t80u_x']),
+  t72b3X: Object.freeze(['t72b3_x']),
+  jagdpanzerE100X: Object.freeze(['jpz_e100_x']),
+  type10X: Object.freeze(['type10_x']),
+  type90X: Object.freeze(['type90_x']),
+  amx40X: Object.freeze(['amx40_x']),
+  arieteX: Object.freeze(['ariete_c1_x', 'ariete_c2_x']),
+  strv122X: Object.freeze(['strv122_x']),
+  t72b3mX: Object.freeze(['t72b3m_x']),
+  challenger1X: Object.freeze(['challenger1_x']),
+  t72buX: Object.freeze(['t72bu_x']),
+  chieftain5X: Object.freeze(['chieftain5_x']),
+  t90AwX: Object.freeze(['t90_x']),
+  t90BurlakX: Object.freeze(['t90a_burlak_x']),
+  t90msX: Object.freeze(['t90ms_x']),
+  leclercX: Object.freeze(['leclerc_x']),
+  leclercClassicX: Object.freeze(['leclerc_classic_x']),
+  chieftain10X: Object.freeze(['chieftain_mk10_x']),
+  leopardX: Object.freeze(['leo2a7v_x', 'leo2a6m_x', 'leo2a4m_x', 'leo2a5_x']),
+  t90X: Object.freeze(['t90a_x', 't90a_vladimir_x', 't90m_x', 't90sm_x']),
+  merkavaX: Object.freeze([
+    'merkava4_x', 'merkava3d_x', 'merkava4_trophy', 'merkava4_barak', 'namer_ifv',
+  ]),
+  k2X: Object.freeze(['k2_x']),
+  kf51X: Object.freeze(['kf51_x']),
+  t14X: Object.freeze(['t14_x']),
+  kurganetsX: Object.freeze(['kurganets25_x']),
+  fv510MilanX: Object.freeze(['fv510_milan_x']),
+  griffin50X: Object.freeze(['griffin50_x']),
+  ajaxX: Object.freeze(['ajax_x']),
+  aft10X: Object.freeze(['aft10_x']),
+  bmp3mDragun125X: Object.freeze(['bmp3m_dragun125_x']),
+  k21X: Object.freeze(['k21_x']),
+  type96bX: Object.freeze(['type96b_x']),
+  kf41LynxSourceX: Object.freeze(['kf41_lynx_x']),
+  cv90MkivSourceX: Object.freeze(['cv90_mkiv_x']),
+  cv90105TmlSourceX: Object.freeze(['cv90105_tml_x']),
+  sabraMk2SourceX: Object.freeze(['sabra_mk2_x']),
+  modern2: Object.freeze(['mbt70', 't14', 'ztz85_iii', 'type99a', 'ztz99a2_prototype', 'ztz99a2', 'vt4a1', 'type59', 'type100', 'ztz100_x', 'ztz100_prototype', 'object695_x']),
+  franceCore: Object.freeze(['amx40']),
+  xk2: Object.freeze(['k2']),
+  modern3Core: Object.freeze(['k1a1', 'type10', 'm2a2_bradley', 'bmp2', 'type89']),
+  // These visual profiles used to be imported by every garage boot even when
+  // no matching vehicle was visible. Keep their ownership in the same
+  // import-free manifest as the larger authored families.
+  misc: Object.freeze([
+    'type90', 'leclerc', 'leclerc_xlr', 'amx56', 't80u',
+    'type74', 'amx30', 'amx30b2',
+  ]),
+  uk: Object.freeze([
+    'chieftain5', 'chieftain_mk10', 'vickers_mk1', 'centurion3', 'centurion5',
+    'fv510', 'fv510_milan',
+  ]),
+  challenger: Object.freeze([
+    'challenger1', 'fv4034', 'challenger2', 'challenger2e', 'ua_challenger2', 'challenger_3',
+    'challenger_3x',
+  ]),
+  leopard: Object.freeze([
+    'leo2a4', 'leo2a6', 'leo2a5', 'leo2a5_a5nl', 'leo2a7v', 'leopard2_proto',
+    'leo2_revolution_proto', 'leo2_revolution', 'kf51', 'kf51b', 'leo1a5', 'leo2a4m', 'leo2a6m',
+    'leo2a6_ua',
+  ]),
+  italy: Object.freeze(['ariete', 'ariete_c1', 'ariete_c2', 'carro45t']),
+  sweden: Object.freeze([
+    'udes03', 'strv103', 'strv103a', 'strv81', 'strv122', 'cv90', 'cv90_mkiv',
+  ]),
+  sovietHeavy: Object.freeze(['kv2']),
+  t90: Object.freeze([
+    't90a', 't90',
+    't90ms', 't90a_burlak', 'pt91m', 't90sm', 't90a_vladimir', 't90m', 't90m_proryv',
+  ]),
+  russia: Object.freeze(['t62mv1', 't64bv1']),
+  t72: Object.freeze(['t72b3m', 't72bu']),
+  t80: Object.freeze(['t80', 't80b', 't80bv', 't84']),
+  ukraine: Object.freeze([
+    'ua_t64bv', 'ua_t80bv', 'ua_t80u_kursk', 'ua_t84_oplot_m', 'ua_m1a1',
+  ]),
+  poland: Object.freeze(['t72m1_jaguar', 'pt91_twardy', 'pl01', 'pl01_105']),
+  abramsSourceX: Object.freeze(['m1a2_x', 'm1a2_tusk_x', 'm1a2_sepv2_x', 'm1a2_sepv3_x', 'ua_m1a1_x']),
+  abrams: Object.freeze([
+    'm1a2', 'm1a1', 'm1a1ha', 'm1a2_tusk', 'm1a2_sepv2',
+    'm1a2_sepv3', 'm1a3', 'abramsx',
+  ]),
+  patton: Object.freeze([
+    'm46_patton', 'm47_patton', 'm48', 'm60a2',
+    'm60a1', 'm60a3',
+  ]),
+  merkava: Object.freeze([
+    'merkava1b', 'merkava2b', 'merkava2d', 'merkava3c',
+    'merkava3d', 'merkava4b',
+  ]),
+  afv: Object.freeze([
+    'bmp3_rok', 'ua_m2a3_bradley',
+    'bmpt_terminator2', 'bwp1', 'marder1a3', 'm3a3_bradley', 'spz_puma', 'spz_puma_s1',
+    'type89_light_tiger',
+    'bmp3', 'upior', 'bmpt_t90',
+  ]),
+  korea: Object.freeze(['k2b']),
+  japan: Object.freeze(['stb1', 'type90a', 'type10b']),
+  germany: Object.freeze(['leo2a4_otco']),
+  sheridan: Object.freeze(['m551_sheridan', 'm551a1_tts']),
+} as const);
+
+export type FleetGroup = keyof typeof FLEET_GROUP_IDS;
+
+export const FLEET_GROUP_BY_ID: Readonly<Record<string, FleetGroup>> = Object.freeze(
+  Object.fromEntries(
+    (Object.entries(FLEET_GROUP_IDS) as [FleetGroup, readonly string[]][])
+      .flatMap(([group, ids]) => ids.map((id) => [id, group])),
+  ),
+);

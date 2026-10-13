@@ -1,0 +1,243 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jackal-env"
+version = "0.2.0"
+description = "Jackal multi-agent tank environment with independent 2D and 3D renderers"
+requires-python = ">=3.10"
+dependencies = ["numpy", "pygame"]
+
+[project.readme]
+content-type = "text/markdown"
+text = '''
+# Jackal-env
+
+二维坦克战斗物理引擎、多智能体强化学习环境，以及可选择的 Jackal 2D / CoT 3D 渲染器。
+二维引擎决定移动、碰撞、弹道、伤害和胜负；绘制端读取同一份状态，三维特效不改变训练物理。
+
+## 目录与依赖关系
+
+- engine：二维世界、地图、单位、弹药、EnemyAI、存档及只读状态合同。
+- environment：场景构建、reset/step、动作掩码、观测、奖励、终止、评估会话与键盘交互。
+- render：统一接口 render/api.py，含 render2D、render3D 和快照传输。
+- training：训练算法、网络、回放、配置，以及模型评估和环境冒烟脚本。
+- test：单元、集成和绘制回归；test/evaluation 仅兼容旧命令。
+- artifacts：生成的日志、检查点、视频和报告，不提交 Git。
+
+训练层通过 environment 使用底层能力。物理对象、渲染快照和窗口由环境内部管理；
+模型网络和动作推理留在 training。环境和独立绘制工具通过 render.api 使用渲染器。
+引擎不依赖 environment、render 或 training。
+
+## 二级目录与文件职责
+
+以下列出五个业务包直属的目录与文件。虚拟环境、缓存、安装元数据和运行产物不属于源码层。
+
+### engine
+
+| 路径 | 职责 |
+| --- | --- |
+| `engine/__init__.py` | Python 包标识，无战斗逻辑。 |
+| `engine/battle_world.py` | BattleWorld 战场入口：管理地图、单位和炮弹，按固定顺序推进物理帧，加载和保存战斗状态，提供只读快照与渲染清单。 |
+| `engine/contracts/` | 定义环境和渲染器共享的不可变状态、事件与接口，统一胜负判定和单位序列化，并生成 TypeScript 数据类型。 |
+| `engine/geometry.py` | 统一导出 Pygame Rect，供碰撞箱、空间查询和视线计算使用；保留整数取整与矩形边界语义，不初始化窗口。 |
+| `engine/maps/` | 二维地图与地块类型、内置地图构建、障碍物索引，以及通行、碰撞和视线查询。 |
+| `engine/parameters.py` | 基础物理常量、资源路径和装甲、队伍、方向等枚举，是全局参数定义入口。 |
+| `engine/projectiles/` | 炮弹基类、NormalShell 等弹种、武器参数以及炮弹管理器，处理移动、碰撞、爆炸和伤害。 |
+| `engine/rules.py` | 定义通信、视野、单位碰撞等游戏规则的全局默认值，允许单局覆盖。 |
+| `engine/scenarios/` | 存放可复用的游戏状态 JSON、二维地图文本和单位初始状态，不存放三维场景资源。 |
+| `engine/units/` | 单位基类、坦克/防空单位/飞机、单位管理器和 EnemyAI，负责移动、转向、炮塔、射击、视野及战斗决策。 |
+| `engine/utils.py` | 引擎公共工具：动作结构、矩形定位、空间索引、距离计算、类型查找和存档命名。 |
+
+### environment
+
+| 路径 | 职责 |
+| --- | --- |
+| `environment/__init__.py` | 对外导出 JackalEnv。 |
+| `environment/action_controller.py` | 将强化学习的离散动作转换为单位移动、转向、瞄准和射击指令，并计算动作可用性。 |
+| `environment/evaluation.py` | BattleSession 单局评估接口：封装模型或 EnemyAI 对战、窗口生命周期、播放等待和战斗结果，使 training 无需直接操作 engine/render。 |
+| `environment/interactive.py` | 构建键盘控制的战场并运行交互会话，封装输入、物理推进与窗口绘制。 |
+| `environment/jackal_env.py` | 强化学习环境主体，组合场景、动作、观测和奖励，提供 reset/step、动作掩码、终止判定、结果及可选渲染。 |
+| `environment/marl_adapter.py` | 将 JackalEnv 适配为 PyMARL 风格的多智能体接口，统一返回顺序与环境信息。 |
+| `environment/observation/` | 将不可变战场快照编码为局部观测、全局状态和地图特征，并进行特征归一化。 |
+| `environment/presentation/` | 独立同步演示与录制工具，封装逐帧确认、帧导出和 2D/3D 一致性诊断，兼容原有演示入口。 |
+| `environment/reward/` | 奖励配置、战斗事件汇总、自动瞄准与手动瞄准奖励及统一奖励管理器。 |
+| `environment/scenario.py` | 场景参数与单局初始化：解析地图/单位配置，布置出生位置、随机扰动和属性覆盖，并构建 EnemyAI 战场。 |
+
+### render
+
+| 路径 | 职责 |
+| --- | --- |
+| `render/__init__.py` | 导出常用统一绘制接口，后端按需加载。 |
+| `render/api.py` | 渲染层统一对外入口：选择 2D/3D/2D3D，创建视图，接收快照绘制，管理窗口、输入、HUD、视频和服务生命周期，并提供地图/车型查询与部署接口。 |
+| `render/render2D/` | Jackal 原生 Pygame 绘制：精灵资源、相机、输入、独立窗口、浏览器内嵌 PNG 画面和视频输出。 |
+| `render/render3D/` | CoT 三维呈现：Python 浏览器桥接与启动器、地图/车型注册和适配、Three.js 场景与特效、贴图和 CoT 来源资源；视觉效果不改动物理。 |
+| `render/transport/` | HTTP 服务与状态快照流，处理帧版本、事件积累、浏览器确认、连接状态和关闭通知。 |
+
+### training
+
+| 路径 | 职责 |
+| --- | --- |
+| `training/__init__.py` | Python 包标识，无训练或窗口逻辑。 |
+| `training/__main__.py` | python -m training 与 jackal-train 的算法分发入口，选择 DQN、DRQN 或 QMIX 训练器。 |
+| `training/DQN_Test/` | DQN 网络、智能体、经验缓存和学习器实现，供 DQN 训练与评估共用。 |
+| `training/DQN_train.py` | DQN 训练入口，组织参数、环境、动作采样、更新、日志与检查点。 |
+| `training/DQN_test_render.py` | DQN 检查点评估主体，通过环境接口执行模型推理和可视化。 |
+| `training/DRQN_Test/` | DRQN 循环网络、智能体、序列缓存、学习器及动作分解工具，供训练与评估共用。 |
+| `training/DRQN_train.py` | DRQN 训练入口，组织序列采样、循环状态、模型更新、日志与检查点。 |
+| `training/DRQN_test_render.py` | DRQN 检查点评估主体，加载配套运行配置并处理循环状态与可视化。 |
+| `training/configs/` | 保存训练、环境、奖励与评估配置；marl2 子目录包含 QMIX/ETD-QMIX/DVD 等实验配置。 |
+| `training/evaluate.py` | 模型评估分发入口，调用 DQN、DRQN、QMIX 或键盘交互评估。 |
+| `training/marl2/` | 多智能体学习组件：共享控制器、RNN/ETD-RNN、QMIX/DVD 混合器、学习器、回放缓存、单进程/并行采样器和算法注册。 |
+| `training/test.py` | 键盘交互评估的命令行入口，交互循环由 environment.interactive 管理。 |
+| `training/test_env.py` | 无窗口环境冒烟入口，检查 reset/step 与观测、状态、奖励和动作掩码。 |
+| `training/test_model.py` | 统一单局模型/EnemyAI 测试入口，解析渲染与场景选项、加载检查点、执行模型推理；对战和窗口由 BattleSession 管理。 |
+| `training/test_qmix_marl2.py` | QMIX 系列检查点评估主体，支持多局评估、统计和可选视频输出。 |
+| `training/tools/` | 训练结果分析工具，例如读取日志绘制胜率曲线。 |
+| `training/train_qmix_marl2.py` | QMIX 系列训练主循环，组合采样器与学习器，管理探索、周期评估、日志、检查点及回滚策略。 |
+| `training/utils/` | 训练和推理共用工具，当前负责 CPU/CUDA/MPS 设备解析与选择。 |
+
+### test
+
+| 路径 | 职责 |
+| --- | --- |
+| `test/__init__.py` | Python 测试包标识，支持 unittest 测试发现。 |
+| `test/evaluation/` | 旧评估命令的兼容入口，转发到 training；不保留模型评估主体。 |
+| `test/fixtures/` | 固定回归数据，保存物理帧、观测、奖励和动作掩码等参考结果。 |
+| `test/integration/` | 跨模块回归，检查环境随机性、存档、训练入口、并行采样、评估会话、分层依赖和物理行为一致性。 |
+| `test/rendering/` | 渲染与传输回归，检查窗口关闭、视频、帧流、2D 内嵌画面、3D 映射及录制结果。 |
+| `test/unit/` | 战场、AI、武器与学习组件的单元测试，以及 AI 基准和训练性能分析工具。 |
+
+项目根目录的 JackalEnv.py、train_qmix_marl2.py、test_qmix_marl2.py 是旧导入/命令的兼容入口；
+start-demo.command 用于双击启动演示，requirements.txt 保存依赖清单，pyproject.toml 定义安装、入口和本项目说明。
+artifacts 下的日志、检查点、视频与诊断目录由运行过程生成；.venv 和 jackal_env.egg-info 分别为本地虚拟环境与安装元数据。
+
+## 安装
+
+在项目目录执行：
+
+```sh
+python3 -m venv .venv
+.venv/bin/python -m pip install -e '.[training,video]'
+cd render/render3D
+npm ci
+```
+
+仅使用物理引擎和环境可安装 -e .；training 扩展提供训练依赖，video 扩展提供视频依赖。
+执行 Python 命令时使用该虚拟环境。editable 安装后可从其他目录运行模块和控制台命令。
+3D 需要 Node.js 和前端依赖；Node 可从 PATH 查找，也可通过 JACKAL_NODE 指定。
+
+## 训练与评估入口
+
+```sh
+python -m training qmix --config training/configs/marl2/jackal_autoaim_3v3_qmix.json
+python -m training dqn --help
+python -m training drqn --help
+
+python -m training.test_model
+python -m training.test_model --render 2D
+python -m training.test_model --render 3D
+python -m training.test_model --render 2D3D --config jackal_autoaim_3v3_qmix --checkpoint /absolute/model.pt --device cpu
+
+python -m training.evaluate qmix --checkpoint /absolute/model.pt --episodes 1
+python -m training.evaluate dqn --help
+python -m training.evaluate drqn --help
+python -m training.evaluate interactive
+python -m training.test_env
+```
+
+jackal-train、jackal-evaluate、jackal-demo 分别对应训练、评估分发和统一单局测试。
+也可双击 start-demo.command 运行同步演示。
+DQN、DRQN、QMIX 评估主体分别位于 training/DQN_test_render.py、DRQN_test_render.py、
+test_qmix_marl2.py；环境冒烟主体位于 training/test_env.py。
+
+## 统一单局测试
+
+training/test_model.py 的 --render 支持 2D、3D、2D3D，默认 2D3D：
+2D 打开原生 Pygame 窗口；3D 打开 CoT 浏览器画面；2D3D 在 CoT 右上角显示 Jackal 2D 画面。
+对战自动开始，默认保留结束画面；关闭窗口退出本次程序，2D 也支持 Esc。
+--exit-on-finish 可在结束后自动退出。macOS 的浏览器演示使用独立 Safari 窗口。
+
+不传 --checkpoint 时，--config 从 engine/scenarios/game_states 选择游戏状态，
+默认 border_map_3t_vs_3t，双方默认使用 5 级 EnemyAI。
+传入 --checkpoint 时，--config 从 training/configs/marl2 选择训练配置，
+默认 jackal_autoaim_3v3_qmix；配置必须与检查点的网络和输入维度匹配。
+统一入口加载 QMIX / DVD 检查点的 agent 权重进行贪心推理，支持 RNN / ETD-RNN。
+DQN 和 DRQN 检查点使用各自评估脚本。
+
+--device 支持 auto、cpu、cuda、cuda:N、mps；--seed、--max-steps、--fixed-delta-time
+可覆盖单局设置。模型模式默认沿用训练配置的步数上限，AI 对战默认 6000 步。
+--speed 仅改变播放等待，不改变物理步长。
+--ai-intelligence 和 --enemy-intelligence 可选择 AI 等级；--scene 可显式选择三维场景。
+完整选项见 python -m training.test_model --help。
+
+## 环境与绘制接口
+
+JackalEnv 提供 reset(seed)、step(actions)、get_env_info、get_avail_actions、
+get_obs、get_state、get_battle_result 和 close。训练默认关闭渲染。
+reset 返回 (obs, state)，step 返回 (obs, state, reward, done, info)。
+JackalMultiAgentEnv 提供 PyMARL 风格适配，step 返回
+(reward, done, info, next_obs, next_state)。
+
+environment.evaluation.BattleSession 封装模型或 EnemyAI 单局评估，支持无窗口模式。
+模型模式 reset 返回 (obs, state)，AI 模式返回 (None, None)。
+step 接受模型离散动作列表；AI 模式不传动作。
+其返回的 info['battle_result'] 包含 finished、winner、reason、alive；
+get_report 返回结果、tick、time、render、controller、seed，模型模式另含 episode_return。
+render/is_open 返回窗口状态；wait_frame/wait_for_close 处理播放和结束等待；
+close 或 with 上下文释放本次服务与窗口。
+本局上限按实际运行步数判断，环境结果统一传给 2D、3D 和终端报告。
+
+引擎通过 render_manifest(dt) 和 render_snapshot() 提供冻结的地图、单位、弹药与事件。
+渲染器通过 initialize(manifest)、render(snapshot, result)、close() 使用这些状态。
+render.api 提供 create_viewer、create_renderer、load_map、apply_map、list_maps、list_models。
+独立绘制工具可通过这些接口创建视图；训练代码使用 environment 的会话接口。
+JackalEnv 的 render_mode 支持 None、2D、3D、2D3D，以及 human、rgb_array、browser、
+browser_lockstep 兼容模式。browser 异步传输，browser_lockstep 逐帧等待确认。
+
+## 地图、车型与资源扩展
+
+三维场景按真实地图布局、尺寸和车型匹配。现有标准 Border 为 960×640，
+小型 Border 为 640×512，tank 使用原版 M1A1。未制作三维场景或未注册模型时选择 2D。
+物理存档位于 engine/scenarios；三维地图描述位于 render/render3D/maps/catalog，
+场景构建器位于 maps/scenes；车型描述位于 models/catalog，模型适配器位于 models/adapters。
+地图加载和视觉部署不会覆盖坦克物理属性或碰撞箱。
+新增地图与车型的资源和生命周期约定见 render/render3D/maps/README.md；
+算法扩展说明见 training/marl2/README.md。
+
+CoT 借用资源、许可证和来源记录位于 render/render3D/vendor/cot，
+文件来源与 SHA-256 见该目录的 PROVENANCE.json。运行不依赖外部 CoT 目录。
+
+## 验证命令
+
+```sh
+python -m unittest discover -s test -t .
+python -m engine.contracts.generate_types --check
+cd render/render3D
+npm run typecheck
+npm test
+npm run build
+```
+'''
+
+[project.optional-dependencies]
+training = ["torch", "tqdm", "tensorboard"]
+video = ["imageio", "imageio-ffmpeg"]
+
+[project.scripts]
+jackal-train = "training.__main__:main"
+jackal-evaluate = "training.evaluate:main"
+jackal-demo = "training.test_model:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["engine*", "environment*", "render*", "training*", "test*"]
+namespaces = false
+
+[tool.setuptools.package-data]
+engine = ["scenarios/**/*.json", "scenarios/**/*.txt"]
+"render.render2D" = ["assets/**/*.png"]
+"render.render3D" = ["package.json", "package-lock.json", "vite.config.ts", "tsconfig.json", "src/**/*", "maps/**/*.ts", "maps/**/*.json", "maps/*.md", "models/**/*.ts", "models/**/*.json", "public/**/*", "vendor/**/*"]
+training = ["configs/**/*.json"]
+test = ["fixtures/*.json"]

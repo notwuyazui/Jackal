@@ -1,18 +1,21 @@
 import os
 import datetime
+import math
+import operator
 from random import Random
 from typing import Optional
 
-import game.GameMode as GameMode
-from game.Parameter import BULLET_SPEED, DEFAULT_AI_INTELLIGENCE_LEVEL, Team
-from game.Map.GameMap import GameMap
-from game.Bullet.BulletManager import BulletManager
-from game.BattleState import WorldSnapshot
-from game.BattleWorld import BattleWorld
-from game.Unit.UnitManager import UnitManager
+import engine.rules as GameMode
+from engine.parameters import BULLET_SPEED, DEFAULT_AI_INTELLIGENCE_LEVEL, Team
+from engine.maps.game_map import GameMap
+from engine.projectiles.bullet_manager import BulletManager
+from engine.contracts.state import WorldSnapshot
+from engine.contracts.outcome import outcome_from_counts
+from engine.battle_world import BattleWorld
+from engine.units.unit_manager import UnitManager
 from environment.action_controller import ActionController
 from environment.observation import ObservationConfig, ObservationManager
-from environment.rendering import PygameRenderer, create_video_writer
+from render.api import create_renderer, create_video_writer
 from environment.reward import RewardManager, default_reward_config, merge_reward_config
 from environment.scenario import (
     ScenarioConfig,
@@ -77,15 +80,26 @@ class JackalEnv:
         collision_scale=1.0,
         enemy_ai_intelligence_level=DEFAULT_AI_INTELLIGENCE_LEVEL,
         seed: Optional[int] = None,
+        render_mode: str | None = None,
+        render_options: dict | None = None,
     ):
         self.headless = headless
-        self.delta_time = fixed_delta_time
+        self.delta_time = float(fixed_delta_time)
+        if not math.isfinite(self.delta_time) or self.delta_time <= 0:
+            raise ValueError("fixed_delta_time must be finite and > 0")
+        try:
+            max_steps = operator.index(max_steps)
+        except TypeError as exc:
+            raise ValueError("max_steps must be a positive integer") from exc
+        if max_steps <= 0:
+            raise ValueError("max_steps must be a positive integer")
         self._rng = Random(None if seed is None else int(seed))
         self._episode_seed: Optional[int] = None
         
         self.use_video = use_video
         self.video_dir = video_dir
         self.video_writer = None
+        self._closed = False
         self.auto_aim = auto_aim
         self.enable_unit_collision = bool(
             GameMode.ENABLE_UNIT_COLLISION
@@ -103,8 +117,8 @@ class JackalEnv:
             else auto_communicate
         )
         self.collision_scale = float(collision_scale)
-        if self.collision_scale <= 0.0:
-            raise ValueError("collision_scale must be > 0")
+        if not math.isfinite(self.collision_scale) or self.collision_scale <= 0.0:
+            raise ValueError("collision_scale must be finite and > 0")
         self.include_obs_map_features = bool(include_map_features) if include_obs_map_features is None else bool(include_obs_map_features)
         self.include_state_map_features = bool(include_map_features) if include_state_map_features is None else bool(include_state_map_features)
         self.obs_map_grid_size = int(obs_map_grid_size)
@@ -115,9 +129,6 @@ class JackalEnv:
         if reward_config:
             merge_reward_config(self.reward_config, reward_config)
         
-        if self.headless:
-            os.environ["SDL_VIDEODRIVER"] = "dummy"
-            os.environ["SDL_AUDIODRIVER"] = "dummy"
 
         self.viewport_width = int(viewport_width)
         self.viewport_height = int(viewport_height)
@@ -192,17 +203,10 @@ class JackalEnv:
             if self.game_state_file or random_builtin_map
             else map_layout
         )
-        self.renderer = (
-            PygameRenderer(
-                self.viewport_width,
-                self.viewport_height,
-                visible=not self.headless,
-                title="Jackal MARL Environment",
-            )
-            if self.use_video or not self.headless
-            else None
-        )
-
+        self.render_mode = render_mode or ("rgb_array" if use_video else "human" if not headless else None)
+        if self.render_mode and self.render_mode.upper() in {"2D", "3D", "2D3D"}:
+            self.render_mode = self.render_mode.upper()
+        browser_mode = self.render_mode in {"browser", "browser_lockstep", "3D", "2D3D"}
         self.n_agents = len(state_allies) if self.game_state_file else int(n_agents)
         self.n_enemies = len(state_enemies) if self.game_state_file else int(n_enemies)
         if self.n_agents <= 0:
@@ -341,6 +345,20 @@ class JackalEnv:
         if self.use_video:
             os.makedirs(self.video_dir, exist_ok=True)
 
+        # Open optional windows only after all constructor validation succeeds.
+        self.renderer = create_renderer(self.render_mode, self.viewport_width,
+                                        self.viewport_height, **({"max_steps": max_steps, **(render_options or {})} if browser_mode else (render_options or {})))
+
+        self._video_renderer = self.renderer
+        if use_video and browser_mode:
+            try:
+                self._video_renderer = create_renderer("rgb_array", self.viewport_width, self.viewport_height)
+            except Exception:
+                if self.renderer is not None:
+                    self.renderer.close()
+                raise
+
+
     @property
     def world(self) -> BattleWorld:
         if self._world is None:
@@ -378,6 +396,7 @@ class JackalEnv:
     def reset(self, seed: Optional[int] = None):
         """Start an episode, optionally reproducing it from an exact seed."""
 
+        self._require_open()
         if seed is not None:
             actual_seed = int(seed)
             self._rng.seed(actual_seed)
@@ -396,19 +415,22 @@ class JackalEnv:
             rng=episode_rng,
         )
         self._world = episode.world
-        self._world.set_camera_viewport(
-            (self.viewport_width, self.viewport_height)
-        )
+        if self.renderer is not None:
+            self.renderer.initialize(self._world.render_manifest(self.delta_time))
+        if self._video_renderer is not None and self._video_renderer is not self.renderer:
+            self._video_renderer.initialize(self._world.render_manifest(self.delta_time))
         self.agents = episode.allies
         self.enemies = episode.enemies
         self._snapshot = episode.world.snapshot()
+        if self.render_mode in {"human", "browser", "browser_lockstep", "2D", "3D", "2D3D"}:
+            self.render()
             
         if self.use_video:
             if self.video_writer is not None:
                 self.video_writer.release()
-            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
             video_path = os.path.join(self.video_dir, f"episode_{timestamp}.mp4")
-            fps = int(1.0 / self.delta_time)
+            fps = 1.0 / self.delta_time
             self.video_writer = create_video_writer(
                 video_path,
                 fps,
@@ -432,12 +454,13 @@ class JackalEnv:
         return [self.get_avail_agent_actions(i) for i in range(self.n_agents)]
 
     def step(self, actions):
-        self.steps += 1
+        self._require_open()
         self.action_controller.apply(
             self.world,
             self.snapshot,
             actions,
         )
+        self.steps += 1
 
         pre_snapshot = self.snapshot
 
@@ -462,6 +485,8 @@ class JackalEnv:
         )
         info["episode_seed"] = self._episode_seed
         done = self._check_done()
+        if self.render_mode in {"human", "browser", "browser_lockstep", "2D", "3D", "2D3D"}:
+            self.render()
         
         return (
             self.observation_manager.get_observations(self.snapshot),
@@ -472,11 +497,14 @@ class JackalEnv:
         )
     
     def _check_done(self):
-        return (
-            self.steps >= self.max_steps
-            or all(not agent.alive for agent in self.snapshot.allies)
-            or all(not enemy.alive for enemy in self.snapshot.enemies)
-        )
+        return self.get_battle_result()['finished']
+
+    def get_battle_result(self) -> dict:
+        """Return episode-relative termination without exposing engine objects."""
+        self._require_open()
+        counts = {'PLAYER': sum(unit.alive for unit in self.snapshot.allies),
+                  'ENEMY': sum(unit.alive for unit in self.snapshot.enemies)}
+        return outcome_from_counts(counts, self.steps, self.max_steps)
 
     def get_env_info(self):
         """Return stable metadata without exposing environment components."""
@@ -527,22 +555,34 @@ class JackalEnv:
         return self.observation_manager.get_state(self.snapshot)
 
     def _render_to_video(self):
-        if self.video_writer is None or self.renderer is None:
+        if self.video_writer is None or self._video_renderer is None:
             return
-        self.renderer.draw(self.world)
-        self.video_writer.write(self.renderer.rgb_array())
+        self._video_renderer.draw(self.world.render_snapshot())
+        self.video_writer.write(self._video_renderer.rgb_array())
 
     def render(self):
-        """Render the current world only when a Pygame adapter was requested."""
+        """Render the current immutable snapshot through the selected unified view."""
 
+        self._require_open()
         if self.renderer is None:
             return None
-        surface = self.renderer.draw(self.world)
-        self.renderer.present()
-        return surface
+        return self.renderer.render(self.world.render_snapshot(), self.get_battle_result())
+
+    def _require_open(self):
+        if self._closed:
+            raise RuntimeError('JackalEnv is closed')
 
     def close(self):
-        if self.use_video and self.video_writer is not None:
-            self.video_writer.release()
-        if self.renderer is not None:
-            self.renderer.close()
+        if self._closed:
+            return
+        self._closed = True
+        from contextlib import ExitStack
+        # ExitStack still releases the other owned resources if one fails.
+        with ExitStack() as cleanup:
+            if self._video_renderer is not None and self._video_renderer is not self.renderer:
+                cleanup.callback(self._video_renderer.close)
+            if self.renderer is not None:
+                cleanup.callback(self.renderer.close)
+            if self.video_writer is not None:
+                writer, self.video_writer = self.video_writer, None
+                cleanup.callback(writer.release)

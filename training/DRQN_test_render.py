@@ -1,12 +1,14 @@
+from pathlib import Path
+import sys
+
+if __package__ in (None, ''):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 import torch
 import os
 import json
 import argparse
-import sys
 
-_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, _PROJECT_ROOT)
 
 from environment.jackal_env import JackalEnv
 
@@ -17,7 +19,7 @@ from training.DRQN_Test.action_factorization import compose_action
 from training.utils.device import get_device, print_device_info
 
 
-def parse_args():
+def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="DRQN render evaluation")
     parser.add_argument("--model-path", type=str, default="artifacts/checkpoints/drqn/drqn/model_final.pth")
     parser.add_argument("--episodes", type=int, default=3)
@@ -41,7 +43,7 @@ def parse_args():
         choices=["auto", "cpu", "cuda", "mps"],
         help="选择计算设备: auto/cpu/cuda/mps"
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def resolve_run_config_path(model_path):
@@ -207,8 +209,8 @@ def test_drqn_model(
     env.close()
     print(f"\n测试完成！录制的视频已保存在 {os.path.abspath(video_dir)} 目录下。")
 
-if __name__ == "__main__":
-    args = parse_args()
+def main(argv=None):
+    args = parse_args(argv)
     test_drqn_model(
         args.model_path,
         episodes=args.episodes,
@@ -217,3 +219,7 @@ if __name__ == "__main__":
         fixed_delta_time=args.fixed_delta_time,
         device_name=args.device,
     )
+
+
+if __name__ == "__main__":
+    main()

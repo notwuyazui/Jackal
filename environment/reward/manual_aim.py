@@ -10,7 +10,7 @@ from environment.reward.common import (
     fast_win_bonus,
     timeout_return_penalty,
 )
-from game.BattleState import WorldSnapshot
+from engine.contracts.state import WorldSnapshot
 
 
 def calculate_manual_aim_reward(

@@ -1,0 +1,23 @@
+{
+  "id": "border-small-verdant",
+  "name": "翠原野 · 小型 Border",
+  "builder": "verdant",
+  "meters_per_pixel": 0.25,
+  "unit_models": {
+    "tank": "m1a1"
+  },
+  "layout": {
+    "tile_size": 64,
+    "tiles": [
+      "xxxxxxxxxx",
+      "xoooooooox",
+      "xoooooooox",
+      "xoooooooox",
+      "xoooooooox",
+      "xoooooooox",
+      "xoooooooox",
+      "xxxxxxxxxx"
+    ]
+  },
+  "default_state": "engine/scenarios/game_states/border_small_2t_vs_2t.json"
+}

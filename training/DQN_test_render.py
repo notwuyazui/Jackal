@@ -1,25 +1,27 @@
+from pathlib import Path
+import sys
+
+if __package__ in (None, ''):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 import argparse
 import torch
 import os
 import json
-import sys
 
-_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, _PROJECT_ROOT)
 
 from environment.jackal_env import JackalEnv
 from training.DQN_Test.network import QNetwork
 from training.utils.device import get_device, print_device_info
 
-def parse_args():
+def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="DQN render evaluation")
 
     parser.add_argument("--model-path", type=str, default="artifacts/checkpoints/dqn/dqn_model_final.pth")
     parser.add_argument("--episodes", type=int, default=5)
     parser.add_argument("--device", type=str, default="auto", choices=["auto", "cpu", "cuda", "mps"], help="选择计算设备")
 
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 def test_model(model_path, episodes=3, device_name="auto", video_dir="artifacts/videos/dqn_eval"):
     print(f"正在加载模型并准备录制视频: {model_path}")
@@ -111,11 +113,15 @@ def test_model(model_path, episodes=3, device_name="auto", video_dir="artifacts/
     env.close()
     print(f"\n测试完成！录制的视频已保存在 {os.path.abspath('artifacts/videos/dqn_eval')} 目录下。")
 
-if __name__ == "__main__":
-    args = parse_args()
+def main(argv=None):
+    args = parse_args(argv)
 
     test_model(
         args.model_path,
         episodes=args.episodes,
         device_name=args.device
     )
+
+
+if __name__ == "__main__":
+    main()

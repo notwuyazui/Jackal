@@ -266,7 +266,9 @@ class QMixLearner:
         torch.save(payload, save_path)
 
     def load_models(self, load_path):
-        payload = torch.load(load_path, map_location=self.device)
+        payload = torch.load(load_path, map_location=self.device, weights_only=True)
+        if not isinstance(payload, dict) or not all(key in payload for key in ("agent", "mixer")):
+            raise ValueError("QMIX checkpoint must contain agent and mixer weights")
         self.mac.agent.load_state_dict(payload["agent"])
         self.mixer.load_state_dict(payload["mixer"])
         self.target_agent.load_state_dict(payload.get("target_agent", payload["agent"]))

@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 import os
 import random
 from copy import deepcopy
@@ -8,11 +9,12 @@ import torch
 
 
 def load_config(config_path):
-    if not os.path.exists(config_path) and config_path.startswith("configs/"):
-        relocated = os.path.join("training", config_path)
-        if os.path.exists(relocated):
-            config_path = relocated
-    with open(config_path, "r", encoding="utf-8") as f:
+    path = Path(config_path)
+    if not path.is_absolute() and not path.exists():
+        if str(path).startswith('configs/'):
+            path = Path('training') / path
+        path = Path(__file__).resolve().parents[3] / path
+    with path.open('r', encoding='utf-8') as f:
         return json.load(f)
 
 

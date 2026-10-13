@@ -1,0 +1,64 @@
+'''
+    一个火箭炮类
+    较低机动，较高生命，较低侦察范围，仅装备火箭弹
+'''
+
+from engine.units.base_unit import BaseUnit
+from engine.parameters import *
+
+class Archie(BaseUnit):
+    
+    def __init__(self, unit_id: int, unit_team: Team, usingAI=False, visible=True,
+                 ai_intelligence_level=DEFAULT_AI_INTELLIGENCE_LEVEL):
+        
+        self.unit_type = 'archie'
+        self.visible = visible
+        self.max_speed_rate = 0.6
+        self.max_acceleration_rate = 0.5
+        self.min_acceleration_rate = -0.5
+        self.max_angular_speed_rate = 0.5
+        self.turret_angular_speed_rate = 0.6
+        self.max_health_rate = 2.0
+        self.sight_range = 150
+        self.communication_range = 200
+        self.armor_type = ArmorType.MEDIUM                                                        # 护甲类型
+        self.ammunition_types = ['rocket_shell']                                                # 单位拥有弹种
+        self.ammo_switch_time =  UNIT_AMMO_SWITCH_TIME                                          # 单位切换弹种时间
+        
+        
+        super().__init__(unit_id, unit_team, usingAI,
+                         unit_type=self.unit_type,
+                         size=(20.0, 24.0),
+                         collision_size=(20.0, 24.0),
+                         visible=self.visible,
+                         ai_intelligence_level=ai_intelligence_level,
+                         max_speed_rate=self.max_speed_rate, 
+                         max_acceleration_rate=self.max_acceleration_rate, 
+                         min_acceleration_rate=self.min_acceleration_rate, 
+                         max_angular_speed_rate=self.max_angular_speed_rate, 
+                         turret_angular_speed_rate=self.turret_angular_speed_rate, 
+                         max_health_rate=self.max_health_rate, 
+                         sight_range=self.sight_range,
+                         communication_range=self.communication_range,
+                         armor_type=self.armor_type, 
+                         ammunition_types=self.ammunition_types, 
+                         ammo_switch_time=self.ammo_switch_time)
+
+def create_archie(unit_id, unit_team, position=(0, 0), usingAI=False, visible=True,
+                  ai_intelligence_level=DEFAULT_AI_INTELLIGENCE_LEVEL):
+    # 示例：archie = create_archie(1, Team.PLAYER, position=(400, 300))
+    archie = Archie(unit_id, unit_team, usingAI, visible, ai_intelligence_level)
+    archie.position = position
+    return archie            
+
+def create_enemy_archie(unit_id, position=(0, 0), usingAI=False, visible=True,
+                        ai_intelligence_level=DEFAULT_AI_INTELLIGENCE_LEVEL):
+    enemy = Archie(unit_id, Team.ENEMY, usingAI, visible, ai_intelligence_level)
+    enemy.position = position
+    return enemy
+
+def create_player_archie(unit_id, position=(0, 0), usingAI=False, visible=True,
+                         ai_intelligence_level=DEFAULT_AI_INTELLIGENCE_LEVEL):
+    player = Archie(unit_id, Team.PLAYER, usingAI, visible, ai_intelligence_level)
+    player.position = position
+    return player

@@ -4,7 +4,7 @@ This folder provides a lightweight PyMARL2-style MARL training/testing pipeline.
 
 ## Current Components
 
-- Env wrapper: `training/marl2/envs/jackal_env.py`
+- Env wrapper: `environment/marl_adapter.py` (registered in `training/marl2/registry.py`)
 - Controller (shared policy): `training/marl2/controllers/basic_mac.py`
 - Agent network: `training/marl2/modules/agents/rnn_agent.py`
 - EDT agent network: `training/marl2/modules/agents/etd_rnn_agent.py`

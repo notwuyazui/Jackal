@@ -4,8 +4,8 @@ import math
 from dataclasses import dataclass
 from typing import Any, Dict, Mapping, Sequence
 
-from game.BattleState import CombatEvent, WorldSnapshot
-from game.Parameter import Team
+from engine.contracts.state import CombatEvent, WorldSnapshot
+from engine.parameters import Team
 
 BattleStats = Dict[str, float]
 

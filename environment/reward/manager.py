@@ -10,7 +10,7 @@ from environment.reward.common import (
     summarize_combat_events,
 )
 from environment.reward.manual_aim import calculate_manual_aim_reward
-from game.BattleState import WorldSnapshot
+from engine.contracts.state import WorldSnapshot
 
 
 class RewardManager:

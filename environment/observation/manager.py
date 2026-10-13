@@ -8,7 +8,7 @@ import numpy as np
 from environment.observation.global_state import GlobalStateEncoder
 from environment.observation.local_obs import LocalObservationEncoder
 from environment.observation.map_encoder import MapFeatureEncoder
-from game.BattleState import WorldSnapshot
+from engine.contracts.state import WorldSnapshot
 
 
 @dataclass(frozen=True, slots=True)

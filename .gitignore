@@ -42,3 +42,10 @@ eval_videos/
 eval_videos_drqn/
 marl2_eval_videos/
 training/DRQN_Test/videos/
+
+# Browser build/runtime and editable installation
+node_modules/
+render/render3D/dist/
+*.egg-info/
+build/
+dist/

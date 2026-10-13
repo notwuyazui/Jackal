@@ -4,18 +4,55 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from random import Random
+from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from game.BattleWorld import BattleWorld
-from game.Map.GameMap import (
+from engine.battle_world import BattleWorld
+from engine.maps.game_map import (
     GameMap,
     create_builtin_map,
     create_map_from_file,
     create_map_from_strings,
 )
-from game.Parameter import DEFAULT_AI_INTELLIGENCE_LEVEL, Team
-from game.Unit.UnitManager import UnitManager
+from engine.parameters import DEFAULT_AI_INTELLIGENCE_LEVEL, Team
+from engine.units.unit_manager import UnitManager
+from engine.projectiles.bullet_manager import BulletManager
+from engine.units.enemy_ai import EnemyAI
 
+GAME_STATE_DIR = Path(__file__).resolve().parents[1] / 'engine/scenarios/game_states'
+DEFAULT_GAME_STATE = 'border_map_3t_vs_3t'
+
+
+def build_ai_world(state_file: str | Path = GAME_STATE_DIR / f'{DEFAULT_GAME_STATE}.json',
+                   seed=42, *, observe=True, ai_intelligence_level=None,
+                   enemy_intelligence_level=None, normal_shell_only=True):
+    """Load a saved battle and attach AI while preserving its unit parameters."""
+    world = BattleWorld(bullet_manager=BulletManager())
+    # Load the actual training attributes first. Constructing PLAYER tanks with
+    # usingAI=True would silently lower their turret speed from 150 to 100 deg/s.
+    levels = {}
+    if ai_intelligence_level is not None:
+        levels[Team.PLAYER] = ai_intelligence_level
+        levels[Team.ENEMY] = ai_intelligence_level
+    if enemy_intelligence_level is not None:
+        levels[Team.ENEMY] = enemy_intelligence_level
+    world.load_game_state(state_file, rng=Random(seed), ai_intelligence_by_team=levels)
+    for unit in world.unit_manager.units:
+        # Optional recorded-demo compatibility. Numeric projectile parameters
+        # and each unit's JSON cooldown override still belong to Jackal.
+        if normal_shell_only:
+            unit.ammunition_types = ["normal_shell"]
+            unit.current_ammunition = "normal_shell"
+            unit.target_ammunition = ""
+            unit.is_switching_ammo = False
+            unit.reload_timer = 0.0
+        if not unit.usingAI:
+            unit.usingAI = True
+            world.unit_manager.enemy_ais.append(EnemyAI(
+                unit, world.unit_manager, world.bullet_manager, world.game_map,
+                intelligence_level=unit.ai_intelligence_level))
+    world.refresh_vision()
+    return world
 
 @dataclass
 class ScenarioConfig:
@@ -239,7 +276,7 @@ def _create_unit(
         )
 
     cooldown = _resolve_fire_cooldown(config, unit_type, enemy=enemy)
-    ai_options = (
+    ai_options: dict[str, Any] = (
         {"ai_intelligence_level": config.enemy_ai_intelligence_level}
         if enemy
         else {}
