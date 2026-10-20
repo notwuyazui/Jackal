@@ -1,7 +1,7 @@
-"""Single-battle evaluation facade: training sees observations, actions and results.
+"""Evaluation facades: training sees observations, actions and results.
 
 Engine snapshots and rendering/window objects remain private to this layer.
-The facade also supports headless evaluation by passing render_mode=None.
+BattleSession handles demonstrations; ModelEvaluationSession handles scored runs.
 """
 from __future__ import annotations
 
@@ -15,8 +15,48 @@ from engine.contracts.outcome import outcome_from_counts
 from engine.parameters import Team
 from engine.battle_world import BattleWorld
 from environment.jackal_env import JackalEnv
+from environment.marl_adapter import JackalMultiAgentEnv
 from environment.scenario import DEFAULT_GAME_STATE, build_ai_world
-from render.api import RenderSession, create_viewer
+from render.api import RenderSession, ViewerClosed, create_viewer
+
+
+class EvaluationStopped(RuntimeError):
+    """A user closed the evaluation view; an unfinished episode has no score."""
+
+
+class ModelEvaluationSession(JackalMultiAgentEnv):
+    """Multi-episode evaluation with video and window ownership in this layer."""
+
+    def __init__(self, env_config: dict):
+        if env_config.get('name', 'jackal') != 'jackal':
+            raise ValueError(f"Unsupported evaluation environment: {env_config['name']}")
+        super().__init__(env_config)
+
+    def _ensure_view_open(self) -> None:
+        if self.env.renderer is not None and not self.env.renderer.poll_window():
+            raise EvaluationStopped('window_closed')
+
+    def _with_view(self, operation, *args, **kwargs):
+        self._ensure_view_open()
+        try:
+            return operation(*args, **kwargs)
+        except ViewerClosed as exc:
+            # Rendering owns the closure message and reports it only once.
+            if self.env.renderer is not None:
+                self.env.renderer.poll_window()
+            raise EvaluationStopped('window_closed') from exc
+
+    def reset(self, seed: int | None = None):
+        return self._with_view(super().reset, seed=seed)
+
+    def step(self, actions):
+        return self._with_view(super().step, actions)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        self.close()
 
 
 class BattleSession:

@@ -13,7 +13,7 @@ from environment.jackal_env import JackalEnv
 from environment.scenario import GAME_STATE_DIR
 from environment.presentation.adapter import build_world
 from render.api import RenderSession, ViewerClosed
-from training.test_model import parse_args, resolve_settings, run_battle
+from training.run_game_ai import parse_args, resolve_settings, run_battle
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -86,7 +86,7 @@ class EvaluationSessionTests(unittest.TestCase):
             args = parse_args(['--checkpoint', str(checkpoint)])
             env = Mock()
             with patch('environment.evaluation.JackalEnv', return_value=env), \
-                    patch('training.test_model.load_policy', side_effect=ValueError('bad weights')), \
+                    patch('training.run_game_ai.load_policy', side_effect=ValueError('bad weights')), \
                     patch('environment.evaluation.create_viewer') as create:
                 with self.assertRaisesRegex(ValueError, 'bad weights'):
                     run_battle(args, resolve_settings(args))

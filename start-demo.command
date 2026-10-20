@@ -18,7 +18,7 @@ if [[ ! -x "$demo_node" || ! -f render/render3D/node_modules/vite/bin/vite.js ]]
   exit 1
 fi
 # Editable package registration makes imports independent of the current directory.
-if ! "$demo_python" -c 'import render.api, training.test_model' >/dev/null 2>&1; then
+if ! "$demo_python" -c 'import render.api, training.run_game_ai' >/dev/null 2>&1; then
   "$demo_python" -m pip install -e . --no-build-isolation --no-deps
 fi
 # The unified rendering API owns both local servers and their cleanup.
@@ -26,4 +26,4 @@ fi
 demo_browser_args=()
 if [[ "${JACKAL_NO_BROWSER:-0}" == 1 ]]; then demo_browser_args+=(--no-open-browser); fi
 print '正在运行 CoT 3D 与右上角 Jackal 2D；关闭本次战斗窗口即可退出。'
-exec "$demo_python" -m training.test_model --render 2D3D "${demo_browser_args[@]}" "$@"
+exec "$demo_python" -m training.run_game_ai --render 2D3D "${demo_browser_args[@]}" "$@"

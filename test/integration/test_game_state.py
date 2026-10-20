@@ -15,7 +15,7 @@ from environment.jackal_env import JackalEnv
 from engine.battle_world import BattleWorld
 from engine.parameters import ArmorType, Team
 from environment.marl_adapter import JackalMultiAgentEnv
-from training.test import init_game
+from training.run_game_keyboard import init_game
 
 
 class GameStateTests(unittest.TestCase):

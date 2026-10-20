@@ -5,7 +5,7 @@ import tempfile
 from pathlib import Path
 import unittest
 
-from training.test_model import (parse_args, resolve_settings,
+from training.run_game_ai import (parse_args, resolve_settings,
     load_policy, STATE_DIR, CONFIG_DIR)
 from render.api import apply_map
 from environment.presentation.adapter import build_world

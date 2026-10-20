@@ -21,19 +21,20 @@ The previous flat layout put all models under one folder and reused one shared c
 ## Train
 
 ```bash
-python DRQN_train.py --save-prefix drqn_manualaim_1v1_run1
+python -m training drqn --save-prefix drqn_manualaim_1v1_run1
 ```
 
 ## Test
 
 ```bash
-python training/DRQN_test_render.py --model-path artifacts/checkpoints/drqn/drqn_manualaim_1v1_run1/model_final.pth --episodes 3
+python -m training.test_model --checkpoint artifacts/checkpoints/drqn/drqn_manualaim_1v1_run1/model_final.pth --episodes 10
 ```
 
 ## Backward compatibility
 
-`DRQN_test_render.py` still supports legacy flat files and tries to resolve configs in this order:
+The unified evaluator accepts `--config` explicitly; otherwise it resolves configs in this order:
 
 1. same directory: `run_config.json`
-2. legacy sibling config inferred from model name
-3. fallback: `drqn_run_config.json`
+2. parent run directory for a checkpoint under `checkpoints/`
+3. legacy sibling config inferred from model name
+4. fallback: `drqn_run_config.json`

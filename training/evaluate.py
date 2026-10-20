@@ -1,28 +1,21 @@
-"""Dispatch model evaluation commands to implementations owned by training."""
-import argparse
-import sys
-from importlib import import_module
+"""Compatibility CLI for unified model evaluation and keyboard demonstrations."""
 from pathlib import Path
+import sys
 
-if __package__ in (None, ''):
+if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-MODULES = {'qmix': 'test_qmix_marl2', 'dqn': 'DQN_test_render',
-           'drqn': 'DRQN_test_render', 'interactive': 'test'}
 
 
 def main(argv=None):
     args = list(sys.argv[1:] if argv is None else argv)
-    parser = argparse.ArgumentParser(prog='python -m training.evaluate')
-    parser.add_argument('algorithm', choices=MODULES, nargs='?')
-    if not args or args[0] in {'-h', '--help'}:
-        parser.print_help()
-        return
-    name = args.pop(0)
-    if name not in MODULES:
-        parser.error(f'Unknown algorithm: {name}')
-    import_module('training.' + MODULES[name]).main(args)
+    if args and args[0] == "interactive":
+        from training.run_game_keyboard import main as run_keyboard
+        return run_keyboard(args[1:])
+    if args and args[0] in {"qmix", "dqn", "drqn"}:
+        args.pop(0)
+    from training.test_model import main as evaluate_model
+    return evaluate_model(args)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

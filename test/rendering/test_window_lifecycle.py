@@ -11,7 +11,7 @@ from environment.presentation.server import handler_for
 from render.api import SnapshotStream, ViewerClosed
 from render.render3D.launch import SafariWindow, open_cot_window
 from render.api import RenderSession
-from training.test_model import parse_args, resolve_settings, run_battle
+from training.run_game_ai import parse_args, resolve_settings, run_battle
 
 
 class WindowLifecycleTests(unittest.TestCase):

@@ -56,7 +56,7 @@ text = '''
 | --- | --- |
 | `environment/__init__.py` | 对外导出 JackalEnv。 |
 | `environment/action_controller.py` | 将强化学习的离散动作转换为单位移动、转向、瞄准和射击指令，并计算动作可用性。 |
-| `environment/evaluation.py` | BattleSession 单局评估接口：封装模型或 EnemyAI 对战、窗口生命周期、播放等待和战斗结果，使 training 无需直接操作 engine/render。 |
+| `environment/evaluation.py` | BattleSession 单局演示和 ModelEvaluationSession 多局评估接口：封装对战、视频、窗口关闭与战斗结果，使 training 无需直接操作 engine/render。 |
 | `environment/interactive.py` | 构建键盘控制的战场并运行交互会话，封装输入、物理推进与窗口绘制。 |
 | `environment/jackal_env.py` | 强化学习环境主体，组合场景、动作、观测和奖励，提供 reset/step、动作掩码、终止判定、结果及可选渲染。 |
 | `environment/marl_adapter.py` | 将 JackalEnv 适配为 PyMARL 风格的多智能体接口，统一返回顺序与环境信息。 |
@@ -83,17 +83,19 @@ text = '''
 | `training/__main__.py` | python -m training 与 jackal-train 的算法分发入口，选择 DQN、DRQN 或 QMIX 训练器。 |
 | `training/DQN_Test/` | DQN 网络、智能体、经验缓存和学习器实现，供 DQN 训练与评估共用。 |
 | `training/DQN_train.py` | DQN 训练入口，组织参数、环境、动作采样、更新、日志与检查点。 |
-| `training/DQN_test_render.py` | DQN 检查点评估主体，通过环境接口执行模型推理和可视化。 |
+| `training/DQN_test_render.py` | DQN 旧评估入口，参数和执行统一转发到 training.test_model。 |
 | `training/DRQN_Test/` | DRQN 循环网络、智能体、序列缓存、学习器及动作分解工具，供训练与评估共用。 |
 | `training/DRQN_train.py` | DRQN 训练入口，组织序列采样、循环状态、模型更新、日志与检查点。 |
-| `training/DRQN_test_render.py` | DRQN 检查点评估主体，加载配套运行配置并处理循环状态与可视化。 |
+| `training/DRQN_test_render.py` | DRQN 旧评估入口，参数和执行统一转发到 training.test_model。 |
 | `training/configs/` | 保存训练、环境、奖励与评估配置；marl2 子目录包含 QMIX/ETD-QMIX/DVD 等实验配置。 |
-| `training/evaluate.py` | 模型评估分发入口，调用 DQN、DRQN、QMIX 或键盘交互评估。 |
+| `training/evaluate.py` | 统一评估的兼容命令入口，保留旧算法名称及 interactive 命令。 |
 | `training/marl2/` | 多智能体学习组件：共享控制器、RNN/ETD-RNN、QMIX/DVD 混合器、学习器、回放缓存、单进程/并行采样器和算法注册。 |
-| `training/test.py` | 键盘交互评估的命令行入口，交互循环由 environment.interactive 管理。 |
+| `training/model_evaluation.py` | 检查点识别、评估配置解析和可扩展策略注册，适配 DQN、因子化 DRQN 与 QMIX 系列网络。 |
+| `training/run_game_ai.py` | 模型或 EnemyAI 控制的单局游戏演示入口，播放和窗口由 BattleSession 管理。 |
+| `training/run_game_keyboard.py` | 键盘交互演示的命令行入口，交互循环由 environment.interactive 管理。 |
 | `training/test_env.py` | 无窗口环境冒烟入口，检查 reset/step 与观测、状态、奖励和动作掩码。 |
-| `training/test_model.py` | 统一单局模型/EnemyAI 测试入口，解析渲染与场景选项、加载检查点、执行模型推理；对战和窗口由 BattleSession 管理。 |
-| `training/test_qmix_marl2.py` | QMIX 系列检查点评估主体，支持多局评估、统计和可选视频输出。 |
+| `training/test_model.py` | 统一多局模型性能评估入口，管理逐局种子、贪心推理、胜率/回报/步数统计及 JSON 报告。 |
+| `training/test_qmix_marl2.py` | QMIX 旧评估入口，参数和执行统一转发到 training.test_model。 |
 | `training/tools/` | 训练结果分析工具，例如读取日志绘制胜率曲线。 |
 | `training/train_qmix_marl2.py` | QMIX 系列训练主循环，组合采样器与学习器，管理探索、周期评估、日志、检查点及回滚策略。 |
 | `training/utils/` | 训练和推理共用工具，当前负责 CPU/CUDA/MPS 设备解析与选择。 |
@@ -134,26 +136,58 @@ python -m training qmix --config training/configs/marl2/jackal_autoaim_3v3_qmix.
 python -m training dqn --help
 python -m training drqn --help
 
-python -m training.test_model
-python -m training.test_model --render 2D
-python -m training.test_model --render 3D
-python -m training.test_model --render 2D3D --config jackal_autoaim_3v3_qmix --checkpoint /absolute/model.pt --device cpu
+python -m training.run_game_ai
+python -m training.run_game_ai --render 2D
+python -m training.run_game_ai --render 3D
+python -m training.run_game_ai --render 2D3D --config jackal_autoaim_3v3_qmix --checkpoint /absolute/model.pt --device cpu
+python -m training.run_game_keyboard
 
-python -m training.evaluate qmix --checkpoint /absolute/model.pt --episodes 1
-python -m training.evaluate dqn --help
-python -m training.evaluate drqn --help
-python -m training.evaluate interactive
+python -m training.test_model --checkpoint /absolute/model.pt --config training/configs/marl2/jackal_autoaim_3v3_qmix.json --episodes 100 --device cpu
+python -m training.test_model --checkpoint /absolute/dqn_model_final.pth --episodes 100
+python -m training.test_model --checkpoint /absolute/model_final.pth --episodes 100 --video-dir artifacts/videos/evaluation --output artifacts/evaluation/report.json
+python -m training.test_model --help
 python -m training.test_env
 ```
 
-jackal-train、jackal-evaluate、jackal-demo 分别对应训练、评估分发和统一单局测试。
+jackal-train、jackal-evaluate、jackal-demo 分别对应训练、统一多局评估和单局游戏演示。
 也可双击 start-demo.command 运行同步演示。
-DQN、DRQN、QMIX 评估主体分别位于 training/DQN_test_render.py、DRQN_test_render.py、
-test_qmix_marl2.py；环境冒烟主体位于 training/test_env.py。
+DQN、DRQN、QMIX 共用 training/test_model.py 的评估流程；三个旧评估文件只作兼容转发。
+环境冒烟主体位于 training/test_env.py。
 
-## 统一单局测试
+## 统一模型性能评估
 
-training/test_model.py 的 --render 支持 2D、3D、2D3D，默认 2D3D：
+training/test_model.py 必须传入 --checkpoint，按权重结构识别 DQN、因子化 DRQN 或 QMIX 系列，
+支持 QMIX/ETD-QMIX/DVD 检查点中的共享 agent 网络。评估只进行贪心推理，不更新权重；
+全部策略使用环境动作掩码，循环网络每局重置记忆，不恢复混合器、优化器或目标网络。
+
+命令行沿用 QMIX 评估参数：--config、--checkpoint、--episodes、--video-dir、--seed-base、
+--device、--render-mode 和 --max-steps。--episodes 默认 10，--device 支持 auto/cpu/cuda/mps，
+--render-mode 默认 none，可选 human/browser/browser_lockstep/2D/3D/2D3D。
+--fixed-delta-time 可覆盖物理步长；--model-path 是 --checkpoint 的兼容别名。
+--output 可将汇总和逐局指标保存为 JSON；main/evaluate 同时返回相同结构的字典。
+
+--config 支持完整训练配置和 DQN/DRQN 的平铺 run_config.json。
+未指定时查找检查点旁的运行配置，包括 DRQN checkpoints 子目录的父目录及旧命名布局；
+QMIX 没有相邻配置时使用标准 jackal_autoaim_3v3_qmix.json，其他场景应显式指定训练配置。
+DQN/DRQN 没有运行配置时使用默认单智能体环境，并从权重识别自动/手动瞄准与网络尺寸；
+地图和奖励不能从权重恢复，非默认训练环境需要 --config。
+DQN/DRQN 使用全局状态控制一个智能体，不能直接将单智能体权重用于多智能体场景。
+输入/输出维度或网络结构不匹配时会明确报错，不改动训练配置来强行加载模型。
+
+评估环境先合并训练配置中的 env 与 eval_env（也兼容 train.eval_env），再应用命令行覆盖。
+逐局种子为 seed_base + 局序号 - 1；seed_base 默认训练配置 seed + 100000。
+仅指定 --video-dir 时录制视频，每局一个文件，不额外重置环境生成探测视频。
+3D 使用已注册的三维地图与车型，无法匹配的配置应使用 none 或 2D。
+关闭窗口或按 Ctrl+C 会清理资源并返回已完成对局的统计，未完成对局不计为失败。
+
+每局返回 episode_return、episode_length、battle_won、winner、reason、episode_limit、
+no_kill_timeout 和 episode_seed；汇总返回 win_rate、return_mean、ep_len_mean、
+标准差、胜负/平局比例、已完成局数、种子、实际 env_config/env_info 及 episode_stats。
+没有完成任何一局时统计值为 null，避免将中断误报为零胜率。
+
+## 单局游戏演示
+
+training/run_game_ai.py 的 --render 支持 2D、3D、2D3D，默认 2D3D：
 2D 打开原生 Pygame 窗口；3D 打开 CoT 浏览器画面；2D3D 在 CoT 右上角显示 Jackal 2D 画面。
 对战自动开始，默认保留结束画面；关闭窗口退出本次程序，2D 也支持 Esc。
 --exit-on-finish 可在结束后自动退出。macOS 的浏览器演示使用独立 Safari 窗口。
@@ -162,14 +196,14 @@ training/test_model.py 的 --render 支持 2D、3D、2D3D，默认 2D3D：
 默认 border_map_3t_vs_3t，双方默认使用 5 级 EnemyAI。
 传入 --checkpoint 时，--config 从 training/configs/marl2 选择训练配置，
 默认 jackal_autoaim_3v3_qmix；配置必须与检查点的网络和输入维度匹配。
-统一入口加载 QMIX / DVD 检查点的 agent 权重进行贪心推理，支持 RNN / ETD-RNN。
-DQN 和 DRQN 检查点使用各自评估脚本。
+演示入口加载 QMIX / DVD 检查点的 agent 权重进行贪心推理，支持 RNN / ETD-RNN。
+DQN 和 DRQN 使用 training.test_model 进行性能评估及可选渲染。
 
 --device 支持 auto、cpu、cuda、cuda:N、mps；--seed、--max-steps、--fixed-delta-time
 可覆盖单局设置。模型模式默认沿用训练配置的步数上限，AI 对战默认 6000 步。
 --speed 仅改变播放等待，不改变物理步长。
 --ai-intelligence 和 --enemy-intelligence 可选择 AI 等级；--scene 可显式选择三维场景。
-完整选项见 python -m training.test_model --help。
+完整选项见 python -m training.run_game_ai --help。
 
 ## 环境与绘制接口
 
@@ -226,8 +260,8 @@ video = ["imageio", "imageio-ffmpeg"]
 
 [project.scripts]
 jackal-train = "training.__main__:main"
-jackal-evaluate = "training.evaluate:main"
-jackal-demo = "training.test_model:main"
+jackal-evaluate = "training.test_model:cli"
+jackal-demo = "training.run_game_ai:cli"
 
 [tool.setuptools.packages.find]
 where = ["."]
