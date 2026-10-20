@@ -28,6 +28,8 @@ import pstats
 from time import perf_counter
 from typing import Any, Callable
 
+from training.utils.device import add_device_argument, get_device, print_device_info
+
 import numpy as np
 import torch
 
@@ -49,7 +51,6 @@ from training.marl2.controllers.basic_mac import BasicMAC
 from training.marl2.registry import ENV_REGISTRY, LEARNER_REGISTRY
 from training.marl2.utils.config import load_config, set_global_seeds
 from training.train_qmix_marl2 import _build_mixer
-from training.utils.device import get_device, print_device_info
 
 
 DEFAULT_CONFIG = (
@@ -128,10 +129,8 @@ def _install_environment_timers(timings: MethodTimings) -> None:
 
 
 def _synchronize(device: torch.device) -> None:
-    if device.type == "cuda":
-        torch.cuda.synchronize(device)
-    elif device.type == "mps" and hasattr(torch, "mps"):
-        torch.mps.synchronize()
+    from training.utils.device import synchronize_device
+    synchronize_device(device)
 
 
 def _new_episode_batch(env_info: dict[str, Any]) -> dict[str, np.ndarray]:
@@ -343,7 +342,7 @@ def parse_args() -> argparse.Namespace:
         description="Profile MARL2 rollout, EnemyAI, record/reward, and learner time"
     )
     parser.add_argument("--config", default=DEFAULT_CONFIG)
-    parser.add_argument("--device", default="auto")
+    add_device_argument(parser)
     parser.add_argument(
         "--steps",
         type=int,
@@ -373,8 +372,8 @@ def main() -> None:
 
     cfg = load_config(args.config)
     seed = int(cfg.get("seed", 42))
-    set_global_seeds(seed)
     device = get_device(args.device)
+    set_global_seeds(seed, device=device)
     print_device_info(device)
 
     env_cfg = dict(cfg["env"])

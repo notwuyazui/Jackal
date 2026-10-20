@@ -27,6 +27,7 @@ def positive_float(value: str) -> float:
 
 
 def parse_args(argv=None):
+    from training.utils.device import add_device_argument
     parser = argparse.ArgumentParser(description="统一评估 DQN、DRQN 和 QMIX 系列检查点")
     parser.add_argument("--config", help="训练配置 JSON；默认查找检查点旁的运行配置，QMIX 回退到标准 3v3 配置")
     parser.add_argument("--checkpoint", "--model-path", required=True,
@@ -34,7 +35,7 @@ def parse_args(argv=None):
     parser.add_argument("--episodes", type=positive_int, default=10)
     parser.add_argument("--video-dir", default=None, help="指定后录制每局 Jackal 2D 视频")
     parser.add_argument("--seed-base", type=int, default=None, help="逐局种子起点，默认配置 seed + 100000")
-    parser.add_argument("--device", type=str.lower, default="auto", choices=["auto", "cpu", "cuda", "mps"])
+    add_device_argument(parser)
     parser.add_argument("--render-mode", choices=["none", "human", "browser", "browser_lockstep", "2D", "3D", "2D3D"], default="none")
     parser.add_argument("--max-steps", type=positive_int, default=None, help="覆盖评估步数上限，不修改训练配置")
     parser.add_argument("--fixed-delta-time", type=positive_float, default=None, help="覆盖评估物理步长")
@@ -92,14 +93,15 @@ def print_summary(report: dict) -> None:
 
 def evaluate(args) -> dict:
     import numpy as np
-    import torch
     from environment.evaluation import EvaluationStopped, ModelEvaluationSession
     from training.model_evaluation import (build_env_config, create_policy, load_checkpoint,
                                            load_evaluation_config, resolve_path)
-    from training.utils.device import get_device, print_device_info
+    from training.utils.device import get_device, print_device_info, seed_torch
 
     if args.episodes <= 0:
         raise ValueError("episodes 必须大于 0")
+    # Register optional device backends before deserializing their checkpoints.
+    device = get_device(args.device)
     checkpoint = resolve_path(args.checkpoint)
     kind, weights = load_checkpoint(checkpoint)
     config, config_path = load_evaluation_config(args.config, checkpoint, kind)
@@ -108,7 +110,6 @@ def evaluate(args) -> dict:
     env_config = build_env_config(config, kind, weights, render_mode=args.render_mode,
         video_dir=args.video_dir, max_steps=args.max_steps, fixed_delta_time=args.fixed_delta_time)
     seed_base = int(args.seed_base) if args.seed_base is not None else int(config.get("seed", 42)) + 100000
-    device = get_device(args.device)
     print_device_info(device)
     print(f"[Model] type={kind} checkpoint={checkpoint}")
     print(f"[Config] {config_path if config_path is not None else '使用默认单智能体环境；动作空间从权重识别'}")
@@ -124,11 +125,7 @@ def evaluate(args) -> dict:
                 seed = seed_base + episode - 1
                 random.seed(seed)
                 np.random.seed(seed % (2**32))
-                torch.manual_seed(seed)
-                if device.type == "cuda":
-                    torch.cuda.manual_seed_all(seed)
-                elif device.type == "mps":
-                    torch.mps.manual_seed(seed)
+                seed_torch(seed, device)
                 stats = run_episode(session, policy, seed)
                 episodes.append(stats)
                 print(f"[Test] ep={episode}/{args.episodes} ret={stats['episode_return']:.2f} "

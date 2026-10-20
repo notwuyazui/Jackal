@@ -98,7 +98,7 @@ text = '''
 | `training/test_qmix_marl2.py` | QMIX 旧评估入口，参数和执行统一转发到 training.test_model。 |
 | `training/tools/` | 训练结果分析工具，例如读取日志绘制胜率曲线。 |
 | `training/train_qmix_marl2.py` | QMIX 系列训练主循环，组合采样器与学习器，管理探索、周期评估、日志、检查点及回滚策略。 |
-| `training/utils/` | 训练和推理共用工具，当前负责 CPU/CUDA/MPS 设备解析与选择。 |
+| `training/utils/` | 训练和推理共用工具，负责 CPU/CUDA/MPS/NPU 设备选择、播种与随机数状态、设备同步，以及可移植检查点保存。 |
 
 ### test
 
@@ -161,7 +161,7 @@ training/test_model.py 必须传入 --checkpoint，按权重结构识别 DQN、�
 全部策略使用环境动作掩码，循环网络每局重置记忆，不恢复混合器、优化器或目标网络。
 
 命令行沿用 QMIX 评估参数：--config、--checkpoint、--episodes、--video-dir、--seed-base、
---device、--render-mode 和 --max-steps。--episodes 默认 10，--device 支持 auto/cpu/cuda/mps，
+--device、--render-mode 和 --max-steps。--episodes 默认 10，--device 支持 auto/cpu/cuda/cuda:N/mps/npu/npu:N，
 --render-mode 默认 none，可选 human/browser/browser_lockstep/2D/3D/2D3D。
 --fixed-delta-time 可覆盖物理步长；--model-path 是 --checkpoint 的兼容别名。
 --output 可将汇总和逐局指标保存为 JSON；main/evaluate 同时返回相同结构的字典。
@@ -199,11 +199,43 @@ training/run_game_ai.py 的 --render 支持 2D、3D、2D3D，默认 2D3D：
 演示入口加载 QMIX / DVD 检查点的 agent 权重进行贪心推理，支持 RNN / ETD-RNN。
 DQN 和 DRQN 使用 training.test_model 进行性能评估及可选渲染。
 
---device 支持 auto、cpu、cuda、cuda:N、mps；--seed、--max-steps、--fixed-delta-time
+--device 支持 auto、cpu、cuda、cuda:N、mps、npu、npu:N；--seed、--max-steps、--fixed-delta-time
 可覆盖单局设置。模型模式默认沿用训练配置的步数上限，AI 对战默认 6000 步。
 --speed 仅改变播放等待，不改变物理步长。
 --ai-intelligence 和 --enemy-intelligence 可选择 AI 等级；--scene 可显式选择三维场景。
 完整选项见 python -m training.run_game_ai --help。
+
+## NPU 训练与评估
+
+NPU 后端使用华为昇腾 torch_npu。DQN、DRQN、QMIX 训练、统一模型评估、旧评估入口及模型演示
+共用 --device：npu 选择首个可见 NPU，npu:N 选择逻辑编号 N，CUDA 也支持 cuda:N。
+auto 的优先级为 CUDA、NPU、MPS、CPU。显式指定不可用设备、缺少 torch_npu 或编号越界时会报错。
+设备名称的参数解析不加载 torch_npu；CPU/MPS 使用不要求安装 NPU 插件。
+
+在昇腾主机上按官方配套表安装驱动、固件、CANN、PyTorch 和 torch_npu，
+并加载对应 CANN 安装目录的 set_env.sh，再安装本项目的 training 依赖。
+PyTorch/torch_npu/CANN 版本应按目标主机选择，参见 https://github.com/Ascend/pytorch 。
+
+```sh
+python -m training qmix --config training/configs/marl2/jackal_autoaim_3v3_qmix.json --device npu:0
+python -m training dqn --device npu:0
+python -m training drqn --device npu:0
+python -m training.test_model --checkpoint /absolute/model.pt --config training/configs/marl2/jackal_autoaim_3v3_qmix.json --episodes 100 --device npu:0
+python -m training.run_game_ai --checkpoint /absolute/model.pt --config jackal_autoaim_3v3_qmix --device npu:0
+```
+
+配置中的 use_cuda 字段保留兼容，实际计算设备由 --device 决定。
+网络计算在选定设备上运行，二维物理引擎和并行环境子进程仍在 CPU 上运行。
+周期评估保存并恢复所选后端的随机数状态，环境子进程只播种 CPU。
+NPU 与 CUDA/MPS 一样启用长序列训练的激活重计算。
+检查点按原有键结构保存 CPU 张量，包含优化器状态，供不同设备加载；加载 NPU 权重前先注册后端。
+本地无 NPU 时可验证参数、模拟后端和 CPU 回归；算子支持与实际性能需在昇腾主机上验证。
+
+CANN 由管理员共享安装时，目录属主与训练用户不同不等于没有读取权限。
+对可读且非所有人可写的共享目录，训练入口将 collect_env 的重复属主提示合并为一条说明；
+SDK 的路径、权限、版本和算子错误仍正常报告，无需修改系统目录属主。
+Pygame 2.6 的 pkg_resources 弃用提示仅在引擎导入时做兼容过滤，不锁定旧版 setuptools。
+需要查看依赖的原始警告时，在运行前设置 JACKAL_RAW_DEPENDENCY_WARNINGS=1；Python -W 策略也优先保留。
 
 ## 环境与绘制接口
 

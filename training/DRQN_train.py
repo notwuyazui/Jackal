@@ -1,4 +1,3 @@
-import torch
 import json
 import os
 import argparse
@@ -9,6 +8,9 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
+from training.utils.device import add_device_argument
+import torch
+
 from environment.jackal_env import JackalEnv
 
 # 导入我们刚刚写好的 DRQN 四大金刚
@@ -16,6 +18,7 @@ from training.DRQN_Test.network import DRQNNetwork
 from training.DRQN_Test.agent import DRQNAgent
 from training.DRQN_Test.buffer import EpisodeBuffer
 from training.DRQN_Test.learner import DRQNLearner
+from training.utils.checkpoint import save_checkpoint
 
 
 def parse_args(argv=None, *, prog=None):
@@ -39,7 +42,7 @@ def parse_args(argv=None, *, prog=None):
     parser.add_argument("--auto-aim", action="store_true", default=False)
     parser.add_argument("--save-dir", type=str, default="artifacts/checkpoints/drqn")
     parser.add_argument("--save-prefix", type=str, default="drqn")
-    parser.add_argument("--device", type=str, default="auto", choices=["auto", "cpu", "cuda", "mps"])
+    add_device_argument(parser)
     return parser.parse_args(argv)
 
 def main(argv=None, *, prog=None):
@@ -231,11 +234,11 @@ def main(argv=None, *, prog=None):
         # 定期保存模型权重
         if episode % 100 == 0:
             ckpt_path = os.path.join(checkpoint_dir, f"ep{episode}.pth")
-            torch.save(policy_net.state_dict(), ckpt_path)
+            save_checkpoint(policy_net.state_dict(), ckpt_path)
             pbar.write(f"--> [检查点] 模型已保存至 {ckpt_path}")
 
     final_path = os.path.join(run_dir, "model_final.pth")
-    torch.save(policy_net.state_dict(), final_path)
+    save_checkpoint(policy_net.state_dict(), final_path)
     print(f"\nDRQN 训练结束！最终模型已保存至 {final_path}")
     env.close()
 

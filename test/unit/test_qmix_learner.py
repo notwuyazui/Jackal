@@ -195,6 +195,9 @@ class QMixLearnerGraphTests(unittest.TestCase):
         self.assertFalse(_should_checkpoint_online_activations(torch.device("cpu")))
         self.assertTrue(_should_checkpoint_online_activations(torch.device("cuda")))
         self.assertTrue(_should_checkpoint_online_activations(torch.device("mps")))
+        # Device-name dispatch does not require installing TorchNPU on CI hosts.
+        self.assertTrue(_should_checkpoint_online_activations("npu"))
+        self.assertTrue(_should_checkpoint_online_activations("npu:1"))
 
 
 if __name__ == "__main__":

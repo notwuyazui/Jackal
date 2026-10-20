@@ -24,14 +24,16 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
+from training.utils.device import (add_device_argument, capture_torch_rng_state,
+                                   get_device, print_device_info,
+                                   restore_torch_rng_state, seed_torch)
+
 import numpy as np
 import torch
 try:
     from torch.utils.tensorboard import SummaryWriter
 except ImportError:
     SummaryWriter = None
-
-from training.utils.device import get_device, print_device_info
 
 from training.marl2.components.replay_buffer import EpisodeReplayBuffer
 from training.marl2.controllers.basic_mac import BasicMAC
@@ -72,7 +74,7 @@ def parse_args(argv=None, *, prog=None):
     parser.add_argument("--save-dir", type=str, default="artifacts/checkpoints/marl2")
     parser.add_argument("--checkpoint", type=str, default=None, help="Optional checkpoint path to resume training")
     parser.add_argument("--resume-t-env", type=int, default=None, help="Optional resumed t_env when checkpoint has no metadata")
-    parser.add_argument("--device", type=str, default="auto", help="device: auto/cpu/cuda/mps")
+    add_device_argument(parser)
     parser.add_argument("--tensorboard-dir", type=str, default=None, help="Override TensorBoard log directory")
     return parser.parse_args(argv)
 
@@ -93,11 +95,12 @@ def evaluate(
     resolved_seed_base = int(seed_base) if seed_base is not None else 0
     py_rng_state = random.getstate()
     np_rng_state = np.random.get_state()
-    torch_rng_state = torch.random.get_rng_state()
-    cuda_rng_states = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
+    torch_rng_state = capture_torch_rng_state(device) if use_seed else None
 
     try:
         if isinstance(runner, ParallelEpisodeRunner):
+            if use_seed:
+                seed_torch(resolved_seed_base, device)
             episode_offset = 0
             while episode_offset < int(n_episodes):
                 batch_episodes = min(runner.n_envs, int(n_episodes) - episode_offset)
@@ -126,11 +129,7 @@ def evaluate(
                 if ep_seed is not None:
                     random.seed(ep_seed)
                     np.random.seed(ep_seed % (2**32))
-                    torch.manual_seed(ep_seed)
-                    if device is not None and device.type == "cuda":
-                        torch.cuda.manual_seed_all(ep_seed)
-                    elif device is not None and device.type == "mps":
-                        torch.mps.manual_seed(ep_seed)
+                    seed_torch(ep_seed, device)
 
                 _, stats = runner.run(
                     test_mode=True,
@@ -146,9 +145,8 @@ def evaluate(
         if use_seed:
             random.setstate(py_rng_state)
             np.random.set_state(np_rng_state)
-            torch.random.set_rng_state(torch_rng_state)
-            if cuda_rng_states is not None:
-                torch.cuda.set_rng_state_all(cuda_rng_states)
+            assert torch_rng_state is not None
+            restore_torch_rng_state(torch_rng_state)
 
     n = max(1, len(returns))
     ret_mean = float(sum(returns) / n)
@@ -311,7 +309,8 @@ def main(argv=None, *, prog=None):
     cfg = load_config(args.config)
 
     seed = int(cfg.get("seed", 42))
-    set_global_seeds(seed)
+    device = get_device(args.device)
+    set_global_seeds(seed, device=device)
 
     train_cfg = cfg["train"]
     algo_cfg = cfg["algo"]
@@ -319,10 +318,7 @@ def main(argv=None, *, prog=None):
 
     t_max = int(args.t_max) if args.t_max is not None else int(train_cfg.get("t_max", 50000))
 
-    device = get_device(args.device)
     print_device_info(device)
-    if device.type == "cuda" and device.index is not None:
-        torch.cuda.set_device(device)
 
     env_name = cfg["env"].get("name", "jackal")
     env_cls = ENV_REGISTRY[env_name]

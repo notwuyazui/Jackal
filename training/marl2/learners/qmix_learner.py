@@ -3,11 +3,13 @@ import copy
 import torch
 import torch.nn.functional as F
 from torch.utils.checkpoint import checkpoint
+from training.utils.checkpoint import save_checkpoint
 
 
 def _should_checkpoint_online_activations(device):
     """Use recomputation on accelerator backends that retain long BPTT graphs."""
-    return torch.device(device).type in {"cuda", "mps"}
+    kind = getattr(device, "type", str(device).partition(":")[0])
+    return kind in {"cuda", "mps", "npu"}
 
 
 class QMixLearner:
@@ -263,10 +265,12 @@ class QMixLearner:
             "train_steps": self.train_steps,
             "meta": meta or {},
         }
-        torch.save(payload, save_path)
+        save_checkpoint(payload, save_path)
 
     def load_models(self, load_path):
-        payload = torch.load(load_path, map_location=self.device, weights_only=True)
+        # Module/optimizer loaders move their own tensors to the selected device.
+        # Keep non-capturable optimizer step counters and temporary copies on CPU.
+        payload = torch.load(load_path, map_location="cpu", weights_only=True)
         if not isinstance(payload, dict) or not all(key in payload for key in ("agent", "mixer")):
             raise ValueError("QMIX checkpoint must contain agent and mixer weights")
         self.mac.agent.load_state_dict(payload["agent"])

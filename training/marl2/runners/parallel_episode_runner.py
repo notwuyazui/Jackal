@@ -3,7 +3,7 @@ import random
 from typing import Any
 
 import numpy as np
-import torch
+from training.utils.device import seed_torch
 
 
 def _derive_worker_seed(
@@ -21,7 +21,7 @@ def _env_worker(remote, parent_remote, env_cls, env_args, seed):
     if seed is not None:
         random.seed(seed)
         np.random.seed(seed)
-        torch.manual_seed(seed)
+        seed_torch(seed)
 
     worker_env_args = dict(env_args)
     if seed is not None:
@@ -41,7 +41,7 @@ def _env_worker(remote, parent_remote, env_cls, env_args, seed):
                     episode_seed = int(data)
                     random.seed(episode_seed)
                     np.random.seed(episode_seed % (2**32))
-                    torch.manual_seed(episode_seed)
+                    seed_torch(episode_seed)
                 obs, state = env.reset(seed=episode_seed)
                 remote.send((obs, state, env.get_avail_actions()))
             elif cmd == "step":

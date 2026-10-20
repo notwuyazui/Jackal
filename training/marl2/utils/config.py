@@ -6,6 +6,7 @@ from copy import deepcopy
 
 import numpy as np
 import torch
+from training.utils.device import seed_torch
 
 
 def load_config(config_path):
@@ -29,12 +30,10 @@ def merge_dict(base, override):
     return merged
 
 
-def set_global_seeds(seed):
+def set_global_seeds(seed, device=None):
     random.seed(seed)
     np.random.seed(seed)
-    torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(seed)
+    seed_torch(seed, device)
 
     # Deterministic mode is optional; we keep benchmark enabled for speed.
     torch.backends.cudnn.deterministic = False

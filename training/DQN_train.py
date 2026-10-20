@@ -1,5 +1,4 @@
 import argparse
-import torch
 import json
 import os
 import sys
@@ -9,22 +8,20 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
+from training.utils.device import add_device_argument, get_device, print_device_info
+import torch
+
 from environment.jackal_env import JackalEnv
 from training.DQN_Test.network import QNetwork
 from training.DQN_Test.buffer import EpisodeBuffer
 from training.DQN_Test.agent import DQNAgent
 from training.DQN_Test.learner import DQNLearner
-from training.utils.device import get_device, print_device_info
+from training.utils.checkpoint import save_checkpoint
 
 
 def parse_args(argv=None, *, prog=None):
     parser = argparse.ArgumentParser(prog=prog, description="DQN 1v1 training")
-    parser.add_argument(
-        "--device",
-        type=str,
-        default="auto",
-        choices=["auto", "cpu", "cuda", "mps"],
-    )
+    add_device_argument(parser)
     parser.add_argument("--episodes", type=int, default=2000)
     parser.add_argument("--max-steps", type=int, default=500)
     parser.add_argument("--batch-size", type=int, default=128)
@@ -139,11 +136,11 @@ def main(argv=None, *, prog=None):
         # 定期保存模型 (使用 pbar.write 防止打断进度条渲染)
         if episode % 100 == 0:
             checkpoint_path = os.path.join(args.save_dir, f"dqn_model_ep{episode}.pth")
-            torch.save(policy_net.state_dict(), checkpoint_path)
+            save_checkpoint(policy_net.state_dict(), checkpoint_path)
             pbar.write(f"--> [检查点] 模型已保存至 {checkpoint_path}")
 
     final_path = os.path.join(args.save_dir, "dqn_model_final.pth")
-    torch.save(policy_net.state_dict(), final_path)
+    save_checkpoint(policy_net.state_dict(), final_path)
     print("\n训练结束！最终模型已保存。")
     env.close()
 

@@ -38,6 +38,7 @@ def positive_float(value):
 
 
 def parse_args(argv=None):
+    from training.utils.device import add_device_argument
     parser = argparse.ArgumentParser(description='统一模型 / EnemyAI 单局测试（2D、3D 或 2D3D）')
     parser.add_argument('--render', type=str.upper, choices=['2D', '3D', '2D3D'], default='2D3D',
                         help='2D=Jackal 窗口；3D=CoT 无小窗；2D3D=CoT 内嵌 Jackal（默认）')
@@ -45,8 +46,7 @@ def parse_args(argv=None):
                         '读取，模型从 training/configs/marl2 读取；默认 border 3 对 3')
     parser.add_argument('--scene', help='显式选择 render/render3D/maps/catalog 中的场景 ID；默认按地图布局匹配')
     parser.add_argument('--checkpoint', type=Path, help='train_qmix_marl2 保存的 .pt 文件；不传则使用 EnemyAI')
-    parser.add_argument('--device', type=str.lower, default='auto',
-                        help='与训练入口一致：auto/cpu/cuda/cuda:0/mps（仅模型推理需要）')
+    add_device_argument(parser)
     parser.add_argument('--seed', type=int, help='覆盖随机种子；默认使用训练配置中的 seed，EnemyAI 为 42')
     parser.add_argument('--max-steps', type=positive_int,
                         help='单局步数上限；模型默认沿用训练配置，EnemyAI 默认 6000')
@@ -67,9 +67,6 @@ def parse_args(argv=None):
     args = parser.parse_args(argv)
     if not all(0 <= port <= 65535 for port in (args.port, args.view_port)):
         parser.error('端口必须在 0 到 65535 之间')
-    if args.device not in {'auto', 'cpu', 'cuda', 'mps'} and not (
-            args.device.startswith('cuda:') and args.device[5:].isdigit()):
-        parser.error('--device 支持 auto/cpu/cuda/cuda:N/mps')
     return args
 
 
@@ -150,18 +147,14 @@ def resolve_settings(args):
 def load_policy(env, settings, device_name):
     """Execution uses the agent network, not the training-only mixer/optimizer."""
     import torch
-    from training.utils.device import get_device, print_device_info
+    from training.utils.device import get_device, print_device_info, seed_torch
     from training.marl2.controllers.basic_mac import BasicMAC
-    device = get_device('cuda' if device_name.startswith('cuda:') else device_name)
-    if device_name.startswith('cuda:'):
-        device = torch.device(device_name)
-        if device.index >= torch.cuda.device_count():
-            raise ValueError(f'CUDA 设备不存在：{device_name}')
+    device = get_device(device_name)
     print_device_info(device)
-    torch.manual_seed(settings.seed)
+    seed_torch(settings.seed, device)
     info = env.get_env_info()
     mac = BasicMAC(info['n_agents'], info['n_actions'], info['obs_shape'], settings.config['agent'], device)
-    payload = torch.load(settings.checkpoint, map_location=device, weights_only=True)
+    payload = torch.load(settings.checkpoint, map_location="cpu", weights_only=True)
     if not isinstance(payload, dict) or 'agent' not in payload:
         raise ValueError('检查点不包含 agent 权重；请使用 train_qmix_marl2.py 保存的模型')
     try:
