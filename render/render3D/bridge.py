@@ -123,10 +123,15 @@ class BrowserRenderer:
                         if window is not None:
                             # Native window identity survives reloads and does
                             # not depend on SSE or an unload beacon arriving.
-                            while not self.window_watch_stop.wait(.5):
-                                if window.is_open() is False:
-                                    self.hub.request_viewer_close()
-                                    return
+                            try:
+                                while not self.window_watch_stop.wait(.5):
+                                    if window.is_open() is False:
+                                        self.hub.request_viewer_close()
+                                        return
+                            finally:
+                                close = getattr(window, 'close', None)
+                                if close is not None:
+                                    close()
                         return
                     except OSError:
                         self.window_watch_stop.wait(.1)

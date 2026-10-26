@@ -190,7 +190,10 @@ no_kill_timeout 和 episode_seed；汇总返回 win_rate、return_mean、ep_len_
 training/run_game_ai.py 的 --render 支持 2D、3D、2D3D，默认 2D3D：
 2D 打开原生 Pygame 窗口；3D 打开 CoT 浏览器画面；2D3D 在 CoT 右上角显示 Jackal 2D 画面。
 对战自动开始，默认保留结束画面；关闭窗口退出本次程序，2D 也支持 Esc。
---exit-on-finish 可在结束后自动退出。macOS 的浏览器演示使用独立 Safari 窗口。
+--exit-on-finish 可在结束后自动退出。浏览器演示默认使用独立全屏窗口：
+Windows 优先使用 Edge，其次 Chrome；macOS 使用 Safari。
+Safari 自动进入系统全屏需要为启动程序允许 macOS“辅助功能”和“自动化（System Events）”；
+未授权时仍会打开新窗口，可点击战斗画面进入网页全屏，无需界面按钮。
 
 不传 --checkpoint 时，--config 从 engine/scenarios/game_states 选择游戏状态，
 默认 border_map_3t_vs_3t，双方默认使用 5 级 EnemyAI。

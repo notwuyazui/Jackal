@@ -1,7 +1,10 @@
 """Window closure releases frame waits and preserves reloads/other windows."""
 import io
 import json
+import os
+from pathlib import Path
 import subprocess
+import tempfile
 import threading
 import unittest
 from unittest.mock import Mock, patch
@@ -9,7 +12,7 @@ from unittest.mock import Mock, patch
 from environment.presentation.adapter import build_world
 from environment.presentation.server import handler_for
 from render.api import SnapshotStream, ViewerClosed
-from render.render3D.launch import SafariWindow, open_cot_window
+from render.render3D.launch import SafariWindow, BrowserProcessWindow, _windows_browser, open_cot_window
 from render.api import RenderSession
 from training.run_game_ai import parse_args, resolve_settings, run_battle
 
@@ -147,6 +150,71 @@ class WindowLifecycleTests(unittest.TestCase):
         self.assertEqual(window.identifier, 314)
         self.assertIn('make new document', run.call_args.args[0][2])
         self.assertIn('return battleWindowID', run.call_args.args[0][2])
+        self.assertIn('"AXFullScreen"', run.call_args.args[0][2])
+
+    @patch('render.render3D.launch.sys.platform', 'darwin')
+    @patch('render.render3D.launch.subprocess.run')
+    def test_safari_fullscreen_denial_keeps_the_exact_new_window_watchable(self, run):
+        run.return_value = subprocess.CompletedProcess([], 0, stdout='314\t-1743\n')
+        with patch('sys.stdout', new_callable=io.StringIO) as output:
+            window = open_cot_window('http://127.0.0.1:1234/')
+        self.assertIsInstance(window, SafariWindow)
+        self.assertEqual(window.identifier, 314)
+        self.assertIn('辅助功能', output.getvalue())
+        self.assertIn('点击战斗画面', output.getvalue())
+
+    @patch('render.render3D.launch.sys.platform', 'win32')
+    @patch('render.render3D.launch._windows_browser', return_value='C:/Edge/msedge.exe')
+    @patch('render.render3D.launch.subprocess.Popen')
+    def test_windows_launches_an_isolated_fullscreen_window_and_cleans_its_profile(self, popen, browser):
+        popen.return_value.poll.return_value = None
+        url = 'http://127.0.0.1:1234/?token=test&inset=1'
+        window = open_cot_window(url)
+        self.assertIsInstance(window, BrowserProcessWindow)
+        arguments = popen.call_args.args[0]
+        self.assertEqual(arguments[0], browser.return_value)
+        self.assertEqual(arguments[-1], url)
+        self.assertIn('--new-window', arguments)
+        self.assertIn('--start-fullscreen', arguments)
+        profile = Path(window.profile.name)
+        self.assertTrue(profile.is_dir())
+        self.assertIn(f'--user-data-dir={profile}', arguments)
+        try:
+            self.assertTrue(window.is_open())
+            popen.return_value.poll.return_value = 0
+            self.assertFalse(window.is_open())
+        finally:
+            window.close()
+        self.assertFalse(profile.exists())
+        popen.return_value.terminate.assert_not_called()
+
+    def test_owned_browser_shutdown_terminates_only_its_process_before_profile_cleanup(self):
+        process, profile = Mock(), Mock()
+        process.poll.return_value = None
+        process.wait.side_effect = [subprocess.TimeoutExpired('browser', 2), 0]
+        window = BrowserProcessWindow(process, profile)
+        window.close()
+        process.terminate.assert_called_once()
+        process.kill.assert_called_once()
+        profile.cleanup.assert_called_once()
+
+    @patch('render.render3D.launch.sys.platform', 'win32')
+    @patch('render.render3D.launch._windows_browser', return_value='C:/Edge/msedge.exe')
+    def test_windows_launch_failure_releases_the_temporary_profile(self, browser):
+        with patch('render.render3D.launch.tempfile.TemporaryDirectory') as profile, \
+                patch('render.render3D.launch.subprocess.Popen', side_effect=OSError('cannot launch')), \
+                patch('sys.stdout', new_callable=io.StringIO):
+            self.assertIsNone(open_cot_window('http://127.0.0.1:1234/'))
+        profile.return_value.cleanup.assert_called_once()
+
+    @patch('render.render3D.launch.shutil.which', return_value=None)
+    def test_windows_browser_search_finds_a_standard_edge_installation(self, which):
+        with tempfile.TemporaryDirectory() as directory:
+            binary = Path(directory) / 'Microsoft/Edge/Application/msedge.exe'
+            binary.parent.mkdir(parents=True)
+            binary.touch()
+            with patch.dict(os.environ, {'PROGRAMFILES(X86)': directory}):
+                self.assertEqual(_windows_browser(), str(binary))
 
     @patch('render.render3D.launch.subprocess.run')
     def test_native_watch_targets_one_window_and_tolerates_script_errors(self, run):

@@ -4,7 +4,7 @@
     "dev": "vite --config vite.config.ts",
     "build": "vite build --config vite.config.ts",
     "typecheck": "node node_modules/typescript/bin/tsc6 --noEmit -p tsconfig.json",
-    "test": "node ../../test/rendering/mapping.selftest.mjs && node ../../test/rendering/exterior.selftest.mjs && node ../../test/rendering/inset.selftest.mjs"
+    "test": "node ../../test/rendering/mapping.selftest.mjs && node ../../test/rendering/exterior.selftest.mjs && node ../../test/rendering/inset.selftest.mjs && node ../../test/rendering/fullscreen.selftest.mjs"
   },
   "dependencies": { "three": "0.185.1" },
   "devDependencies": { "@types/node": "24.10.12", "@types/three": "0.185.4", "typescript": "npm:@typescript/typescript6@6.0.2", "vite": "8.1.5" }

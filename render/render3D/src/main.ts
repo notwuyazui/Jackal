@@ -1,16 +1,18 @@
 import type { Frame } from './protocol.ts';
 import { commitInset } from './inset.ts';
+import { installFullscreenFallback } from './fullscreen.ts';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 document.title = 'Claude of Tanks · M1A1 同步战场';
+installFullscreenFallback();
 const inset = $<HTMLCanvasElement>('jackal-inset');
 const insetContext = inset.getContext('2d', { alpha: false })!;
 const decoder = new Image(); // Never replace an image currently on screen.
 let insetCommits = 0;
 const healthElements = new Map<number, { root: HTMLSpanElement; value: HTMLElement }>();
 let healthRun = -1;
-if (new URLSearchParams(window.location.search).get('inset') === '0') {
-  $('subtitle').textContent = 'CoT 3D 画面 · 自动运行';
+function setConnectionStatus(message: string) {
+  $('viewport').dataset.connection = message;
 }
 
 async function acknowledge(body: unknown) {
@@ -24,7 +26,7 @@ let reportViewerFailure: ((error: unknown) => void) | null = null;
 function fail(error: unknown) {
   $('loading').hidden = false;
   $('loading').textContent = String(error);
-  $('connection').textContent = '同步异常 · 请检查错误';
+  setConnectionStatus('同步异常 · 请检查错误');
   console.error(error);
 }
 
@@ -59,15 +61,10 @@ function commitJackal(frame: Frame) {
 function hud(frame: Frame) {
   const { result } = frame;
   const showInset = frame.manifest.show_inset !== false;
-  $('subtitle').textContent = showInset ? 'Jackal 原版 2D 画面内嵌 · 自动运行' : 'CoT 3D 画面 · 自动运行';
   if (!showInset) inset.hidden = true;
   $('clock').textContent = `${frame.time.toFixed(2)} s · STEP ${frame.tick}`;
   $('score').textContent = `蓝方 ${result.alive.PLAYER} : ${result.alive.ENEMY} 红方`;
-  $('digest').textContent = `STATE ${frame.hash} · Δt ${frame.manifest.dt}s`;
-  $('connection').textContent = result.finished ? '对战结束 · 已同步' : frame.tick === 0 ? '同步就绪 · 自动开始' : showInset ? 'Jackal 2D / CoT 3D 同步' : 'CoT 3D · 物理状态已同步';
-  const allies = frame.units.filter(u => u.team === 'PLAYER').length;
-  const enemies = frame.units.filter(u => u.team === 'ENEMY').length;
-  $('scenario').textContent = `${frame.manifest.scene.name} · ${allies} 对 ${enemies} · ${frame.manifest.controller || 'EnemyAI Lv.5'}`;
+  setConnectionStatus(result.finished ? '对战结束 · 已同步' : frame.tick === 0 ? '同步就绪 · 自动开始' : showInset ? 'Jackal 2D / CoT 3D 同步' : 'CoT 3D · 物理状态已同步');
   if (healthRun !== frame.run_id) {
     healthElements.clear(); $('healths').replaceChildren(); healthRun = frame.run_id;
   }
@@ -82,10 +79,8 @@ function hud(frame: Frame) {
     entry.root.className = unit.team === 'ENEMY' ? 'enemy' : '';
     entry.value.textContent = `${unit.alive ? unit.health : 0} HP`;
   }
-  const followed = frame.units.find(u => u.id === frame.manifest.follow_id)!;
-  $('focus').textContent = `炮塔跟随 · #${followed.id} · ${followed.alive ? `${followed.health} HP` : '已被击毁'} · 装填 ${followed.cooldown.toFixed(2)} s`;
   $('result').hidden = !result.finished;
-  if (result.finished) $('result').innerHTML = `<strong>${result.winner === 'ENEMY' ? '红方获胜' : result.winner === 'PLAYER' ? '蓝方获胜' : '战斗平局'}</strong><small>${frame.time.toFixed(2)} 秒 · ${frame.tick} 步 · 存活 ${result.alive.PLAYER} : ${result.alive.ENEMY}</small>`;
+  $('result').textContent = result.finished ? result.winner === 'ENEMY' ? '红方获胜' : result.winner === 'PLAYER' ? '蓝方获胜' : '战斗平局' : '';
 }
 
 async function boot() {
@@ -123,7 +118,7 @@ async function boot() {
     stop();
     const status = JSON.parse((event as MessageEvent<string>).data);
     if (status.error) { fail(status.error); return; }
-    if ($('result').hidden) $('connection').textContent = '战斗服务已停止';
+    if ($('result').hidden) setConnectionStatus('战斗服务已停止');
   });
 
   function reportFailure(error: unknown) {
@@ -145,7 +140,7 @@ async function boot() {
     if (stopped || frame.version <= receivedVersion) return;
     receivedVersion = frame.version;
     pending = frame;
-    if (!view) $('connection').textContent = '战斗首帧已读取 · 正在加载场景';
+    if (!view) setConnectionStatus('战斗首帧已读取 · 正在加载场景');
     void drain();
   }
 
@@ -185,12 +180,12 @@ async function boot() {
     catch (error) { reportFailure(error); }
   };
   events.onopen = () => {
-    if (receivedVersion < 0) $('connection').textContent = '战斗服务已连接 · 正在加载场景';
+    if (receivedVersion < 0) setConnectionStatus('战斗服务已连接 · 正在加载场景');
   };
   events.onerror = () => {
     if (stopped) return;
     lastStreamFrameAt = 0;
-    if ($('result').hidden) $('connection').textContent = '正在恢复战斗连接…';
+    if ($('result').hidden) setConnectionStatus('正在恢复战斗连接…');
   };
 
   async function pollFrame() {
@@ -219,7 +214,7 @@ async function boot() {
       }
     } catch (error) {
       if (!stopped && $('result').hidden) {
-        $('connection').textContent = '本地战斗服务连接中断 · 自动重连';
+        setConnectionStatus('本地战斗服务连接中断 · 自动重连');
         if (view && receivedVersion < 0) {
           $('loading').textContent = '暂时无法读取战斗首帧，请查看运行命令的终端。正在自动重连…';
         }

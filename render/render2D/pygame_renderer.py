@@ -33,6 +33,7 @@ class PygameRenderer:
         title: str = "Jackal",
         draw_sight_range: bool | None = None,
         draw_health_bar: bool | None = None,
+        draw_health_text: bool = True,
     ) -> None:
         pygame.font.init()
         if visible:
@@ -40,6 +41,7 @@ class PygameRenderer:
         self.visible = visible
         self.draw_sight_range = draw_sight_range
         self.draw_health_bar = draw_health_bar
+        self.draw_health_text = draw_health_text
         self.viewport_width = int(width)
         self.viewport_height = int(height)
         if self.viewport_width <= 0 or self.viewport_height <= 0:
@@ -212,6 +214,8 @@ class PygameRenderer:
             (bar_x, bar_y, width, height),
             1,
         )
+        if not self.draw_health_text:
+            return
         if self._health_font is None:
             self._health_font = pygame.font.Font(None, 12)
         text = self._health_font.render(

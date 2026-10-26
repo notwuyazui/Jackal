@@ -128,7 +128,6 @@ export async function createView(container: HTMLElement) {
   let raf = 0;
   let animationFrames = 0;
   let presented: (() => void) | null = null;
-  let lastFpsReport = 0;
   const frameTimes: number[] = [];
   const renderCosts: number[] = [];
   let peakDrawCalls = 0, peakTriangles = 0;
@@ -154,7 +153,7 @@ export async function createView(container: HTMLElement) {
   const observer = new ResizeObserver(resize);
   observer.observe(container);
   renderer.userData.contextRecovery = {
-    onLost() { document.getElementById('connection')!.textContent = '图形设备恢复中'; },
+    onLost() { container.dataset.connection = '图形设备恢复中'; },
     onRestored() { resize(); return true; },
   };
 
@@ -337,10 +336,6 @@ export async function createView(container: HTMLElement) {
       }
       renderScene(currentFrame);
       animationFrames++;
-      if (now - lastFpsReport >= 1000) {
-        document.getElementById('fps')!.textContent = `${performanceReceipt().average_fps.toFixed(0)} FPS`;
-        lastFpsReport = now;
-      }
       if (visualClock - lastResolutionCheck > 4 && frameTimes.length >= 90) {
         const fps = performanceReceipt().average_fps;
         const next = fps < 48 ? Math.max(.75, displayPixelRatio - .15) :

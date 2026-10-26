@@ -197,6 +197,28 @@ class RenderAPITests(unittest.TestCase):
         finally:
             inset.close()
 
+    def test_inset_png_contains_only_the_native_scene_without_text_or_extra_marks(self):
+        import io
+        import pygame
+        from render.render2D.pygame_renderer import PygameRenderer
+        world = build_world()
+        snapshot = world.render_snapshot()
+        inset = create_inset_renderer(960, 640)
+        original = PygameRenderer(960, 640, draw_sight_range=False,
+                                  draw_health_bar=True, draw_health_text=False)
+        try:
+            expected = pygame.image.tobytes(original.draw(snapshot), 'RGB')
+            # Metadata and impact events used to add titles, IDs and rings.
+            png = inset.png(snapshot, {'time': 0, 'tick': 0, 'units': [],
+                                       'events': [{'kind': 'impact', 'position': [220, 320]}]})
+            decoded = pygame.image.load(io.BytesIO(png), 'frame.png')
+            self.assertEqual(pygame.image.tobytes(decoded, 'RGB'), expected)
+            self.assertIsNone(inset._health_font)
+            self.assertFalse(inset.draw_health_text)
+        finally:
+            inset.close()
+            original.close()
+
 
 class ActionValidationTests(unittest.TestCase):
     def test_invalid_batch_does_not_change_any_command_tick_or_step(self):
