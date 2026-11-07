@@ -1,134 +1,153 @@
+/** Water droplets/trails plus continuous brush fires; no combat effects. */
 import * as THREE from 'three';
-import { createFx } from '@cot/fx/effects.ts';
-import { registerFxClock, registerPopTrail } from '@cot/fx/clock.ts';
-import { LATE_FX_LAYER } from '@cot/fx/layers.ts';
-import { toWorld } from './mapping.ts';
+import { createBrushFires } from './brushFire.ts';
+import { createWaterArc, sampleWaterArc, WATER_GRAVITY, type WaterArc, type WaterSample } from './waterTrajectory.ts';
 import type { Frame } from './protocol.ts';
 
-interface Shell {
-  id: number; pos: THREE.Vector3; prevPos: THREE.Vector3; vel: THREE.Vector3;
-  distM: number; isPlayer: boolean; spec: { tracer: 'HE' };
-}
-
-/** Original CoT HE tracer geometry/shader and particle atlases, without ballistics. */
-export async function createShellPresentation(scene: THREE.Scene, camera: THREE.Camera) {
-  const fx = createFx({ scene, camera, anisotropy: 8 }, { getHeightAt: () => 0 }, { seed: 42 });
-  if (!await fx.preloadTextures()) throw new Error('CoT 原版炮弹特效贴图未加载');
-  fx.warmTextures();
-  scene.add(fx.group);
-  // CoT composites these effects in a late pass. This direct renderer sees that layer too.
-  camera.layers.enable(LATE_FX_LAYER);
-  let tracerGeometry: THREE.InstancedBufferGeometry | undefined;
-  fx.group.traverse(object => {
-    if (object instanceof THREE.Mesh && object.geometry.getAttribute('aA') && object.geometry.getAttribute('aB')) {
-      tracerGeometry = object.geometry;
-    }
-  });
-  if (!tracerGeometry) throw new Error('CoT native tracer geometry is missing');
-  const shells = new Map<number, Shell>();
-  const live: Shell[] = [];
-  const normal = new THREE.Vector3();
-  const particleMeshes = fx.group.getObjectByName('fx-particles')!.children as
-    THREE.Mesh<THREE.InstancedBufferGeometry, THREE.ShaderMaterial>[];
-  const softParticles = fx.group.getObjectByName('fx-particles')!.userData.softParticles;
-  function activePuffs(index: number) {
-    const mesh = particleMeshes[index];
-    const births = mesh.geometry.getAttribute('aPB');
-    const lives = mesh.geometry.getAttribute('aVL');
-    const time = mesh.material.uniforms.uTime.value as number;
-    let active = 0;
-    for (let i = 0; i < mesh.geometry.instanceCount; i++) {
-      const age = time - births.getW(i), life = lives.getW(i);
-      if (life > 0 && age >= 0 && age <= life) active++;
-    }
-    return active;
+export async function createShellPresentation(scene: THREE.Scene) {
+  const fires = await createBrushFires(scene);
+  let sceneDepth: THREE.DepthTexture | null = null;
+  const capacity = 2048;
+  const trailSegments = 3;
+  const widthScale = 9.0;
+  const waterClock = { value: 0 };
+  const headGeometry = new THREE.SphereGeometry(1, 10, 6);
+  const trailGeometry = new THREE.CylinderGeometry(1, 1, 1, 10, 1, true);
+  const headMaterial = new THREE.MeshPhysicalMaterial({ color: 0x9cdef3,
+    metalness: 0, roughness: 0.09, clearcoat: .9, ior: 1.333,
+    transparent: true, opacity: 0.3, depthWrite: false });
+  const trailMaterial = new THREE.MeshPhysicalMaterial({ color: 0x78cbe7,
+    metalness: 0, roughness: 0.1, clearcoat: .9, ior: 1.333, specularIntensity: .65,
+    transparent: true, opacity: 0.4, depthWrite: false });
+  const coreMaterial = new THREE.MeshBasicMaterial({ color: 0xd2f3ff,
+    transparent: true, opacity: 0.3, depthWrite: false, toneMapped: false });
+  const sprayMaterial = new THREE.MeshPhysicalMaterial({ color: 0xc9efff,
+    metalness: 0, roughness: .12, clearcoat: .8, ior: 1.333,
+    transparent: true, opacity: .42, depthWrite: false });
+  for (const material of [headMaterial, trailMaterial, coreMaterial]) {
+    material.onBeforeCompile = shader => {
+      shader.uniforms.uWaterTime = waterClock;
+      shader.vertexShader = 'varying vec3 vWaterWorld;\n' + shader.vertexShader;
+      shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', `
+        #include <begin_vertex>
+        vec4 jetPoint = vec4(transformed, 1.0);
+        #ifdef USE_INSTANCING
+          jetPoint = instanceMatrix * jetPoint;
+        #endif
+        vWaterWorld = (modelMatrix * jetPoint).xyz;`);
+      shader.fragmentShader = 'varying vec3 vWaterWorld; uniform float uWaterTime;\n' + shader.fragmentShader;
+      shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `
+        #include <color_fragment>
+        float ripple = 0.5 + 0.5 * sin(dot(vWaterWorld, vec3(4.0, 3.5, 2.7)) - uWaterTime * 19.0);
+        float fine = 0.5 + 0.5 * sin(dot(vWaterWorld, vec3(11.0, -8.0, 7.0)) - uWaterTime * 31.0);
+        diffuseColor.rgb *= 0.87 + ripple * 0.16 + fine * 0.05;
+        diffuseColor.a *= 0.94 + fine * 0.06;`);
+    };
+    material.customProgramCacheKey = () => 'flowing-aerated-water-v1';
   }
+  const heads = new THREE.InstancedMesh(headGeometry, headMaterial, capacity);
+  const trails = new THREE.InstancedMesh(trailGeometry, trailMaterial, capacity * trailSegments);
+  const cores = new THREE.InstancedMesh(trailGeometry, coreMaterial, capacity * trailSegments);
+  const spray = new THREE.InstancedMesh(headGeometry, sprayMaterial, capacity * 2);
+  const water = new THREE.Group(); water.name = 'Translucent broad water jet / separated three-second packets';
+  water.add(heads, trails, cores, spray); scene.add(water);
+  for (const mesh of [heads, trails, cores, spray]) {
+    mesh.count = 0; mesh.frustumCulled = false;
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  }
+  const dummy = new THREE.Object3D(), up = new THREE.Vector3(0, 1, 0);
+  const direction = new THREE.Vector3(), position = new THREE.Vector3();
+  const tailStart = new THREE.Vector3(), tailEnd = new THREE.Vector3();
+  const sideways = new THREE.Vector3(), crossStream = new THREE.Vector3();
+  const sample: WaterSample = { x: 0, y: 0, z: 0, vy: 0 };
+  const arcs = new Map<number, WaterArc>();
+  const live: Array<{ id: number; x: number; y: number; height_m: number;
+    tail_height_m: number; vertical_speed_mps: number; tracer: string }> = [];
 
   return {
-    bindSceneDepth(depth: THREE.DepthTexture, width: number, height: number) {
-      softParticles.uSceneDepth.value = depth;
-      softParticles.uSoftViewport.value.set(width, height);
-      softParticles.uCameraNear.value = (camera as THREE.PerspectiveCamera).near;
-      softParticles.uCameraFar.value = (camera as THREE.PerspectiveCamera).far;
+    bindSceneDepth(depth: THREE.DepthTexture, width: number, height: number) { sceneDepth = depth; fires.bindDepth(depth, width, height); },
+    pinTime(value: number) { fires.setTime(value); waterClock.value = value; },
+    reset(_seed: number) {
+      fires.reset(); arcs.clear(); live.length = 0;
+      heads.count = trails.count = cores.count = spray.count = 0;
     },
-    pinTime(time: number) { fx.setFrozen(true, time); },
-    reset(seed: number) { fx.setFrozen(true, 0); fx.resetAll(); fx.resetSeed(seed); shells.clear(); live.length = 0; },
-    muzzleFlash(position: THREE.Vector3, direction: THREE.Vector3) {
-      // A stronger visual recipe scales CoT's original flash, ember fan,
-      // smoke ring and ground blast; Jackal's shell stays exactly NormalShell.
-      fx.muzzleFlash(position, direction, 200);
-    },
-    destruction(position: THREE.Vector3) {
-      // Native CoT fireball, debris, blast light and smoke; the vehicle's
-      // burnt material/turret animation is driven separately by its visual.
-      fx.destruction(position, null, 'shot');
-    },
-    impact(id: number | undefined, position: THREE.Vector3) {
-      const shell = id === undefined ? undefined : shells.get(id);
-      if (shell) normal.copy(shell.vel).negate().normalize();
-      else normal.set(0, 0, -1);
-      // This selects a fireball recipe only; no CoT penetration/ricochet simulation runs.
-      fx.impact('he_pen', position, normal, 120);
-    },
-    sync(frame: Frame, planeHeight: number) {
-      live.length = 0;
+    sync(next: Frame, planeHeight: number) {
+      fires.sync(next); live.length = 0;
       const seen = new Set<number>();
-      const scale = frame.manifest.meters_per_pixel;
-      for (const bullet of frame.bullets) {
-        const point = toWorld(...bullet.position, ...frame.manifest.map.size, scale);
-        let shell = shells.get(bullet.id);
-        if (!shell) {
-          shell = { id: bullet.id, pos: new THREE.Vector3(point.x, planeHeight, point.z),
-            prevPos: new THREE.Vector3(point.x, planeHeight, point.z), vel: new THREE.Vector3(),
-            distM: Math.hypot(...bullet.velocity) * scale * frame.manifest.dt,
-            isPlayer: bullet.source_id === frame.manifest.follow_id, spec: { tracer: 'HE' } };
-          shells.set(bullet.id, shell);
+      let index = 0, trailIndex = 0, sprayIndex = 0;
+      for (const bullet of next.bullets) {
+        if (index >= capacity) break;
+        let arc = arcs.get(bullet.id);
+        if (!arc) {
+          arc = createWaterArc(bullet, next, planeHeight);
+          arcs.set(bullet.id, arc);
         }
-        shell.prevPos.copy(shell.pos);
-        shell.pos.set(point.x, planeHeight, point.z);
-        shell.distM += shell.pos.distanceTo(shell.prevPos);
-        shell.vel.set(bullet.velocity[0] * scale, 0, bullet.velocity[1] * scale);
         seen.add(bullet.id);
-        live.push(shell);
-      }
-      for (const id of shells.keys()) if (!seen.has(id)) shells.delete(id);
-    },
-    render() { fx.update(0, live, camera); },
-    effectState() { return { flash_particles: activePuffs(5), smoke_particles: activePuffs(3),
-      soft_depth_bound: softParticles.uSceneDepth.value instanceof THREE.DepthTexture }; },
-    receipts(manifest: Frame['manifest']) {
-      const heads = tracerGeometry!.getAttribute('aB');
-      const tails = tracerGeometry!.getAttribute('aA');
-      if (tracerGeometry!.instanceCount < live.length) throw new Error('CoT omitted a live shell');
-      return live.map((shell, index) => ({ id: shell.id,
-        x: heads.getX(index) / manifest.meters_per_pixel + manifest.map.size[0] / 2,
-        y: heads.getZ(index) / manifest.meters_per_pixel + manifest.map.size[1] / 2,
-        height_m: heads.getY(index), tail_height_m: tails.getY(index),
-        vertical_speed_mps: shell.vel.y, tracer: shell.spec.tracer }));
-    },
-    dispose() {
-      fx.resetAll(); fx.group.removeFromParent();
-      const geometries = new Set<THREE.BufferGeometry>();
-      const materials = new Set<THREE.Material>();
-      const textures = new Set<THREE.Texture>();
-      fx.group.traverse(object => {
-        if (!(object instanceof THREE.Mesh)) return;
-        geometries.add(object.geometry);
-        for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
-          materials.add(material);
-          for (const value of Object.values(material)) if (value instanceof THREE.Texture) textures.add(value);
-          if (material instanceof THREE.ShaderMaterial) {
-            for (const uniform of Object.values(material.uniforms)) {
-              if (uniform.value instanceof THREE.Texture) textures.add(uniform.value);
-            }
-          }
+        const age = Math.max(0, arc.lifetime - bullet.lifetime);
+        sampleWaterArc(arc, age, sample);
+        // Missed jets fall into the ground instead of continuing beneath it.
+        if (sample.y <= 0.08) continue;
+        position.set(sample.x, sample.y, sample.z);
+        const headVy = sample.vy;
+        direction.set(arc.vx, headVy, arc.vz).normalize();
+        dummy.quaternion.setFromUnitVectors(up, direction);
+        // Shallow, irregular beads blend into the translucent trailing volume.
+        const ripple = .94 + .06 * Math.sin(bullet.id * 2.4);
+        dummy.position.copy(position); dummy.scale.set(0.07 * widthScale * ripple, 0.24, 0.07 * widthScale * ripple);
+        dummy.updateMatrix(); heads.setMatrixAt(index, dummy.matrix);
+        // Match the 0.1 s emission interval: a small overlap joins the fluid,
+        // without the broad alternating opaque bands of the previous trails.
+        const tailAge = Math.max(0, age - 0.105);
+        sampleWaterArc(arc, tailAge, sample);
+        const tailHeight = sample.y;
+        tailStart.set(sample.x, sample.y, sample.z);
+        for (let segment = 1; segment <= trailSegments; segment++) {
+          sampleWaterArc(arc, tailAge + (age - tailAge) * segment / trailSegments, sample);
+          tailEnd.set(sample.x, sample.y, sample.z);
+          const length = tailStart.distanceTo(tailEnd);
+          direction.subVectors(tailEnd, tailStart).normalize();
+          dummy.quaternion.setFromUnitVectors(up, direction);
+          dummy.position.copy(tailStart).add(tailEnd).multiplyScalar(0.5);
+          dummy.scale.set(0.105 * widthScale, length, 0.105 * widthScale); dummy.updateMatrix(); trails.setMatrixAt(trailIndex, dummy.matrix);
+          dummy.scale.set(0.038 * widthScale, length, 0.038 * widthScale); dummy.updateMatrix(); cores.setMatrixAt(trailIndex, dummy.matrix);
+          tailStart.copy(tailEnd); trailIndex++;
         }
-      });
-      for (const geometry of geometries) geometry.dispose();
-      for (const material of materials) material.dispose();
-      for (const texture of textures) texture.dispose();
-      registerFxClock(() => 0); registerPopTrail(() => {});
-      shells.clear(); live.length = 0;
+        // Fine detached droplets at the edge give the jet an aerated, wet
+        // silhouette instead of a stack of large projectile-shaped beads.
+        direction.set(arc.vx, headVy, arc.vz).normalize();
+        sideways.set(-arc.vz, 0, arc.vx).normalize();
+        crossStream.crossVectors(direction, sideways).normalize();
+        for (let drop = 0; drop < 2; drop++) {
+          const phase = bullet.id * 2.39996 + drop * 2.8;
+          const radius = widthScale * (.115 + .035 * Math.sin(phase + age * 5));
+          dummy.position.copy(position).addScaledVector(sideways, Math.cos(phase) * radius)
+            .addScaledVector(crossStream, Math.sin(phase) * radius);
+          dummy.quaternion.setFromUnitVectors(up, direction);
+          const size = widthScale * (.012 + .005 * (1 + Math.sin(phase * 3)));
+          dummy.scale.set(size, size * 1.8, size); dummy.updateMatrix();
+          spray.setMatrixAt(sprayIndex++, dummy.matrix);
+        }
+        live.push({ id: bullet.id, x: bullet.position[0], y: bullet.position[1], height_m: position.y,
+          tail_height_m: tailHeight, vertical_speed_mps: headVy, tracer: 'parabolic-blue-water' });
+        index++;
+      }
+      for (const id of arcs.keys()) if (!seen.has(id)) arcs.delete(id);
+      heads.count = index; trails.count = cores.count = trailIndex; spray.count = sprayIndex;
+      for (const mesh of [heads, trails, cores, spray]) mesh.instanceMatrix.needsUpdate = true;
+    },
+    render() {},
+    effectState() { return { flash_particles: 0, ...fires.state(), trajectory: 'parabolic', water_max_gravity_mps2: WATER_GRAVITY,
+      water_gravity_mode: 'range-adjusted', water_arc_height_above_chord_m: 18,
+      water_width_scale: widthScale, landing_mode: 'continuous-fire-front',
+      water_style: 'flowing-water-with-fine-spray', water_opacity: trailMaterial.opacity,
+      water_spray_droplets: spray.count,
+      soft_depth_bound: sceneDepth instanceof THREE.DepthTexture }; },
+    receipts(_manifest: Frame['manifest']) { return live; },
+    dispose() {
+      fires.dispose(); water.removeFromParent();
+      for (const mesh of [heads, trails, cores, spray]) mesh.dispose();
+      headGeometry.dispose(); trailGeometry.dispose();
+      headMaterial.dispose(); trailMaterial.dispose(); coreMaterial.dispose(); sprayMaterial.dispose(); arcs.clear();
     },
   };
 }

@@ -25,4 +25,8 @@ export interface RenderReceipt {
   cosmetic_bob_m?: number; cosmetic_pitch_deg?: number; start_bounce_age_s?: number | null;
   chassis_roll_deg?: number; cosmetic_retreat_m?: number; native_recoil_m?: number;
   visible?: boolean; collider_active?: boolean;
+  locomotion_mode?: string; gait_phase_rad?: number; gait_blend?: number;
+  step_rate_hz?: number; stride_length_m?: number;
+  left_foot_contact?: boolean; right_foot_contact?: boolean;
+  nozzle_yaw_error_deg?: number;
 }

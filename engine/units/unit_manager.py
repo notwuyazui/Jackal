@@ -176,7 +176,7 @@ class UnitManager:
         # Interleave teams and reverse the complete order every tick. This keeps
         # deterministic updates without permanently granting one id range the
         # first decision, movement, communication, and collision opportunity.
-        ai_order = self._fair_update_order(self.enemy_ais)
+        ai_order = self._fair_update_order([ai for ai in self.enemy_ais if not ai.unit.is_static])
         for ai in ai_order:
             ai.update()
         # Firing is committed only after every controller has decided, so later

@@ -14,6 +14,9 @@ import plasterUrl from '../public/textures/buildings/Plaster007_1K-JPG_Color.jpg
 import strawUrl from '../public/textures/terrain/withered_grass_diff_1k.jpg?url';
 import { prepareVerdantMountains, createMountainApron } from './mountains.ts';
 import { planExterior } from './exteriorLayout.ts';
+import { BURNING_HOUSE, RELOCATED_BATHHOUSE, moveBurningHouse, setHouseGround } from './firefighterScene.ts';
+import { houseSurfaceWorld } from './houseFireLayout.ts';
+import { createBurningGround } from './burningGround.ts';
 import type { Manifest } from './protocol.ts';
 
 function airBarrier(width: number, height: number, tile: number) {
@@ -79,12 +82,32 @@ export async function createExteriorFactory(loader: THREE.TextureLoader) {
       backdrop = await prepareVerdantMountains(seed);
       backdropSeed = seed;
     },
-    build(manifest: Manifest, groundMaterial: THREE.MeshStandardMaterial, groundSize: number) {
+    build(manifest: Manifest, groundMaterial: THREE.MeshStandardMaterial, groundSize: number,
+      extendedSize: readonly number[] = manifest.map.size) {
       const [mapWidth, mapHeight] = manifest.map.size;
       const width = mapWidth * manifest.meters_per_pixel;
       const height = mapHeight * manifest.meters_per_pixel;
       const tile = manifest.map.tile_size * manifest.meters_per_pixel;
-      const layout = planExterior(manifest.seed, { width, height });
+      const layout = moveBurningHouse(planExterior(manifest.seed, { width, height }));
+      // Extra slope dressing uses its own sequence, leaving every old record
+      // and the RNG order of the original exterior unchanged.
+      const addedTrees = new Set<object>(), addedRocks = new Set<object>();
+      for (let i = 0; i < 360; i++) {
+        const angle = i * 2.39996323;
+        const radius = 345 + (i * 71 % 260);
+        const tree = { x: Math.cos(angle) * radius, z: Math.sin(angle) * radius,
+          species: (i % 5 === 0 ? 'birch' : 'pine') as 'birch' | 'pine',
+          size: 1.1 + (i % 7) * .12, yaw: angle };
+        if (tree.x > 120 && tree.x < RELOCATED_BATHHOUSE.x + 16 &&
+            Math.abs(tree.z - RELOCATED_BATHHOUSE.z * tree.x / RELOCATED_BATHHOUSE.x) < 14) continue;
+        layout.trees.push(tree); addedTrees.add(tree);
+      }
+      for (let i = 0; i < 42; i++) {
+        const angle = i * 2.39996323 + .7, radius = 330 + (i * 37 % 160);
+        const rock = { x: Math.cos(angle) * radius, z: Math.sin(angle) * radius,
+          size: 1.6 + (i % 5) * .65, variant: i % 3, yaw: angle };
+        layout.rocks.push(rock); addedRocks.add(rock);
+      }
       const group = new THREE.Group();
       group.name = 'CoT scenery outside Jackal combat bounds / visual only';
       const ownedGeometry = new Set<THREE.BufferGeometry>();
@@ -98,11 +121,19 @@ export async function createExteriorFactory(loader: THREE.TextureLoader) {
 
       if (!backdrop) throw new Error('CoT Verdant mountains were not prepared');
       const mountains = createMountainApron(manifest.seed, width, height, groundMaterial, groundSize, backdrop);
+      const houseGround = mountains.originalGroundAt(BURNING_HOUSE.x, BURNING_HOUSE.z);
+      setHouseGround(houseGround);
+      const burnedGround = createBurningGround(mountains.groundAt);
+      group.add(burnedGround.mesh);
       group.add(backdrop.mesh);
       group.add(mountains.mesh);
       ownedGeometry.add(mountains.mesh.geometry);
       ownedMaterial.add(mountains.mesh.material);
-      const barrier = airBarrier(width, height, tile);
+      const barrier = airBarrier(extendedSize[0] * manifest.meters_per_pixel,
+        extendedSize[1] * manifest.meters_per_pixel, tile);
+      barrier.group.position.x = (extendedSize[0] - mapWidth) * manifest.meters_per_pixel / 2;
+      barrier.group.position.z = ((extendedSize[1] - mapHeight) / 2 -
+        (manifest.scene.origin_offset?.[1] ?? 0)) * manifest.meters_per_pixel;
       group.add(barrier.group);
       for (const geometry of barrier.geometries) ownedGeometry.add(geometry);
       ownedMaterial.add(barrier.material);
@@ -123,7 +154,7 @@ export async function createExteriorFactory(loader: THREE.TextureLoader) {
             const mesh = new THREE.InstancedMesh(geometry, material, records.length);
             mesh.name = `CoT ${species} ${name} / ${zone} exterior`;
             records.forEach((record, index) => {
-              position.set(record.x, mountains.groundAt(record.x, record.z), record.z);
+              position.set(record.x, (addedTrees.has(record) ? mountains.groundAt : mountains.originalGroundAt)(record.x, record.z), record.z);
               rotation.setFromAxisAngle(up, record.yaw);
               scale.setScalar(record.size);
               modelMatrix.compose(position, rotation, scale);
@@ -150,7 +181,7 @@ export async function createExteriorFactory(loader: THREE.TextureLoader) {
           const mesh = new THREE.InstancedMesh(geometry, rockMaterial, records.length);
           mesh.name = `CoT ${zone} boulders / variant ${variant}`;
           records.forEach((record, index) => {
-            position.set(record.x, mountains.groundAt(record.x, record.z) + record.size * 0.25, record.z);
+            position.set(record.x, (addedRocks.has(record) ? mountains.groundAt : mountains.originalGroundAt)(record.x, record.z) + record.size * 0.25, record.z);
             rotation.setFromAxisAngle(up, record.yaw);
             scale.setScalar(record.size);
             modelMatrix.compose(position, rotation, scale);
@@ -199,7 +230,7 @@ export async function createExteriorFactory(loader: THREE.TextureLoader) {
       const poleMesh = new THREE.InstancedMesh(poleGeometry, poleMaterial, layout.poles.length);
       poleMesh.name = 'CoT telephone pole kit / exterior';
       layout.poles.forEach((record, index) => {
-        position.set(record.x, mountains.groundAt(record.x, record.z), record.z);
+        position.set(record.x, mountains.originalGroundAt(record.x, record.z), record.z);
         rotation.setFromAxisAngle(up, record.yaw);
         modelMatrix.compose(position, rotation, scale.setScalar(1));
         poleMesh.setMatrixAt(index, modelMatrix);
@@ -220,7 +251,7 @@ export async function createExteriorFactory(loader: THREE.TextureLoader) {
               const t = step / 8;
               const x = THREE.MathUtils.lerp(a.x, b.x, t) + (across ? 0 : side);
               const z = THREE.MathUtils.lerp(a.z, b.z, t) + (across ? side : 0);
-              const y = THREE.MathUtils.lerp(mountains.groundAt(a.x, a.z), mountains.groundAt(b.x, b.z), t) +
+              const y = THREE.MathUtils.lerp(mountains.originalGroundAt(a.x, a.z), mountains.originalGroundAt(b.x, b.z), t) +
                 6.1 - Math.sin(Math.PI * t) * 0.55;
               wirePoints.push(x, y, z);
             }
@@ -243,7 +274,7 @@ export async function createExteriorFactory(loader: THREE.TextureLoader) {
         const mesh = new THREE.InstancedMesh(geometry, hayMaterial, records.length);
         mesh.name = `CoT native ${kind} / exterior`;
         records.forEach((record, index) => {
-          position.set(record.x, mountains.groundAt(record.x, record.z), record.z);
+          position.set(record.x, mountains.originalGroundAt(record.x, record.z), record.z);
           rotation.setFromAxisAngle(up, record.yaw);
           modelMatrix.compose(position, rotation, scale.setScalar(record.size));
           mesh.setMatrixAt(index, modelMatrix);
@@ -272,6 +303,8 @@ export async function createExteriorFactory(loader: THREE.TextureLoader) {
         return material;
       }
       const houseTemplates = new Map<string, THREE.Group>();
+      const fireLights: Array<{ light: THREE.PointLight; intensity: number }> = [];
+      const burningWindows: THREE.MeshStandardMaterial[] = [];
       for (const house of [...layout.houses, ...layout.boundaryHouses]) {
         let template = houseTemplates.get(house.kind);
         if (!template) {
@@ -305,37 +338,89 @@ export async function createExteriorFactory(loader: THREE.TextureLoader) {
               if (merged) for (const geometry of matching) geometry.dispose();
               for (const geometry of merged ? [merged] : matching) {
                 ownedGeometry.add(geometry);
-                template.add(new THREE.Mesh(geometry, houseMaterial(bucket, !!geometry.getAttribute('color'))));
+                const mesh = new THREE.Mesh(geometry, houseMaterial(bucket, !!geometry.getAttribute('color')));
+                mesh.userData.houseSurface = bucket;
+                template.add(mesh);
               }
             }
           }
           houseTemplates.set(house.kind, template);
         }
         const instance = template.clone(true);
-        instance.position.set(house.x, mountains.groundAt(house.x, house.z), house.z);
+        const burning = house.x === BURNING_HOUSE.x && house.z === BURNING_HOUSE.z;
+        const relocated = house.x === RELOCATED_BATHHOUSE.x && house.z === RELOCATED_BATHHOUSE.z;
+        instance.position.set(house.x, (relocated ? mountains.groundAt : mountains.originalGroundAt)(house.x, house.z), house.z);
         instance.rotation.y = house.yaw;
         instance.traverse(object => {
           if (object instanceof THREE.Mesh) {
             object.castShadow = true;
             object.receiveShadow = true;
+            if (burning && object.material instanceof THREE.MeshStandardMaterial) {
+              const material = object.material.clone();
+              ownedMaterial.add(material); object.material = material;
+              const surface = object.userData.houseSurface;
+              if (['glass', 'dark', 'curtain'].includes(surface)) {
+                material.color.set('#6b2307');
+                material.emissive.set('#ff4a05'); material.emissiveIntensity = 1.7;
+                burningWindows.push(material);
+              } else {
+                material.color.multiplyScalar(surface === 'roof' || surface === 'wood' ? .32 : .68);
+                material.roughness = 1;
+                material.onBeforeCompile = shader => {
+                  shader.vertexShader = 'varying vec3 vBurnLocal;\n' + shader.vertexShader;
+                  shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>',
+                    '#include <begin_vertex>\n vBurnLocal = position;');
+                  shader.fragmentShader = 'varying vec3 vBurnLocal;\n' + shader.fragmentShader;
+                  shader.fragmentShader = shader.fragmentShader.replace('#include <map_fragment>', `
+                    #include <map_fragment>
+                    float streak = 0.5 + 0.5 * sin(vBurnLocal.x * 3.7 + sin(vBurnLocal.z * 4.1) * 2.0);
+                    float soot = smoothstep(0.7, 4.4, vBurnLocal.y) * (0.35 + streak * 0.35);
+                    diffuseColor.rgb *= mix(vec3(0.88, 0.8, 0.72), vec3(0.25, 0.22, 0.19), soot);`);
+                };
+                material.customProgramCacheKey = () => 'firefighter-charred-house-v1';
+              }
+            }
           }
         });
         group.add(instance);
+        if (burning) {
+          instance.name = 'Burning red-roof house beside the left-front rock pile';
+          for (const [x, y, z, intensity, range] of [
+            [-5.0, 2.8, -1.5, 2000, 40], [0, 6.9, 0, 3200, 52], [0, 2.1, 8.5, 850, 32],
+          ]) {
+            const p = houseSurfaceWorld(x, z);
+            const light = new THREE.PointLight(0xff6414, intensity, range, 2);
+            light.position.set(p.x, houseGround + y, p.z); group.add(light);
+            fireLights.push({ light, intensity });
+          }
+        }
       }
 
       return {
         group,
-        counts: { trees: layout.trees.length, hillside_trees: 1600, ...backdrop.counts,
+        counts: { trees: layout.trees.length, hillside_trees: 1600 + addedTrees.size, ...backdrop.counts,
+          added_mountain_trees: addedTrees.size, added_mountain_rocks: addedRocks.size,
+          burning_house: { ...BURNING_HOUSE, ground_height: houseGround }, scenery_reference_size: manifest.map.size,
+          burning_building_style: 'charred-surfaces-glowing-windows-and-attached-flames',
+          burning_ground_extent_m: [64, 72],
+          extended_map_size: extendedSize,
           rocks: layout.rocks.length,
           houses: layout.houses.length, poles: layout.poles.length, hay: layout.hay.length,
           barrier_panels: barrier.group.children.length,
           boundary_fences: layout.boundaryFences.length,
           boundary_rocks: layout.boundaryRocks.length,
           boundary_houses: layout.boundaryHouses.length },
-        groundAt: mountains.groundAt,
-        setTime(time: number) { barrier.setTime(time); },
+        groundAt: mountains.originalGroundAt,
+        setTime(time: number) {
+          barrier.setTime(time);
+          burnedGround.setTime(time);
+          const flicker = .9 + .08 * Math.sin(time * 9) + .06 * Math.sin(time * 15.7);
+          for (const { light, intensity } of fireLights) light.intensity = intensity * flicker;
+          for (const material of burningWindows) material.emissiveIntensity = 1.7 * flicker;
+        },
         dispose() {
           backdrop?.mesh.removeFromParent();
+          burnedGround.dispose();
           group.removeFromParent();
           for (const kit of treeKits) kit.dispose();
           for (const geometry of ownedGeometry) geometry.dispose();

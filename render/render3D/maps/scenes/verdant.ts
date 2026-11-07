@@ -10,6 +10,7 @@ import { createGroundDressingFactory } from '../../src/groundDressing.ts';
 import { createRoadsideProps } from '../../src/roadsideProps.ts';
 import { onRoad } from '../../src/roads.ts';
 import { toWorld } from '../../src/mapping.ts';
+import { sceneryManifest } from '../../src/firefighterScene.ts';
 import type { MapContext, PreparedMap } from '../registry.ts';
 import type { Frame } from '../../src/protocol.ts';
 
@@ -32,7 +33,7 @@ export async function prepare({ renderer, loadingStage }: MapContext): Promise<P
   }
   return {
     async build(frame: Frame) {
-      const manifest = frame.manifest;
+      const manifest = sceneryManifest(frame.manifest);
       await exteriorFactory.prepare(manifest.seed);
       const group = new THREE.Group();
       group.name = `Jackal scene: ${manifest.scene.id}`;
@@ -58,7 +59,8 @@ export async function prepare({ renderer, loadingStage }: MapContext): Promise<P
       ground.rotation.x = -Math.PI / 2;
       ground.receiveShadow = true;
       group.add(ground);
-      exterior = exteriorFactory.build(manifest, ground.material as THREE.MeshStandardMaterial, groundSize);
+      exterior = exteriorFactory.build(manifest, ground.material as THREE.MeshStandardMaterial, groundSize,
+        frame.manifest.map.size);
       group.add(exterior.group);
       const noVegetation = (x: number, z: number) => {
         const column = Math.floor((x / scale + width / 2) / manifest.map.tile_size);
@@ -66,7 +68,11 @@ export async function prepare({ renderer, loadingStage }: MapContext): Promise<P
         const tile = manifest.map.tiles[row]?.[column];
         return (tile !== 'o' && tile !== 'x') || onRoad(x, z, 0.55);
       };
-      const unitStarts = frame.units.map(unit => toWorld(...unit.position, ...manifest.map.size, scale));
+      // Preserve the old scenery exclusions too: removing the brush piles must
+      // not resample props or move any of the original roadside decorations.
+      const starts = manifest.scene.scenery_size ? [[400, 220], [400, 320], [400, 420],
+        [780, 190], [780, 320], [780, 450]] : frame.units.map(unit => unit.position);
+      const unitStarts = starts.map(p => toWorld(p[0], p[1], ...manifest.map.size, scale));
       groundDressing = groundDressingFactory.build(manifest, exterior.groundAt, noVegetation, unitStarts);
       group.add(groundDressing.group);
       roadside = createRoadsideProps(manifest, exterior.groundAt, unitStarts);

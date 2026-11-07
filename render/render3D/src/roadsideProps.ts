@@ -89,8 +89,8 @@ export function createRoadsideProps(manifest: Manifest,
     sync(frame: Frame) {
       for (const record of records) {
         if (record.crushed) continue;
-        const x = record.x / scale + pixelWidth / 2;
-        const y = record.z / scale + pixelHeight / 2;
+        const x = record.x / scale + pixelWidth / 2 + (manifest.scene.origin_offset?.[0] ?? 0);
+        const y = record.z / scale + pixelHeight / 2 + (manifest.scene.origin_offset?.[1] ?? 0);
         const radius = DESTRUCTIBLE_TYPES[record.kind].r / scale;
         const overrun = frame.units.some(unit => {
           if (!unit.alive) return false;

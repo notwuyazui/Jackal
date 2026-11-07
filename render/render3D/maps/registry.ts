@@ -9,6 +9,8 @@ export interface InitialPlacement {
 export interface SceneDefinition {
   id: string; name: string; builder: string; meters_per_pixel: number;
   unit_models: Record<string, string>;
+  scenery_size?: [number, number];
+  origin_offset?: [number, number];
   initial_units?: InitialPlacement[];
 }
 export interface MapContext {
@@ -34,6 +36,8 @@ const builders = import.meta.glob<{ prepare(context: MapContext): Promise<Prepar
 export async function prepareMap(scene: SceneDefinition, context: MapContext): Promise<PreparedMap> {
   const definition = Object.values(catalog).find(candidate => candidate.id === scene.id);
   if (!definition || definition.builder !== scene.builder || definition.meters_per_pixel !== scene.meters_per_pixel
+      || JSON.stringify(definition.scenery_size) !== JSON.stringify(scene.scenery_size)
+      || JSON.stringify(definition.origin_offset) !== JSON.stringify(scene.origin_offset)
       || JSON.stringify(definition.unit_models) !== JSON.stringify(scene.unit_models)) {
     throw new Error(`3D 地图注册信息与 Python 不一致：${scene.id}`);
   }

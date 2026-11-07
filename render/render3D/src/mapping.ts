@@ -1,5 +1,12 @@
 // Pure coordinate/parameter conversions, shared by the live view and tests.
 export const radians = Math.PI / 180;
+export function worldSize(manifest: { map: { size: readonly number[] }; scene?: {
+  scenery_size?: [number, number]; origin_offset?: [number, number];
+} }): [number, number] {
+  const size = manifest.scene?.scenery_size ?? manifest.map.size;
+  const offset = manifest.scene?.origin_offset ?? [0, 0];
+  return [size[0] + offset[0] * 2, size[1] + offset[1] * 2];
+}
 export function toWorld(x: number, y: number, width: number, height: number, scale: number) {
   return { x: (x - width / 2) * scale, z: (y - height / 2) * scale };
 }

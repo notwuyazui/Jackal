@@ -635,6 +635,8 @@ interface HorizonForestOptions {
   /** 0..1 share of conifers (the map's rim mix). */
   coniferShare: number;
   maxInstances: number;
+  densityScale?: number;
+  coverSummits?: boolean;
   /** Outer radius beyond which the skyline ribbon carries the forest. */
   maxRadius: number;
   /** The ring's detail noise (texture coordinates in, 0..1 out) — the JS twin of the fragment program's fields. */
@@ -881,6 +883,7 @@ export function buildHorizonForest(options: HorizonForestOptions): THREE.Group |
   // terrain material paints grass to steeper slopes than the vista rock weight, so trees stand there up to ~40°,
   // and the map-scale field only thins the band (clearings come from the 140 m field) so no sector goes bare.
   const standWeightAt = (x: number, y: number, z: number, slope: number, band: boolean): number => {
+    if (options.coverSummits) return .88 * forestAmp;
     if (!noise) return 0.6;
     const nB = noise(x * 0.0016, z * 0.0016) - 0.5;
     const nC = noise(x * 0.0071 + 0.29, z * 0.0071 + 0.53) - 0.5;
@@ -921,28 +924,29 @@ export function buildHorizonForest(options: HorizonForestOptions): THREE.Group |
       const i00 = row * n + column, i01 = row * n + k1, i10 = (row + 1) * n + column, i11 = (row + 1) * n + k1;
       // only faces that rise away from the battlefield show their trees; back slopes are hidden by the crest
       const rise = (heights[i10] + heights[i11]) * 0.5 - (heights[i00] + heights[i01]) * 0.5;
-      if (rise < -0.5) continue;
+      if (rise < -0.5 && !options.coverSummits) continue;
       const dx = positions[i10 * 3] - positions[i00 * 3], dz = positions[i10 * 3 + 2] - positions[i00 * 3 + 2];
       const radialSpan = Math.hypot(dx, dz), arc = Math.hypot(positions[i01 * 3] - positions[i00 * 3], positions[i01 * 3 + 2] - positions[i00 * 3 + 2]);
       const area = radialSpan * arc;
       const slope = Math.abs(rise) / Math.max(1, radialSpan);
-      if (slope > (band ? 1.15 : 1.0)) continue;
+      if (slope > (options.coverSummits ? 2 : band ? 1.15 : 1.0)) continue;
       const faceBeyond = beyondRim(positions[i00 * 3], positions[i00 * 3 + 2]);
       // one candidate per ~45 m² of rim band, ~90 m² of near range face, ~160 m² beyond 450 m
       let count = area / (band ? 45 : faceBeyond < 450 ? 90 : 160);
+      count *= options.densityScale ?? 1;
       count = Math.floor(count) + (rng() < count - Math.floor(count) ? 1 : 0);
       for (let t = 0; t < count; t++) {
         const u = rng(), w = rng();
         sampleHorizonFace(positions, heights, i00, i01, i10, i11, u, w, surface);
         const { x, y, z, slope: faceSlope } = surface;
-        if (faceSlope > (band ? 1.15 : 1.0)) continue;
+        if (faceSlope > (options.coverSummits ? 2 : band ? 1.15 : 1.0)) continue;
         if (y < 1.0) continue; // the sea aperture
         // round 72: range-class trees only on the near ranges (inside 880 m), below half the ring's height and never on
         // a snow map — past that the aerial pass washes a boosted range's face toward the sky while a dark crown keeps
         // a third of its green, so the crowns floated over pale slopes as dots in the sky (Glacier Pass, Nordhavn,
         // Verdant); on a snow map every face past the first ridge is that pale, so only the rim band keeps its trees
-        if (!band && (y > maxHeight * 0.5 || Math.hypot(x, z) > 880 || snowline <= 1)) continue;
-        if (band && y > maxHeight * 0.5) continue; // and no band tree on a foothill crest that climbs past half the ring
+        if (!options.coverSummits && !band && (y > maxHeight * 0.5 || Math.hypot(x, z) > 880 || snowline <= 1)) continue;
+        if (!options.coverSummits && band && y > maxHeight * 0.5) continue; // legacy foothill-only forest
         if (options.clearAt && options.clearAt(x, z) > 0.5) continue; // round 63: the cutting's right-of-way
         const stand = standWeightAt(x, y, z, faceSlope, band);
         // round 72c (integrator: a straight treeline belt on the apron of Whiteout / Frosthollow): the stands follow the
@@ -950,7 +954,7 @@ export function buildHorizonForest(options: HorizonForestOptions): THREE.Group |
         // where no range trees continue past the first ridge, the band's outer edge is a wandering treeline (the
         // hollows carry it out to the ridge row, the crests pull it back 100 m) thinning over its last 90 m
         let clump = 1;
-        if (options.reliefAt) {
+        if (options.reliefAt && !options.coverSummits) {
           const rel = Math.max(-1, Math.min(1, options.reliefAt(x, z)));
           clump = band ? Math.max(0.12, 1 - rel * 0.85) : Math.max(0.25, 1 - rel * 0.6);
           if (band && snowline <= 1) {
@@ -976,11 +980,11 @@ export function buildHorizonForest(options: HorizonForestOptions): THREE.Group |
     }
   }
   if (candidates.length === 0) return null;
-  // Budget: the rim band keeps up to three quarters of the instances, thinned uniformly by key so the whole
-  // perimeter stays covered; the ranges take the rest. The band trees nearest the edge become the rich near class.
+  // Thin uniformly across each zone. Summit coverage gives the upper ranges
+  // three quarters of the budget; the default keeps the richer rim band.
   const thin = (list: ForestPlacement[], budget: number): ForestPlacement[] =>
     (list.length <= budget ? list : list.slice().sort((a, b) => a.key - b.key).slice(0, budget));
-  const bandKept = thin(candidates.filter((c) => c.band), Math.floor(options.maxInstances * 0.75));
+  const bandKept = thin(candidates.filter((c) => c.band), Math.floor(options.maxInstances * (options.coverSummits ? .25 : .75)));
   const rangeKept = thin(candidates.filter((c) => !c.band), Math.max(0, options.maxInstances - bandKept.length));
   const byDepth = bandKept.slice().sort((a, b) => a.beyond - b.beyond);
   for (let i = 0; i < byDepth.length; i++) byDepth[i].detail = i < maxNear && byDepth[i].beyond < nearDepth ? 2 : 1;

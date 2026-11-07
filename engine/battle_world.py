@@ -399,6 +399,8 @@ class BattleWorld:
             if name in state:
                 setattr(unit, name, float(state[name]))
         unit.health = float(state.get("health", unit.max_health))
+        unit.is_static = bool(state.get("is_static", False))
+        unit.movement_bounds = tuple(float(value) for value in state["movement_bounds"]) if state.get("movement_bounds") else None
         unit.min_sight_range = float(state.get('min_sight_range', unit.min_sight_range))
         unit.is_alive = bool(state.get("is_alive", unit.health > 0.0))
         unit.direction_angle = unit.normalize_angle(direction)
@@ -901,7 +903,7 @@ class BattleWorld:
 
     def set_unit_turret_target_angle(self, unit_id: int, angle: float) -> bool:
         unit = self.get_unit(unit_id)
-        if unit is None:
+        if unit is None or unit.is_static:
             return False
         unit.turret_target_angle = float(angle)
         return True

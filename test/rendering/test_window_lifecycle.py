@@ -143,6 +143,20 @@ class WindowLifecycleTests(unittest.TestCase):
         self.assertTrue(viewer.closed)
 
     @patch('render.render3D.launch.sys.platform', 'darwin')
+    @patch('render.render3D.launch._mac_chromium', return_value='/Applications/Edge')
+    @patch('render.render3D.launch.subprocess.Popen')
+    def test_firefighter_prefers_an_isolated_chromium_window(self, popen, browser):
+        popen.return_value.poll.return_value = None
+        window = open_cot_window('http://127.0.0.1:1234/', prefer_chromium=True)
+        self.assertIsInstance(window, BrowserProcessWindow)
+        self.assertEqual(popen.call_args.args[0][0], '/Applications/Edge')
+        self.assertIn('--start-fullscreen', popen.call_args.args[0])
+        self.assertIn('--disable-backgrounding-occluded-windows', popen.call_args.args[0])
+        self.assertIn('--disable-background-timer-throttling', popen.call_args.args[0])
+        self.assertIn('--disable-renderer-backgrounding', popen.call_args.args[0])
+        window.close()
+
+    @patch('render.render3D.launch.sys.platform', 'darwin')
     @patch('render.render3D.launch.subprocess.run')
     def test_native_launcher_returns_the_new_window_id(self, run):
         run.return_value = subprocess.CompletedProcess([], 0, stdout='314\n')

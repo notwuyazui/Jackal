@@ -1,9 +1,10 @@
-import type { createM1A1 } from './m1a1.ts';
+import type { createFirefighter } from './firefighter.ts';
+import { createFireSite } from './fireSite.ts';
 import type { Manifest, Parameters } from './protocol.ts';
 import type { SceneDefinition } from '../maps/registry.ts';
 
-export { TEAM_CAMO } from './m1a1.ts';
-export type Vehicle = ReturnType<typeof createM1A1>;
+export { TEAM_CAMO } from './firefighter.ts';
+export type Vehicle = ReturnType<typeof createFirefighter>;
 interface ModelAdapter {
   prepare(): Promise<unknown>;
   create(parameters: Parameters, team: string, manifest: Manifest): Vehicle;
@@ -29,5 +30,6 @@ export async function prepareVehicles(scene: SceneDefinition) {
   }));
 }
 export function createVehicle(parameters: Parameters, team: string, manifest: Manifest): Vehicle {
+  if (team === 'ENEMY') return createFireSite(parameters, team, manifest);
   return resolve(manifest.scene.unit_models[parameters.unit_type]).create(parameters, team, manifest);
 }

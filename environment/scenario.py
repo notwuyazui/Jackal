@@ -51,6 +51,16 @@ def build_ai_world(state_file: str | Path = GAME_STATE_DIR / f'{DEFAULT_GAME_STA
             world.unit_manager.enemy_ais.append(EnemyAI(
                 unit, world.unit_manager, world.bullet_manager, world.game_map,
                 intelligence_level=unit.ai_intelligence_level))
+    if Path(state_file).stem == DEFAULT_GAME_STATE:
+        crew = [unit for unit in world.iter_units() if unit.team == Team.PLAYER]
+        sites = [unit for unit in world.iter_units() if unit.team == Team.ENEMY and unit.is_static]
+        if len(crew) == len(sites) == 3:
+            from engine.units.firefighter_ai import FirefighterAI, FirefighterDirector
+            director = FirefighterDirector(crew, sites, seed=seed)
+            world.unit_manager.enemy_ais = [ai for ai in world.unit_manager.enemy_ais if ai.unit not in crew]
+            world.unit_manager.enemy_ais.extend(FirefighterAI(
+                unit, world.unit_manager, world.bullet_manager, world.game_map,
+                intelligence_level=unit.ai_intelligence_level, director=director) for unit in crew)
     world.refresh_vision()
     return world
 

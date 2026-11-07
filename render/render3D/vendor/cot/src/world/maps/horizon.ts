@@ -87,6 +87,11 @@ interface HorizonConfig {
   relief?: HorizonReliefCharacter;
   /** Round 72: false keeps the far range (the peaks behind the ring, 1.9–3.3 km out) off this map. */
   farRange?: boolean;
+  /** Optional dense woodland continuing over the complete range and its crests. */
+  forestInstances?: number;
+  forestRadius?: number;
+  forestDensity?: number;
+  forestSummits?: boolean;
   seaOpening?: HorizonSeaOpening;
   /**
    * Terrain-following canopy belts across the visible mountain faces. Off by
@@ -3383,7 +3388,9 @@ export function* buildHorizonRingSteps(
     // with them — the round-72 polar forest of 6000 band spruces was the whole +0.9 ms over the treeless rolling ring
     // it replaced; 3000 still measured +0.65-0.85): the polar character keeps 1600 instances, clumped by the relief
     // (horizonVista.ts)
-    maxInstances: vista ? (reliefCharacter === 'polar' ? 1600 : 8000) : 0, maxRadius: 1050, nearDepth: 300, ridgeRow,
+    maxInstances: vista ? (H.forestInstances ?? (reliefCharacter === 'polar' ? 1600 : 8000)) : 0,
+    maxRadius: H.forestRadius ?? 1050, nearDepth: 300, ridgeRow,
+    densityScale: H.forestDensity, coverSummits: H.forestSummits,
     detailNoise: mat.userData.horizonDetailNoise as DetailNoiseSampler,
     // round 72c: the stands follow the coarse relief (clumps in the hollows, gaps on the crests, a wandering treeline)
     ...(reliefField ? { reliefAt: (x: number, z: number) => reliefField.low(x, z) / Math.max(1, reliefField.settings.lowAmpM) } : {}),

@@ -1,9 +1,11 @@
 import type { Frame } from './protocol.ts';
 import { commitInset } from './inset.ts';
 import { installFullscreenFallback } from './fullscreen.ts';
+import { acknowledgeFrame } from './frameTransport.ts';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
-document.title = 'Claude of Tanks · M1A1 同步战场';
+document.title = 'Firefighter · 消防员灭火演示';
+document.body.classList.toggle('recording-view', new URLSearchParams(window.location.search).get('inset') === '0');
 installFullscreenFallback();
 const inset = $<HTMLCanvasElement>('jackal-inset');
 const insetContext = inset.getContext('2d', { alpha: false })!;
@@ -13,13 +15,6 @@ const healthElements = new Map<number, { root: HTMLSpanElement; value: HTMLEleme
 let healthRun = -1;
 function setConnectionStatus(message: string) {
   $('viewport').dataset.connection = message;
-}
-
-async function acknowledge(body: unknown) {
-  const response = await fetch('/api/ack', { method: 'POST',
-    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || response.statusText);
 }
 
 let reportViewerFailure: ((error: unknown) => void) | null = null;
@@ -61,10 +56,17 @@ function commitJackal(frame: Frame) {
 function hud(frame: Frame) {
   const { result } = frame;
   const showInset = frame.manifest.show_inset !== false;
-  if (!showInset) inset.hidden = true;
+  document.body.classList.toggle('recording-view', !showInset);
+  if (!showInset) {
+    inset.hidden = true;
+    // Retain the finished flag used by polling without adding a text overlay.
+    $('result').hidden = !result.finished;
+    $('result').textContent = '';
+    return;
+  }
   $('clock').textContent = `${frame.time.toFixed(2)} s · STEP ${frame.tick}`;
-  $('score').textContent = `蓝方 ${result.alive.PLAYER} : ${result.alive.ENEMY} 红方`;
-  setConnectionStatus(result.finished ? '对战结束 · 已同步' : frame.tick === 0 ? '同步就绪 · 自动开始' : showInset ? 'Jackal 2D / CoT 3D 同步' : 'CoT 3D · 物理状态已同步');
+  $('score').textContent = `消防员 ${result.alive.PLAYER} · 起火点 ${result.alive.ENEMY}`;
+  setConnectionStatus(result.finished ? '演示结束' : frame.tick === 0 ? '消防演示 · 自动开始' : showInset ? 'Jackal 2D / CoT 3D 同步' : '水炮作业中');
   if (healthRun !== frame.run_id) {
     healthElements.clear(); $('healths').replaceChildren(); healthRun = frame.run_id;
   }
@@ -72,15 +74,15 @@ function hud(frame: Frame) {
     let entry = healthElements.get(unit.id);
     if (!entry) {
       const root = document.createElement('span'), value = document.createElement('b');
-      root.append(document.createTextNode(`#${unit.id}`), value);
+      root.append(document.createTextNode(unit.team === 'ENEMY' ? '起火点' : '消防员'), value);
       $('healths').appendChild(root);
       entry = { root, value }; healthElements.set(unit.id, entry);
     }
     entry.root.className = unit.team === 'ENEMY' ? 'enemy' : '';
-    entry.value.textContent = `${unit.alive ? unit.health : 0} HP`;
+    entry.value.textContent = unit.team === 'ENEMY' ? '持续燃烧' : '水炮就绪';
   }
   $('result').hidden = !result.finished;
-  $('result').textContent = result.finished ? result.winner === 'ENEMY' ? '红方获胜' : result.winner === 'PLAYER' ? '蓝方获胜' : '战斗平局' : '';
+  $('result').textContent = result.finished ? '消防演示结束' : '';
 }
 
 async function boot() {
@@ -127,7 +129,8 @@ async function boot() {
     // Scene/model/WebGL failures must wake Python's lockstep wait immediately.
     // This request intentionally survives aborting the normal frame requests.
     void fetch('/api/error', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ view_token: viewToken, message: String(error).slice(0, 4000) || '未知渲染错误' }),
+      body: JSON.stringify({ view_token: viewToken,
+        message: (error instanceof Error ? error.stack || error.message : String(error)).slice(0, 4000) || '未知渲染错误' }),
       keepalive: true }).catch(() => {});
     stop();
     fail(error);
@@ -163,8 +166,8 @@ async function boot() {
           $('loading').hidden = true;
         });
         if (stopped) return;
-        await acknowledge({ view: '3d', version: frame.version, tick: frame.tick, hash: frame.hash,
-          event_cursor: frame.event_cursor, jackal_inset, ...receipt });
+        await acknowledgeFrame({ view: '3d', version: frame.version, tick: frame.tick, hash: frame.hash,
+          event_cursor: frame.event_cursor, jackal_inset, ...receipt }, { signal: requests.signal });
         appliedCursor = frame.event_cursor;
       }
     } catch (error) {

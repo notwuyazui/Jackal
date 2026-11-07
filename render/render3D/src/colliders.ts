@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { toWorld } from './mapping.ts';
+import { worldSize, toWorld } from './mapping.ts';
 import type { Manifest, UnitFrame } from './protocol.ts';
 
 /** Extrude the actual Pygame rectangles. Jackal does not rotate these boxes. */
@@ -17,7 +17,7 @@ export function createColliders(manifest: Manifest, height: number, debug = fals
   group.add(hit, movement);
   const bounds = new THREE.Box3();
   const scale = manifest.meters_per_pixel;
-  const [width, mapHeight] = manifest.map.size;
+  const [width, mapHeight] = worldSize(manifest);
 
   function update(mesh: THREE.Mesh, rect: number[]) {
     const [left, top, w, h] = rect;

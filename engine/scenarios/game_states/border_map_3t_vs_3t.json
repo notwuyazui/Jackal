@@ -4,16 +4,23 @@
   "map": {
     "tile_size": 64,
     "tiles": [
-      "xxxxxxxxxxxxxxx",
-      "xooooooooooooox",
-      "xooooooooooooox",
-      "xooooooooooooox",
-      "xooooooooooooox",
-      "xooooooooooooox",
-      "xooooooooooooox",
-      "xooooooooooooox",
-      "xooooooooooooox",
-      "xxxxxxxxxxxxxxx"
+      "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "xooooooooooooooooooooooooooooox",
+      "xooooooooooooooooooooooooooooox",
+      "xooooooooooooooooooooooooooooox",
+      "xooooooooooooooooooooooooooooox",
+      "xooooooooooooooooooooooooooooox",
+      "xooooooooooooooooooooooooooooox",
+      "xooooooooooooooooooooooooooooox",
+      "xooooooooooooooooooooooooooooox",
+      "xooooooooooooooooooooooooooooox",
+      "xooooooooooooooooooooooooooooox",
+      "xooooooooooooooooooooooooooooox",
+      "xooooooooooooooooooooooooooooox",
+      "xooooooooooooooooooooooooooooox",
+      "xooooooooooooooooooooooooooooox",
+      "xooooooooooooooooooooooooooooox",
+      "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
     ]
   },
   "rules": {
@@ -26,68 +33,209 @@
     "elapsed_time": 0.0,
     "print_record_timer": 0.0,
     "unit_collision_count": 0,
-    "camera_offset": [0.0, 0.0]
+    "camera_offset": [
+      0.0,
+      0.0
+    ]
   },
   "units": [
     {
       "unit_id": 1,
       "unit_type": "tank",
       "team": "PLAYER",
-      "position": [220.0, 220.0],
+      "position": [
+        820.0,
+        540.0
+      ],
       "using_ai": false,
       "ai_intelligence_level": 5,
-      "sight_range": 400.0,
-      "communication_range": 400.0
+      "sight_range": 1800.0,
+      "communication_range": 1800.0,
+      "direction_angle": 90.0,
+      "turret_direction_angle": 90.0,
+      "turret_target_angle": 90.0,
+      "fire_cooldown_override": 0.1,
+      "ammunition_types": [
+        "normal_shell"
+      ],
+      "current_ammunition": "normal_shell",
+      "projectile_overrides": {
+        "normal_shell": {
+          "speed_rate": 0.45,
+          "damage_rate": 0.125,
+          "penetration": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "cooldown_rate": 0.08333333333333334,
+          "lifetime": 18.0
+        }
+      },
+      "turret_angular_speed": 75.0,
+      "movement_bounds": [
+        64,
+        512,
+        896,
+        1024
+      ]
     },
     {
       "unit_id": 2,
       "unit_type": "tank",
       "team": "PLAYER",
-      "position": [220.0, 320.0],
+      "position": [
+        820.0,
+        590.0
+      ],
       "using_ai": false,
       "ai_intelligence_level": 5,
-      "sight_range": 400.0,
-      "communication_range": 400.0
+      "sight_range": 1800.0,
+      "communication_range": 1800.0,
+      "direction_angle": 90.0,
+      "turret_direction_angle": 90.0,
+      "turret_target_angle": 90.0,
+      "fire_cooldown_override": 0.1,
+      "ammunition_types": [
+        "normal_shell"
+      ],
+      "current_ammunition": "normal_shell",
+      "projectile_overrides": {
+        "normal_shell": {
+          "speed_rate": 0.45,
+          "damage_rate": 0.125,
+          "penetration": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "cooldown_rate": 0.08333333333333334,
+          "lifetime": 18.0
+        }
+      },
+      "turret_angular_speed": 75.0,
+      "movement_bounds": [
+        64,
+        512,
+        896,
+        1024
+      ]
     },
     {
       "unit_id": 3,
       "unit_type": "tank",
       "team": "PLAYER",
-      "position": [220.0, 420.0],
+      "position": [
+        820.0,
+        640.0
+      ],
       "using_ai": false,
       "ai_intelligence_level": 5,
-      "sight_range": 400.0,
-      "communication_range": 400.0
+      "sight_range": 1800.0,
+      "communication_range": 1800.0,
+      "direction_angle": 90.0,
+      "turret_direction_angle": 90.0,
+      "turret_target_angle": 90.0,
+      "fire_cooldown_override": 0.1,
+      "ammunition_types": [
+        "normal_shell"
+      ],
+      "current_ammunition": "normal_shell",
+      "projectile_overrides": {
+        "normal_shell": {
+          "speed_rate": 0.45,
+          "damage_rate": 0.125,
+          "penetration": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "cooldown_rate": 0.08333333333333334,
+          "lifetime": 18.0
+        }
+      },
+      "turret_angular_speed": 75.0,
+      "movement_bounds": [
+        64,
+        512,
+        896,
+        1024
+      ]
     },
     {
       "unit_id": 100,
       "unit_type": "tank",
       "team": "ENEMY",
-      "position": [740.0, 220.0],
+      "position": [
+        1172.0,
+        248.0
+      ],
       "using_ai": true,
       "ai_intelligence_level": 5,
       "sight_range": 400.0,
-      "communication_range": 400.0
+      "communication_range": 400.0,
+      "is_static": true,
+      "max_speed": 0.0,
+      "max_acceleration": 0.0,
+      "min_acceleration": 0.0,
+      "max_angular_speed": 0.0,
+      "turret_angular_speed": 0.0,
+      "health": 999999.0,
+      "max_health": 999999.0,
+      "base_collision_size": [
+        12,
+        12
+      ]
     },
     {
       "unit_id": 101,
       "unit_type": "tank",
       "team": "ENEMY",
-      "position": [740.0, 320.0],
+      "position": [
+        1172.0,
+        268.0
+      ],
       "using_ai": true,
       "ai_intelligence_level": 5,
       "sight_range": 400.0,
-      "communication_range": 400.0
+      "communication_range": 400.0,
+      "is_static": true,
+      "max_speed": 0.0,
+      "max_acceleration": 0.0,
+      "min_acceleration": 0.0,
+      "max_angular_speed": 0.0,
+      "turret_angular_speed": 0.0,
+      "health": 999999.0,
+      "max_health": 999999.0,
+      "base_collision_size": [
+        12,
+        12
+      ]
     },
     {
       "unit_id": 102,
       "unit_type": "tank",
       "team": "ENEMY",
-      "position": [740.0, 420.0],
+      "position": [
+        1172.0,
+        288.0
+      ],
       "using_ai": true,
       "ai_intelligence_level": 5,
       "sight_range": 400.0,
-      "communication_range": 400.0
+      "communication_range": 400.0,
+      "is_static": true,
+      "max_speed": 0.0,
+      "max_acceleration": 0.0,
+      "min_acceleration": 0.0,
+      "max_angular_speed": 0.0,
+      "turret_angular_speed": 0.0,
+      "health": 999999.0,
+      "max_health": 999999.0,
+      "base_collision_size": [
+        12,
+        12
+      ]
     }
   ],
   "bullets": []

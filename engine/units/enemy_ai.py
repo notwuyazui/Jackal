@@ -368,6 +368,14 @@ class EnemyAI:
         enemies = list(enemies)
         if not enemies:
             return None
+        # Keep a water jet on its inert fire site. Delayed, low-damage water
+        # must not trigger combat retargeting while that site is still usable.
+        if (self._is_valid_enemy(self.target_unit)
+                and self.target_unit.is_static
+                and self.target_unit in enemies
+                and self._distance_to(self.target_unit) <= self.unit.weapon_range()
+                and self.unit_manager.has_line_of_sight(self.game_map, self.unit, self.target_unit)):
+            return self.target_unit
         if self.intelligence_level <= 2:
             return min(enemies, key=self._distance_to)
 
@@ -929,7 +937,7 @@ class EnemyAI:
                 target.position[1] + velocity[1] * travel_time * lead_factor,
             )
         self._aim_at_position(aim_position)
-        if self.intelligence_level < 6:
+        if self.intelligence_level < 6 and not target.is_static:
             # Lower levels estimate target position less precisely. The error is
             # deterministic and mirrored so it changes skill without restoring
             # a left/right bias or adding nondeterministic training noise.

@@ -5,10 +5,14 @@ import { buildHorizonRingSteps, HORIZON_SEGMENTS } from '@cot/world/maps/horizon
 import { disposeObject3DResources } from '@cot/engine/resourceLifetime.ts';
 import { createHorizonReliefField, resolveHorizonRelief } from '@cot/world/horizonRelief.ts';
 import { onRoad } from './roads.ts';
+import { mountainCoordinate } from './firefighterScene.ts';
 
 export async function prepareVerdantMountains(seed: number) {
   const steps = buildHorizonRingSteps(null, {
-    ...verdant, horizon: { ...verdant.horizon, farRange: true },
+    ...verdant, horizon: { ...verdant.horizon, farRange: true,
+      treeline: 1.4, snowline: 2, baseHex: 0x4b7139, forestHex: 0x2e5027,
+      bareRock: 0, outcrops: 0,
+      forestInstances: 32000, forestRadius: 2600, forestDensity: 2.8, forestSummits: true },
     sky: { ...verdant.sky, sunElevationDeg: 32, sunAzimuthDeg: 115,
       cloudAltM: 1400, sunIntensity: 2, hemiIntensity: 1.1 },
   }, seed, { getHeightAt: () => 0,
@@ -22,7 +26,16 @@ export async function prepareVerdantMountains(seed: number) {
     if (!step.done) await new Promise<void>(resolve => setTimeout(resolve, 0));
   }
   const mesh = step.value;
-  const position = mesh.geometry.getAttribute('position');
+  // Keep living meadow and canopy textures across every slope and summit;
+  // the recording's mountains have no exposed rock or scree caps.
+  for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+    const vista = material.userData.horizonVista as { uniforms?: Record<string, THREE.IUniform> } | undefined;
+    for (const name of ['uVRockAmp', 'uVPeakRock', 'uVScreeAmp', 'uVBareRock', 'uVOutcrop']) {
+      if (vista?.uniforms?.[name]) vista.uniforms[name].value = 0;
+    }
+  }
+  // Keep the original relief sampler for unchanged scenery placements.
+  const position = mesh.geometry.getAttribute('position').clone();
   const stride = HORIZON_SEGMENTS + 1; // CoT duplicates the closing vertex of every row.
   const rows = position.count / stride;
   const columns = HORIZON_SEGMENTS;
@@ -32,7 +45,7 @@ export async function prepareVerdantMountains(seed: number) {
     if (object instanceof THREE.InstancedMesh) forestInstances += object.count;
   });
   // Sample the actual rendered triangles to seat the bridge's hillside trees.
-  function groundAt(x: number, z: number) {
+  function originalGroundAt(x: number, z: number) {
     const radius = Math.hypot(x, z);
     let columnFloat = Math.atan2(z, x) / (Math.PI * 2) * columns;
     if (columnFloat < 0) columnFloat += columns;
@@ -60,10 +73,44 @@ export async function prepareVerdantMountains(seed: number) {
     if (!triangle(a, b, c)) triangle(d, c, b);
     return Math.max(0, point.z);
   }
-  return { mesh, groundAt,
+  // Move the complete mountain vista, including its own forest/decor, while
+  // keeping tree sizes and mountain heights. The old battlefield stays fixed.
+  mesh.updateMatrixWorld(true);
+  const matrix = new THREE.Matrix4(), inverse = new THREE.Matrix4();
+  const translation = new THREE.Vector3();
+  const movedGeometry = new Set<THREE.BufferGeometry>();
+  mesh.traverse(object => {
+    if (!(object instanceof THREE.Mesh)) return;
+    inverse.copy(object.matrixWorld).invert();
+    if (object instanceof THREE.InstancedMesh) {
+      for (let i = 0; i < object.count; i++) {
+        object.getMatrixAt(i, matrix);
+        translation.setFromMatrixPosition(matrix).applyMatrix4(object.matrixWorld);
+        translation.set(mountainCoordinate(translation.x, 120), translation.y,
+          mountainCoordinate(translation.z, 80)).applyMatrix4(inverse);
+        matrix.setPosition(translation); object.setMatrixAt(i, matrix);
+      }
+      object.instanceMatrix.needsUpdate = true; object.computeBoundingSphere();
+    } else if (!movedGeometry.has(object.geometry)) {
+      movedGeometry.add(object.geometry);
+      const vertices = object.geometry.getAttribute('position');
+      for (let i = 0; i < vertices.count; i++) {
+        translation.fromBufferAttribute(vertices, i).applyMatrix4(object.matrixWorld);
+        translation.set(mountainCoordinate(translation.x, 120), translation.y,
+          mountainCoordinate(translation.z, 80)).applyMatrix4(inverse);
+        vertices.setXYZ(i, translation.x, translation.y, translation.z);
+      }
+      vertices.needsUpdate = true;
+      object.geometry.computeVertexNormals(); object.geometry.computeBoundingSphere();
+    }
+  });
+  return { mesh, originalGroundAt, groundAt(x: number, z: number) {
+    return originalGroundAt(mountainCoordinate(x, 120, true), mountainCoordinate(z, 80, true));
+  },
     counts: { mountains: 5, terrain_layers: 5, mountain_rows: rows,
       mountain_forest: forestInstances, mountain_style: 'cot-verdant-native-vista',
-      mountain_relief_bake: Boolean(mesh.userData.horizonRing?.reliefBake),
+      summit_vegetation: true, mountain_ground_cover: 'continuous-grass-and-forest',
+      mountain_relief_bake: Boolean(mesh.userData.horizonRing?.reliefBake), mountain_gap_scale: .5,
       far_range: Boolean(mesh.getObjectByName('horizon-far-range')) },
     dispose() { disposeObject3DResources(mesh); } };
 }
@@ -87,7 +134,8 @@ export function createMountainApron(seed: number, width: number, height: number,
   const uv = geometry.getAttribute('uv');
   for (let i = 0; i < positions.count; i++) {
     const x = positions.getX(i), z = positions.getZ(i);
-    positions.setY(i, apronHeight(x, z) + 0.012);
+    positions.setXYZ(i, mountainCoordinate(x, width / 2), apronHeight(x, z) + 0.012,
+      mountainCoordinate(z, height / 2));
     uv.setXY(i, x / groundSize + 0.5, 0.5 - z / groundSize);
   }
   const index = geometry.getIndex()!;
@@ -108,8 +156,11 @@ export function createMountainApron(seed: number, width: number, height: number,
   const mesh = new THREE.Mesh(geometry, material);
   mesh.name = 'textured low foothills / flat Jackal border to native Verdant vista';
   mesh.receiveShadow = true;
-  return { mesh, groundAt(x: number, z: number) {
+  function originalGroundAt(x: number, z: number) {
     if (Math.max(Math.abs(x), Math.abs(z)) < 512) return apronHeight(x, z);
-    return backdrop.groundAt(x, z);
+    return backdrop.originalGroundAt(x, z);
+  }
+  return { mesh, originalGroundAt, groundAt(x: number, z: number) {
+    return originalGroundAt(mountainCoordinate(x, width / 2, true), mountainCoordinate(z, height / 2, true));
   } };
 }

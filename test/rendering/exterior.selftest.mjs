@@ -42,3 +42,43 @@ for (const route of routes) {
 assert.equal(outsideMap(0, 0, bounds), false);
 assert.equal(outsideMap(120, 0, bounds), true);
 console.log('PASS: reproducible scenery stays beyond Jackal combat bounds');
+
+const { moveBurningHouse, BURNING_HOUSE, RELOCATED_BATHHOUSE, mountainCoordinate, sceneryManifest } =
+  await import('../../render/render3D/src/firefighterScene.ts');
+const { worldSize, toWorld } = await import('../../render/render3D/src/mapping.ts');
+const { readFileSync } = await import('node:fs');
+const moved = moveBurningHouse(scenery);
+for (const key of Object.keys(scenery).filter(key => key !== 'boundaryHouses'))
+  assert.deepEqual(moved[key], scenery[key], `${key} must keep its authored positions`);
+assert.deepEqual(moved.boundaryHouses[0], scenery.boundaryHouses[0]);
+assert.deepEqual(moved.boundaryHouses[1], { ...scenery.boundaryHouses[1], ...RELOCATED_BATHHOUSE });
+for (const extent of [120, 80]) {
+  for (const old of [-1200, -600, -extent, 0, extent, 600, 1200]) {
+    const pulled = mountainCoordinate(old, extent);
+    assert.equal(Math.max(0, Math.abs(pulled) - extent), Math.max(0, Math.abs(old) - extent) / 2);
+    assert.equal(mountainCoordinate(pulled, extent, true), old);
+  }
+}
+const state = JSON.parse(readFileSync(new URL('../../engine/scenarios/game_states/border_map_3t_vs_3t.json', import.meta.url)));
+const scene = JSON.parse(readFileSync(new URL('../../render/render3D/maps/catalog/border-verdant.json', import.meta.url)));
+const manifest = { scene, meters_per_pixel: .25, map: { ...state.map,
+  size: [state.map.tiles[0].length * 64, state.map.tiles.length * 64] } };
+assert.deepEqual(worldSize(manifest), [960, 1536]);
+assert.deepEqual(sceneryManifest(manifest).map.tiles, ['x'.repeat(15), ...Array(8).fill(`x${'o'.repeat(13)}x`), 'x'.repeat(15)]);
+assert.deepEqual(toWorld(400, 768, ...worldSize(manifest), .25), { x: -20, z: 0 });
+assert.ok(BURNING_HOUSE.x > 120, 'relocated house outside original map');
+assert.ok(BURNING_HOUSE.x + 10 < (manifest.map.size[0] - 480 - 64) * .25, 'entire house within extended front');
+for (const unit of state.units) {
+  if (unit.team === 'PLAYER') assert.deepEqual(unit.movement_bounds, [64, 512, 896, 1024]);
+  else {
+    const point = toWorld(...unit.position, ...worldSize(manifest), .25);
+    assert.equal(point.x, BURNING_HOUSE.x - 4);
+    assert.ok(Math.abs(point.z - BURNING_HOUSE.z) <= 5, 'all targets belong to one house');
+  }
+}
+assert.ok(scenery.houses.some(house => house.kind === 'school' && house.x === BURNING_HOUSE.x && house.z === BURNING_HOUSE.z),
+  'new fire uses the existing left-front schoolhouse');
+assert.notDeepEqual(BURNING_HOUSE, RELOCATED_BATHHOUSE, 'previous mountain-foot house is no longer the fire source');
+const top = (0 - worldSize(manifest)[1] / 2 + 64) * .25;
+assert.ok(BURNING_HOUSE.z - 15 > top, 'new left-front fire fits within extended northern map');
+console.log('PASS: existing left-front house becomes the fire; all buildings, scenery and old movement area stay in place');

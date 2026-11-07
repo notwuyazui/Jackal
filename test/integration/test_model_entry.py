@@ -24,8 +24,8 @@ class UnifiedModelTestEntryTests(unittest.TestCase):
                             normal_shell_only=False)
         self.assertEqual(len(world.unit_manager.enemy_ais), 6)
         self.assertTrue(all(ai.intelligence_level == 5 for ai in world.unit_manager.enemy_ais))
-        # Attaching AI must retain the externally controlled tank's 150 deg/s turret.
-        self.assertEqual(world.get_unit(2).turret_angular_speed, 150)
+        # Attaching AI must retain the recording scene's configured turret rate.
+        self.assertEqual(world.get_unit(2).turret_angular_speed, 75)
         apply_map(world)
 
     def test_config_catalog_is_selected_by_checkpoint(self):

@@ -33,11 +33,15 @@ class SceneDefinition:
     meters_per_pixel: float
     unit_models: tuple[tuple[str, str], ...]
     default_state: str | None
+    scenery_size: tuple[int, int] | None = None
+    origin_offset: tuple[int, int] | None = None
 
     def to_dict(self) -> dict:
         return {"id": self.id, "name": self.name, "builder": self.builder,
                 "meters_per_pixel": self.meters_per_pixel,
-                "unit_models": dict(self.unit_models)}
+                "unit_models": dict(self.unit_models),
+                **({"scenery_size": self.scenery_size} if self.scenery_size else {}),
+                **({"origin_offset": self.origin_offset} if self.origin_offset else {})}
 
 
 def list_maps(catalog: Path = CATALOG) -> tuple[SceneDefinition, ...]:
@@ -77,7 +81,9 @@ def list_maps(catalog: Path = CATALOG) -> tuple[SceneDefinition, ...]:
                 raise ValueError(f"duplicate scene id: {data['id']}")
             ids.add(data["id"])
             scenes.append(SceneDefinition(data["id"], data["name"], data["builder"],
-                tile_size, tuple(tiles), scale, tuple(models.items()), data.get("default_state")))
+                tile_size, tuple(tiles), scale, tuple(models.items()), data.get("default_state"),
+                tuple(data["scenery_size"]) if data.get("scenery_size") else None,
+                tuple(data["origin_offset"]) if data.get("origin_offset") else None))
         except (KeyError, TypeError, ValueError) as exc:
             raise ValueError(f"3D 地图描述无效：{path}: {exc}") from exc
     return tuple(scenes)
@@ -125,12 +131,13 @@ def deployment(manifest: BattleManifest, frame: FrameSnapshot,
     if (frame.map != manifest.map or len(frame.units) != len(manifest.units)
             or {(u.id, u.unit_type) for u in frame.units} != {(u.id, u.unit_type) for u in manifest.units}):
         raise ValueError("地图部署的快照与 manifest 不一致")
-    width, height = manifest.map.size
+    width, height = scene.scenery_size or manifest.map.size
+    offset_x, offset_y = scene.origin_offset or (0, 0)
     scale = scene.meters_per_pixel
     models = dict(scene.unit_models)
     placements = [{"id": u.id, "model": models[u.unit_type], "team": u.team,
-                   "x": (u.position[0] - width / 2) * scale,
-                   "y": 0., "z": (u.position[1] - height / 2) * scale,
+                   "x": (u.position[0] - width / 2 - offset_x) * scale,
+                   "y": 0., "z": (u.position[1] - height / 2 - offset_y) * scale,
                    "hull_yaw": math.pi - math.radians(u.heading),
                    "turret_yaw": math.pi - math.radians(u.turret_heading)} for u in frame.units]
     return {**scene.to_dict(), "initial_units": placements}

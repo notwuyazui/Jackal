@@ -49,9 +49,9 @@ def parse_args(argv=None):
     add_device_argument(parser)
     parser.add_argument('--seed', type=int, help='覆盖随机种子；默认使用训练配置中的 seed，EnemyAI 为 42')
     parser.add_argument('--max-steps', type=positive_int,
-                        help='单局步数上限；模型默认沿用训练配置，EnemyAI 默认 6000')
+                        help='单局步数上限；模型沿用训练配置，消防 3D 默认 18000，其他 EnemyAI 为 6000')
     parser.add_argument('--fixed-delta-time', '--dt', type=positive_float,
-                        help='覆盖物理步长；默认训练配置的步长，EnemyAI 为 0.03 秒')
+                        help='覆盖物理步长；模型沿用训练配置，消防 3D 为 0.01 秒，其他 EnemyAI 为 0.03 秒')
     parser.add_argument('--ai-intelligence', type=int, choices=range(1, 10), default=5,
                         help='未指定模型时己方 EnemyAI 等级，默认 5')
     parser.add_argument('--enemy-intelligence', type=int, choices=range(1, 10),
@@ -136,8 +136,11 @@ def resolve_settings(args):
     else:
         if config.get('format') != 'jackal-game-state':
             raise ValueError('EnemyAI 模式需要 engine/scenarios/game_states 中的游戏状态配置')
-        dt = args.fixed_delta_time or .03
-        max_steps = args.max_steps or 6000
+        # Keep reload timing at 10 ms resolution. Render three physics ticks
+        # together below so timing is independent of the presentation rate.
+        firefighter = args.render == '3D' and path.stem == BORDER_STATE
+        dt = args.fixed_delta_time or (.01 if firefighter else .03)
+        max_steps = args.max_steps or (round(180 / dt) if firefighter else 6000)
         seed = args.seed if args.seed is not None else 42
     if not math.isfinite(dt) or dt <= 0 or max_steps <= 0:
         raise ValueError('配置中的 fixed_delta_time 和 max_steps 必须大于 0')
@@ -176,6 +179,7 @@ def run_battle(args, settings):
             render_mode=args.render, controller=controller,
             render_options={'follow_id': args.follow_id, 'scene_id': args.scene,
                             'port': args.port, 'view_port': args.view_port,
+                            'prefer_chromium': args.render == '3D',
                             'open_browser': not args.no_open_browser}) as battle:
         # Validate weights before any view opens. Model inference stays here;
         # observations, actions, battle results and presentation cross the env API.
@@ -186,16 +190,22 @@ def run_battle(args, settings):
         result = battle.get_battle_result()
         if not battle.render():
             return None
+        render_every = max(1, round(.03 / settings.dt)) if args.render == '3D' else 1
         while not result['finished']:
             if not battle.is_open():
                 return None
-            if mac is not None:
-                actions = mac.select_actions(obs, battle.get_avail_actions(), epsilon=0, test_mode=True)
-            else:
-                actions = None
-            obs, _, _, _, info = battle.step(actions)
-            result = info['battle_result']
-            if not battle.render() or not battle.wait_frame(args.speed):
+            advanced = 0
+            for _ in range(render_every):
+                if mac is not None:
+                    actions = mac.select_actions(obs, battle.get_avail_actions(), epsilon=0, test_mode=True)
+                else:
+                    actions = None
+                obs, _, _, _, info = battle.step(actions)
+                result = info['battle_result']
+                advanced += 1
+                if result['finished']:
+                    break
+            if not battle.render() or not battle.wait_frame(args.speed / advanced):
                 return None
         report = battle.get_report()
         print('[Result] ' + json.dumps(report, ensure_ascii=False), flush=True)

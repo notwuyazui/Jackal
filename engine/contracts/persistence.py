@@ -18,6 +18,8 @@ def unit_game_state(unit: BaseUnit) -> dict[str, Any]:
         "ammunition_types": list(unit.ammunition_types),
         "ammo_switch_time": float(unit.ammo_switch_time),
         "using_ai": bool(unit.usingAI),
+        "is_static": bool(unit.is_static),
+        "movement_bounds": list(unit.movement_bounds) if unit.movement_bounds else None,
         "ai_intelligence_level": int(unit.ai_intelligence_level),
         "visible": bool(unit.visible),
         "sight_range": float(unit.sight_range),

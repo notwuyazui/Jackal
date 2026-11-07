@@ -3,6 +3,7 @@
 body{margin:0;height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
 main{position:relative;flex:1;min-height:0;overflow:hidden;background:#172127;display:flex;align-items:center;justify-content:center}
 main>canvas{display:block}
+.recording-view #labels,.recording-view .status,.recording-view #result{display:none}
 #jackal-inset[hidden]{display:none}
 #jackal-inset{position:absolute;z-index:3;right:14px;top:14px;width:min(31.5vw,432px);height:auto;aspect-ratio:3/2;object-fit:contain;image-rendering:auto;border:2px solid #e3d9ad99;border-radius:6px;background:#172127;box-shadow:0 5px 25px #0009}
 #loading{position:absolute;z-index:5;color:#d0d9df;white-space:pre-wrap;padding:25px;background:#17212ce8;border-radius:10px;max-width:85%}

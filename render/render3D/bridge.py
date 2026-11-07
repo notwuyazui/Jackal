@@ -24,7 +24,7 @@ class BrowserRenderer:
     def __init__(self, *, lockstep=False, max_steps=6000, follow_id=2,
                  seed=42, port=0, view_port=0, open_browser=True,
                  startup_timeout=120, frame_timeout=45, show_inset=True,
-                 controller='EnemyAI Lv.5', scene_id=None):
+                 controller='EnemyAI Lv.5', scene_id=None, prefer_chromium=False):
         from render.transport.stream import SnapshotStream
         from render.transport.server import LocalDemoServer, handler_for
         root = Path(__file__).resolve().parent
@@ -35,6 +35,7 @@ class BrowserRenderer:
                                   seed=seed, startup_timeout=startup_timeout, frame_timeout=frame_timeout,
                                   show_inset=show_inset, controller=controller, scene_id=scene_id)
         self.open_browser = open_browser
+        self.prefer_chromium = prefer_chromium
         self.opened = False
         self.closed = False
         self.window_watch_stop = threading.Event()
@@ -119,7 +120,7 @@ class BrowserRenderer:
                         urllib.request.urlopen(url, timeout=.5).close()
                         if self.window_watch_stop.is_set():
                             return
-                        window = open_cot_window(url)
+                        window = open_cot_window(url, prefer_chromium=self.prefer_chromium)
                         if window is not None:
                             # Native window identity survives reloads and does
                             # not depend on SSE or an unload beacon arriving.

@@ -4,13 +4,14 @@ import { createCameraRig } from '@cot/engine/cameraRig.ts';
 import { createSky } from '@cot/engine/sky.ts';
 import { createColliders } from './colliders.ts';
 import { createShellPresentation } from './shells.ts';
+import { startPresentationLoop } from './presentationLoop.ts';
 import { LATE_FX_LAYER } from '@cot/fx/layers.ts';
 import { copyResolvedDepth } from '@cot/engine/resolvedDepthCopy.ts';
 import { LateFxSceneView } from '@cot/engine/lateFxSceneView.ts';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { CopyShader } from 'three/examples/jsm/shaders/CopyShader.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
-import { toWorld, toYaw, toHeading } from './mapping.ts';
+import { worldSize, toWorld, toYaw, toHeading } from './mapping.ts';
 import type { Frame, Parameters, UnitFrame, RenderReceipt } from './protocol.ts';
 import type { GroundDisturbance } from '@cot/world/groundPressure.ts';
 type MutableDisturbance = { -readonly [K in keyof GroundDisturbance]: GroundDisturbance[K] };
@@ -23,12 +24,8 @@ export async function createView(container: HTMLElement) {
   const cameraPosition = new THREE.Vector3();
   const cameraTarget = new THREE.Vector3();
   const cameraDirection = new THREE.Vector3();
-  const effectPosition = new THREE.Vector3();
-  const effectDirection = new THREE.Vector3();
   const disturbances: GroundDisturbance[] = [];
   const disturbanceByUnit = new Map<number, MutableDisturbance>();
-  const captureAges = [0.072, 0.24, 0.6];
-  const captureNames = ['muzzle-peak', 'muzzle-recovery', 'muzzle-smoke'];
   // This bridge renders directly through Three.js. CoT's volumetric clouds
   // require its post-processing compositor, so use CoT's shaded baked deck.
   const cloudUrl = new URL(window.location.href);
@@ -39,7 +36,7 @@ export async function createView(container: HTMLElement) {
   const loadingStage = (text: string) => { document.getElementById("loading")!.textContent = text; };
   loadingStage("正在加载天空与云层…");
   const renderer = createRenderer(container);
-  renderer.domElement.setAttribute('aria-label', 'Claude of Tanks M1A1 同步 3D 场景');
+  renderer.domElement.setAttribute('aria-label', '消防员持水枪灭火 3D 场景');
   const maxPixelRatio = Math.min(window.devicePixelRatio || 1, 1.25);
   let displayPixelRatio = maxPixelRatio;
   renderer.setPixelRatio(displayPixelRatio);
@@ -88,11 +85,9 @@ export async function createView(container: HTMLElement) {
     return value;
   }
   const vehicle = (id: number) => required(models, id, '模型');
-  const previousAlive = new Map<number, boolean>();
-  loadingStage("正在加载战斗特效…");
-  const shells = await createShellPresentation(scene, camera);
-  // Native CoT smoke/flash shaders require a resolved world depth source.
-  // The source is an offscreen target, never the framebuffer they draw into.
+  loadingStage("正在加载水流与持续火焰…");
+  const shells = await createShellPresentation(scene);
+  // Preserve the existing HDR world/output path for CoT's scene materials.
   const worldDepth = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: true, type: THREE.HalfFloatType,
     depthTexture: new THREE.DepthTexture(1, 1, THREE.UnsignedIntType) });
   const composite = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: true, type: THREE.HalfFloatType,
@@ -118,14 +113,11 @@ export async function createView(container: HTMLElement) {
   let grassWarm = false;
   let lastTick = -1;
   let firstContactCaptured = false;
-  let firstMuzzleCaptured = false;
-  let fireCount = 0;
-  let destructionCount = 0;
   let visualClock = 0;
   let lastVisualWallMs = performance.now();
   let visualRunning = false;
   let disposed = false;
-  let raf = 0;
+  let presentationLoop: ReturnType<typeof startPresentationLoop> | null = null;
   let animationFrames = 0;
   let presented: (() => void) | null = null;
   const frameTimes: number[] = [];
@@ -135,9 +127,6 @@ export async function createView(container: HTMLElement) {
   let shadowDirty = false;
   const shotsByUnit: Record<number, number> = {};
   const animationMaxima = { recoil_m: 0, pitch_deg: 0, roll_deg: 0 };
-  const pendingEffectCaptures: Array<{ name: string; png: string; age_s: number;
-    recoil_m: number; pitch_deg: number; flash_particles: number; smoke_particles: number }> = [];
-  let shotCapture: { born: number; source: number; stage: number } | null = null;
 
 
   function resize() {
@@ -177,13 +166,10 @@ export async function createView(container: HTMLElement) {
     colliders.clear();
     labels.replaceChildren();
     labelElements.clear();
-    previousAlive.clear();
     parametersById.clear();
     placementsById.clear();
     for (const pose of frame.manifest.scene.initial_units ?? []) placementsById.set(pose.id, pose);
     for (const parameters of frame.manifest.units) parametersById.set(parameters.id, parameters);
-    fireCount = 0;
-    destructionCount = 0;
     visualClock = 0;
     lastVisualWallMs = performance.now();
     animationFrames = 0;
@@ -193,8 +179,6 @@ export async function createView(container: HTMLElement) {
     lastResolutionCheck = resolutionChanges = 0;
     for (const id of Object.keys(shotsByUnit)) delete shotsByUnit[Number(id)];
     animationMaxima.recoil_m = animationMaxima.pitch_deg = animationMaxima.roll_deg = 0;
-    shotCapture = null;
-    pendingEffectCaptures.length = 0;
     shells.reset(frame.manifest.seed);
     battlePlaneHeight = NaN;
     world.clear();
@@ -203,7 +187,6 @@ export async function createView(container: HTMLElement) {
     mapScene = nextScene;
     world.add(mapScene.group);
     firstContactCaptured = false;
-    firstMuzzleCaptured = false;
     lastTick = -1;
   }
 
@@ -219,13 +202,18 @@ export async function createView(container: HTMLElement) {
     }
     const followed = required(unitsById, frame.manifest.follow_id, '跟随对象');
     const position = vehicle(followed.id).root.position;
+    const recording = frame.manifest.show_inset === false;
     const yaw = toYaw(followed.turret_heading);
-    // The chase camera stays behind the gun and follows the turret bearing.
-    // The fixed entity remains #2, including after it has been destroyed.
+    // Close third-person view behind vehicle #2, without formation averaging
+    // or zooming out as the trucks spread out.
     cameraDirection.set(Math.sin(yaw), 0, Math.cos(yaw));
     vehicle(followed.id).cameraPivot(cameraTarget);
-    cameraPosition.copy(cameraTarget).addScaledVector(cameraDirection, -13 * Math.cos(THREE.MathUtils.degToRad(10)));
-    cameraPosition.y += 13 * Math.sin(THREE.MathUtils.degToRad(10));
+    const orbitDistance = recording ? 18 : 30;
+    const basePitch = THREE.MathUtils.degToRad(18);
+    cameraPosition.copy(cameraTarget).addScaledVector(cameraDirection, -orbitDistance * Math.cos(basePitch));
+    // Recording view keeps the established rear offset while lowering the
+    // vertical rise by exactly one half.
+    cameraPosition.y += orbitDistance * Math.sin(basePitch) * (recording ? .5 : 1);
     chaseFill.position.copy(cameraPosition);
     rig.setExternalPose(cameraPosition, cameraTarget, 60);
     const grass = mapScene?.grass;
@@ -304,8 +292,8 @@ export async function createView(container: HTMLElement) {
       if (renderCosts.length > 300) renderCosts.shift();
     }
     const rect = renderer.domElement.getBoundingClientRect();
-    for (const [id, model] of models) {
-      const element = required(labelElements, id, '标签');
+    for (const [id, element] of labelElements) {
+      const model = vehicle(id);
       model.labelAnchor(labelPoint).project(camera);
       element.hidden = !model.root.visible || labelPoint.z < -1 || labelPoint.z > 1 ||
         Math.abs(labelPoint.x) > 1 || Math.abs(labelPoint.y) > 1;
@@ -332,7 +320,8 @@ export async function createView(container: HTMLElement) {
         animationMaxima.recoil_m = Math.max(animationMaxima.recoil_m, state.native_recoil_m ?? 0);
         animationMaxima.pitch_deg = Math.max(animationMaxima.pitch_deg, Math.abs(state.cosmetic_pitch_deg ?? 0));
         animationMaxima.roll_deg = Math.max(animationMaxima.roll_deg, Math.abs(state.chassis_roll_deg ?? 0));
-        required(labelElements, unit.id, '标签').dataset.opacity = String(state.visual_opacity ?? 1);
+        const label = labelElements.get(unit.id);
+        if (label) label.dataset.opacity = String(state.visual_opacity ?? 1);
       }
       renderScene(currentFrame);
       animationFrames++;
@@ -347,24 +336,11 @@ export async function createView(container: HTMLElement) {
           resize();
         }
       }
-      if (shotCapture) {
-        const age = visualClock - shotCapture.born;
-        if (age >= captureAges[shotCapture.stage]) {
-          const state = vehicle(shotCapture.source).presentationState();
-          if (!state) throw new Error("开火模型尚未接收姿态");
-          pendingEffectCaptures.push({ name: captureNames[shotCapture.stage], age_s: age,
-            recoil_m: state.native_recoil_m ?? 0, pitch_deg: state.cosmetic_pitch_deg ?? 0,
-            ...shells.effectState(), png: renderer.domElement.toDataURL('image/png') });
-          shotCapture.stage++;
-          if (shotCapture.stage === captureAges.length) shotCapture = null;
-        }
-      }
       const ready = presented;
       presented = null;
       ready?.();
     }
     lastVisualWallMs = now;
-    raf = requestAnimationFrame(animate);
   }
 
   function performanceReceipt() {
@@ -376,6 +352,7 @@ export async function createView(container: HTMLElement) {
       peak_draw_calls: peakDrawCalls, peak_triangles: peakTriangles,
       gpu_geometries: renderer.info.memory.geometries, gpu_textures: renderer.info.memory.textures,
       pixel_ratio: renderer.getPixelRatio(), world_passes_per_frame: 1,
+      background_fallback_frames: presentationLoop?.fallbackFrames ?? 0,
       resolution_changes: resolutionChanges };
   }
 
@@ -404,24 +381,22 @@ export async function createView(container: HTMLElement) {
         }
         models.set(unit.id, model);
         scene.add(model.root);
-        const element = document.createElement('div');
-        element.className = 'tank-label' + (unit.team === 'ENEMY' ? ' enemy' : '');
-        labels.appendChild(element);
-        labelElements.set(unit.id, element);
+        if (frame.manifest.show_inset !== false) {
+          const element = document.createElement('div');
+          element.className = 'tank-label' + (unit.team === 'ENEMY' ? ' enemy' : '');
+          labels.appendChild(element);
+          labelElements.set(unit.id, element);
+        }
       }
       if (frame.tick !== lastTick && frame.events.some(e => e.kind === 'fire' && e.source_id === unit.id)) model.fire(visualClock);
-      const receipt = model.pose(unit, visualClock, frame.tick !== lastTick && frame.tick > 0 ? frame.manifest.dt : 0);
+      const receipt = model.pose(unit, visualClock,
+        lastTick >= 0 ? Math.max(0, frame.tick - lastTick) * frame.manifest.dt : 0);
       rendered.push(receipt);
-      if (frame.tick !== lastTick && previousAlive.get(unit.id) === true && !unit.alive) {
-        effectPosition.copy(model.root.position);
-        effectPosition.y = model.modelHeight * 0.48;
-        shells.destruction(effectPosition);
-        destructionCount++;
+      const label = labelElements.get(unit.id);
+      if (label) {
+        label.textContent = '';
+        label.dataset.opacity = String(receipt.visual_opacity ?? 1);
       }
-      previousAlive.set(unit.id, unit.alive);
-      required(labelElements, unit.id, '标签').innerHTML = '#' + unit.id + ' · ' + (unit.alive ? unit.health : '击毁') +
-        '<i><b style="width:' + Math.max(0, unit.health / unit.max_health * 100) + '%"></b></i>';
-      required(labelElements, unit.id, '标签').dataset.opacity = String(receipt.visual_opacity ?? 1);
     }
     if (!Number.isFinite(battlePlaneHeight)) battlePlaneHeight = vehicle(frame.manifest.follow_id).muzzleHeight;
     for (let index = 0; index < frame.units.length; index++) {
@@ -442,25 +417,12 @@ export async function createView(container: HTMLElement) {
       for (const event of frame.events) {
         if (event.kind === 'fire' && event.source_id != null) {
           const unit = required(unitsById, event.source_id, '开火来源');
-          vehicle(unit.id).muzzleWorld(effectPosition);
-          const yaw = toYaw(unit.turret_heading);
-          effectDirection.set(Math.sin(yaw), 0, Math.cos(yaw));
-          shells.muzzleFlash(effectPosition, effectDirection);
-          fireCount++;
           shotsByUnit[unit.id] = (shotsByUnit[unit.id] || 0) + 1;
-          if (!firstMuzzleCaptured && unit.id === frame.manifest.follow_id) {
-            firstMuzzleCaptured = true;
-            shotCapture = { born: visualClock, source: unit.id, stage: 0 };
-          }
-        } else if (event.kind === 'impact' && event.position) {
-          const point = toWorld(...event.position, ...frame.manifest.map.size, frame.manifest.meters_per_pixel);
-          effectPosition.set(point.x, battlePlaneHeight, point.z);
-          shells.impact(event.bullet_id ?? undefined, effectPosition);
         }
       }
     }
     shells.sync(frame, battlePlaneHeight);
-    mapScene?.roadside?.sync(frame);
+    // Keep roadside props intact: no crushing/destruction effects in the recording.
     currentFrame = frame;
     visualRunning = true;
     lastTick = frame.tick;
@@ -468,18 +430,11 @@ export async function createView(container: HTMLElement) {
     // a second time or waits for an additional frame after the display is ready.
     if (frame.tick === 0) loadingStage("正在呈现首帧…");
     await new Promise<void>(resolve => { presented = resolve; });
-    // Publish the exact 2D/HUD state immediately, even when a final wreck
-    // animation continues before the final verification receipt is returned.
+    // Publish the exact 2D/HUD state after presenting the frame.
     onPresented();
     if (frame.result.finished && frame.tick !== 0) {
-      const finishAt = visualClock + 3.65;
-      await new Promise<void>(resolve => {
-        const settled = () => {
-          if (visualClock < finishAt && !disposed) requestAnimationFrame(settled);
-          else resolve();
-        };
-        requestAnimationFrame(settled);
-      });
+      // No destruction/fade animation exists in the recording scene. Its final
+      // frame is already presented; do not wait on an extra foreground-only RAF.
       visualRunning = false;
       for (let i = 0; i < frame.units.length; i++) {
         const state = vehicle(frame.units[i].id).presentationState();
@@ -492,42 +447,42 @@ export async function createView(container: HTMLElement) {
     const contact = !firstContactCaptured && frame.events.some(e => e.kind === 'impact');
     if (contact) firstContactCaptured = true;
     const screenshot = frame.tick === 0 || contact || frame.result.finished ? renderer.domElement.toDataURL('image/png') : undefined;
-    const effect_captures = pendingEffectCaptures.splice(0);
     camera.getWorldDirection(cameraDirection);
     return { view_token: viewToken, rendered, bullets: shells.receipts(frame.manifest),
       performance: performanceReceipt(),
-      scenery: { map_id: frame.manifest.scene.id, map_builder: frame.manifest.scene.builder, scene_revision: 'verdant-native-continuous-v7',
-        model: 'cot-native-m1a1', ground: 'cot-grass004', grass: mapScene?.grass?.getState(),
+      scenery: { map_id: frame.manifest.scene.id, map_builder: frame.manifest.scene.builder, scene_revision: 'firefighter-house-v2',
+        model: 'procedural-articulated-firefighters-and-burning-house', ground: 'cot-grass004', grass: mapScene?.grass?.getState(),
         sky: 'cot-baked-cumulus-verdant', lighting: 'diffuse-soil-sun-entity-shadows',
-        shell: 'cot-native-he-tracer', shell_textures: 'cot-original-particle-atlases',
+        shell: 'parabolic-blue-water-with-curved-trails', shell_textures: 'cot-original-particle-atlases',
         battle_plane_height_m: battlePlaneHeight, collider: 'jackal-axis-aligned-cuboid',
         boundary: 'transparent-air-barrier', exterior: mapScene?.exterior?.counts,
         ground_dressing: mapScene?.groundDressing?.counts, roadside: mapScene?.roadside &&
           { ...mapScene.roadside.counts, crushed: mapScene.roadside.crushed }, camouflage: TEAM_CAMO,
-        effects: { muzzle_flashes: fireCount, destructions: destructionCount,
-          muzzle_style: 'cot-native-continuous-200mm-visual',
+        effects: { ...shells.effectState(), muzzle_flashes: 0, destructions: 0,
+          muzzle_style: 'none',
           animation_frames: animationFrames, animation_maxima: { ...animationMaxima },
           shots_by_unit: { ...shotsByUnit }, soft_depth_bound: shells.effectState().soft_depth_bound,
-          wreck_fade: 'cot-burn-then-alpha-3.55s' } },
-      camera: { follow_id: frame.manifest.follow_id, mode: 'turret-follow',
+          wreck_fade: 'none' } },
+      camera: { follow_id: frame.manifest.follow_id,
+        mode: frame.manifest.show_inset === false ? 'close-third-person' : 'turret-follow',
         heading: toHeading(Math.atan2(cameraDirection.x, cameraDirection.z)),
         orbit_distance_m: cameraPosition.distanceTo(cameraTarget),
         orbit_pitch_deg: THREE.MathUtils.radToDeg(Math.atan2(cameraPosition.y - cameraTarget.y,
           Math.hypot(cameraPosition.x - cameraTarget.x, cameraPosition.z - cameraTarget.z))),
         fov_deg: camera.fov,
-        anchor_x: vehicle(frame.manifest.follow_id).root.position.x / frame.manifest.meters_per_pixel + frame.manifest.map.size[0] / 2,
-        anchor_y: vehicle(frame.manifest.follow_id).root.position.z / frame.manifest.meters_per_pixel + frame.manifest.map.size[1] / 2 },
-      screenshot, effect_captures };
+        anchor_x: cameraTarget.x / frame.manifest.meters_per_pixel + worldSize(frame.manifest)[0] / 2,
+        anchor_y: cameraTarget.z / frame.manifest.meters_per_pixel + worldSize(frame.manifest)[1] / 2 },
+      screenshot, effect_captures: [] };
   }
   loadingStage("正在连接战斗画面…");
   resize();
-  raf = requestAnimationFrame(animate);
+  presentationLoop = startPresentationLoop(animate);
   return {
     draw,
     dispose() {
       if (disposed) return;
       disposed = true;
-      cancelAnimationFrame(raf);
+      presentationLoop?.stop();
       presented?.(); presented = null;
       mapScene?.dispose(); mapFactory?.dispose();
       observer.disconnect(); rig.release(); shells.dispose();

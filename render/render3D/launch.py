@@ -83,10 +83,41 @@ def _windows_browser():
     return None
 
 
-def open_cot_window(url):
+def _mac_chromium():
+    for candidate in (
+        '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+        '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    ):
+        if Path(candidate).is_file():
+            return candidate
+    return None
+
+
+def _open_chromium_window(browser, url):
+    profile = tempfile.TemporaryDirectory(prefix="jackal-browser-", ignore_cleanup_errors=True)
+    try:
+        process = subprocess.Popen(
+            [browser, "--new-window", "--start-fullscreen", "--no-first-run",
+             "--no-default-browser-check", "--disable-background-mode",
+             "--disable-background-timer-throttling", "--disable-backgrounding-occluded-windows",
+             "--disable-renderer-backgrounding",
+             f"--user-data-dir={profile.name}", url],
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except OSError:
+        profile.cleanup()
+        raise
+    return BrowserProcessWindow(process, profile)
+
+
+def open_cot_window(url, *, prefer_chromium=False):
     """Open a new fullscreen game window on macOS Safari or Windows Chromium."""
     try:
         if sys.platform == "darwin":
+            browser = _mac_chromium() if prefer_chromium else None
+            if browser:
+                return _open_chromium_window(browser, url)
             script = '''on run argv
 tell application "Safari"
     set targetURL to item 1 of argv
@@ -125,19 +156,7 @@ end run'''
         elif sys.platform == "win32":
             browser = _windows_browser()
             if browser:
-                profile = tempfile.TemporaryDirectory(prefix="jackal-browser-", ignore_cleanup_errors=True)
-                try:
-                    process = subprocess.Popen(
-                        [browser, "--new-window", "--start-fullscreen", "--no-first-run",
-                         "--no-default-browser-check", "--disable-background-mode",
-                         f"--user-data-dir={profile.name}", url],
-                        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-                    )
-                except OSError:
-                    profile.cleanup()
-                    raise
-                return BrowserProcessWindow(process, profile)
+                return _open_chromium_window(browser, url)
             print("未找到 Edge 或 Chrome，将使用默认浏览器；可点击战斗画面进入全屏。", flush=True)
             webbrowser.open(url, new=1, autoraise=True)
         else:

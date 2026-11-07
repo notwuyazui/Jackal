@@ -42,6 +42,9 @@ class BaseUnit:
         self.collision_scale = 1.0
         self.collision_size = self.base_collision_size
         self.usingAI: bool = bool(usingAI)
+        # Static scenario props retain their hit box/health, but cannot be
+        # driven or armed by either an AI or an external controller.
+        self.is_static = False
         self.ai_intelligence_level = int(ai_intelligence_level)
         if not 1 <= self.ai_intelligence_level <= 9:
             raise ValueError("ai_intelligence_level must be between 1 and 9")
@@ -78,6 +81,7 @@ class BaseUnit:
         
         # 实时属性
         self.position = (0.0, 0.0)
+        self.movement_bounds = None
         self.speed = 0.0
         self.direction_angle = 0.0              # 单位朝向角度
         self.turret_direction_angle = 0.0       # 单位炮塔朝向角度
@@ -153,6 +157,13 @@ class BaseUnit:
         if self.health <= 0:
             self.is_alive = False
             return False
+
+        if self.is_static:
+            self.speed = self.acceleration = self.angular_speed = 0.0
+            self.velocity = (0.0, 0.0)
+            self.turret_target_angle = self.turret_direction_angle
+            self.living_time += delta_time
+            return True
         
         self.living_time += delta_time
         self._frame_init()                            # 重置上一帧地块效果
@@ -166,6 +177,15 @@ class BaseUnit:
         self._update_bounding_box()                  # 更新受击箱
         self._update_collision_box()                 # 更新物理碰撞箱
         self.velocity = self.cal_velocity()          # 更新速度向量
+
+        if self.movement_bounds is not None:
+            left, top, right, bottom = self.movement_bounds
+            half_w, half_h = (value / 2 for value in self.collision_size)
+            if not (left + half_w <= self.position[0] <= right - half_w and
+                    top + half_h <= self.position[1] <= bottom - half_h):
+                self._rollback_blocked_movement(old_position)
+                self.velocity = (0.0, 0.0)
+                return True
         
         if self.is_switching_ammo and self.reload_timer <= 0:    # 完成弹种切换
             self._complete_ammo_switch()
@@ -259,7 +279,7 @@ class BaseUnit:
         """更新开火冷却时间"""
         if self.fire_cooldown > 0:
             self.fire_cooldown -= delta_time
-            if self.fire_cooldown < 0:
+            if self.fire_cooldown < 1e-9:
                 self.fire_cooldown = 0
 
     def configure_weapon(
@@ -333,6 +353,7 @@ class BaseUnit:
     def can_fire(self) -> bool:
         return bool(
             self.is_alive
+            and not self.is_static
             and self.current_ammunition
             and not self.is_switching_ammo
             and self.fire_cooldown <= 0.0
@@ -513,6 +534,8 @@ class BaseUnit:
         """
         设置坦克前进或后退
         """
+        if self.is_static:
+            return False
         if forward and not backward:
             self.acceleration = self.max_acceleration
         elif backward and not forward:
@@ -525,6 +548,8 @@ class BaseUnit:
         """
         设置坦克转向
         """
+        if self.is_static:
+            return False
         if left and not right:
             self.angular_speed = -self.max_angular_speed
         elif right and not left:
@@ -537,6 +562,8 @@ class BaseUnit:
         """
         设置炮塔目标指向世界坐标
         """
+        if self.is_static:
+            return False
         # 计算鼠标的世界坐标
         world_mouse_x, world_mouse_y = position
         
