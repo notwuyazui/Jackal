@@ -179,7 +179,10 @@ def run_battle(args, settings):
             render_mode=args.render, controller=controller,
             render_options={'follow_id': args.follow_id, 'scene_id': args.scene,
                             'port': args.port, 'view_port': args.view_port,
-                            'prefer_chromium': args.render == '3D',
+                            # Frame transport now tolerates Safari's transient
+                            # localhost fetch failures. Keep the macOS viewer in
+                            # Safari so Chromium extensions cannot steal focus.
+                            'prefer_chromium': False,
                             'open_browser': not args.no_open_browser}) as battle:
         # Validate weights before any view opens. Model inference stays here;
         # observations, actions, battle results and presentation cross the env API.

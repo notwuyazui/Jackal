@@ -15,7 +15,9 @@ class FirefighterDirector:
     RETARGET_INTERVAL = 5.0
     ARRIVAL_TOLERANCE = 1.0
     APPROACH_SPEED = 12.0
-    STANDOFF_DISTANCE = 185.0
+    # Aim proxies sit 4 m in front of the house centre: 26 m to the proxy
+    # corresponds to the requested roughly 30 m working distance.
+    STANDOFF_DISTANCE = 104.0
     PHASE_DURATION = 3.0
     # The new house is outside this old arena. Vehicles never enter the scenery.
     MOVEMENT_BOUNDS = (64.0, 64.0, 896.0, 576.0)
@@ -73,6 +75,8 @@ class FirefighterDirector:
 
 
 class FirefighterAI(EnemyAI):
+    SEPARATION_DISTANCE = 12.0  # 3 m for people, rather than the tanks' 18 m.
+
     def __init__(self, *args, director: FirefighterDirector, **kwargs):
         super().__init__(*args, **kwargs)
         self.director = director
@@ -85,6 +89,15 @@ class FirefighterAI(EnemyAI):
                 top + half_h <= position[1] <= bottom - half_h):
             return False
         return super()._is_position_safe(position)
+
+    def _choose_safe_direction(self, desired):
+        # A walking crew can stop inside a few metres; the tank's long probe
+        # unnecessarily rejected short sidesteps near another crew member.
+        speed = abs(self.unit.speed)
+        lookahead = max(8.0, speed ** 2 / (2 * max(1, abs(self.unit.min_acceleration))) + speed * .5 + 4)
+        if self._is_path_safe(desired, lookahead):
+            return desired, False
+        return super()._choose_safe_direction(desired)
 
     def _approach_flank(self) -> None:
         # Blend a forward approach with tangential motion. Near the fire site
@@ -105,10 +118,17 @@ class FirefighterAI(EnemyAI):
             self._brake()
             return
         heading = (math.degrees(math.atan2(direction[1], direction[0])) + 90) % 360
+        if abs(self.unit.speed) < .1:
+            # A person can start a sidestep from a planted stance. This is the
+            # invisible proxy's travel direction; the rendered pelvis, torso
+            # and alternating feet continue to turn through the human rig.
+            self.unit.direction_angle = heading
         error = self.unit.get_angle_difference(self.unit.direction_angle, heading)
-        turn_speed = min(35, self.unit.max_angular_speed)
+        turn_speed = min(120, self.unit.max_angular_speed)
         self.unit.angular_speed = max(-turn_speed, min(turn_speed, error * 2))
-        desired_speed = min(self.director.APPROACH_SPEED, self.unit.max_speed) * max(.35, math.cos(math.radians(error)))
+        # On a left/right reversal, turn before advancing. The old minimum
+        # throttle drove away from the fire for much of the short move phase.
+        desired_speed = min(self.director.APPROACH_SPEED, self.unit.max_speed) * max(0, math.cos(math.radians(error)))
         forward = (math.cos(math.radians(self.unit.direction_angle - 90)),
                    math.sin(math.radians(self.unit.direction_angle - 90)))
         if not self._is_path_safe(forward, max(10, self.unit.speed ** 2 /
@@ -148,4 +168,12 @@ class FirefighterAI(EnemyAI):
                 self._fire_requested = self.unit.can_fire()
             else:
                 self.ai_state = 'reposition'
-                self._approach_flank()
+                remaining = self.director.PHASE_DURATION - (self.director.elapsed % self.director.PHASE_DURATION)
+                stopping_time = abs(self.unit.speed) / max(1, abs(self.unit.min_acceleration))
+                if remaining <= stopping_time + .12:
+                    # A person carrying SCBA and a hose brakes before planting
+                    # their stance for the next burst, rather than stopping in
+                    # a single tank-physics frame as the shot begins.
+                    self._brake()
+                else:
+                    self._approach_flank()

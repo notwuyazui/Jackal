@@ -1,0 +1,6 @@
+/** Metres, measured from the standing boot soles to the helmet crown. */
+export const FIREFIGHTER_HEIGHT_M = 1.8;
+export const FIREFIGHTER_RIG_HEIGHT_M = 1.97172;
+export const FIREFIGHTER_MODEL_SCALE = FIREFIGHTER_HEIGHT_M / FIREFIGHTER_RIG_HEIGHT_M;
+export const FIREFIGHTER_NOZZLE_REACH_M = .98 * FIREFIGHTER_MODEL_SCALE;
+export const FIREFIGHTER_MUZZLE_HEIGHT_M = 1.58 * FIREFIGHTER_MODEL_SCALE;

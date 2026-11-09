@@ -86,7 +86,7 @@ export async function createView(container: HTMLElement) {
   }
   const vehicle = (id: number) => required(models, id, '模型');
   loadingStage("正在加载水流与持续火焰…");
-  const shells = await createShellPresentation(scene);
+  const shells = await createShellPresentation(scene, { near: camera.near, far: camera.far, sunDirection: sky.sunDir });
   // Preserve the existing HDR world/output path for CoT's scene materials.
   const worldDepth = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: true, type: THREE.HalfFloatType,
     depthTexture: new THREE.DepthTexture(1, 1, THREE.UnsignedIntType) });
@@ -136,7 +136,7 @@ export async function createView(container: HTMLElement) {
     renderer.getDrawingBufferSize(bufferSize);
     worldDepth.setSize(bufferSize.x, bufferSize.y);
     composite.setSize(bufferSize.x, bufferSize.y);
-    shells.bindSceneDepth(worldDepth.depthTexture!, bufferSize.x, bufferSize.y);
+    shells.bindSceneDepth(worldDepth.depthTexture!, bufferSize.x, bufferSize.y, worldDepth.texture);
     if (currentFrame && !visualRunning) renderScene(currentFrame);
   }
   const observer = new ResizeObserver(resize);
@@ -204,16 +204,18 @@ export async function createView(container: HTMLElement) {
     const position = vehicle(followed.id).root.position;
     const recording = frame.manifest.show_inset === false;
     const yaw = toYaw(followed.turret_heading);
-    // Close third-person view behind vehicle #2, without formation averaging
-    // or zooming out as the trucks spread out.
+    // Follow firefighter #2 from a nearby shoulder-height rear viewpoint.
+    // Keep the framing independent of the other crew members' positions.
     cameraDirection.set(Math.sin(yaw), 0, Math.cos(yaw));
     vehicle(followed.id).cameraPivot(cameraTarget);
-    const orbitDistance = recording ? 18 : 30;
     const basePitch = THREE.MathUtils.degToRad(18);
-    cameraPosition.copy(cameraTarget).addScaledVector(cameraDirection, -orbitDistance * Math.cos(basePitch));
-    // Recording view keeps the established rear offset while lowering the
-    // vertical rise by exactly one half.
-    cameraPosition.y += orbitDistance * Math.sin(basePitch) * (recording ? .5 : 1);
+    const rearDistance = recording ? 7.5 : 30 * Math.cos(basePitch);
+    const cameraRise = recording ? 2.8 : 30 * Math.sin(basePitch);
+    cameraPosition.copy(cameraTarget).addScaledVector(cameraDirection, -rearDistance);
+    cameraPosition.y += cameraRise;
+    // Aim higher from the same rear position, keeping the mountain skyline
+    // in frame while the firefighter remains visible in the lower foreground.
+    if (recording) cameraTarget.y += 1.4;
     chaseFill.position.copy(cameraPosition);
     rig.setExternalPose(cameraPosition, cameraTarget, 60);
     const grass = mapScene?.grass;
@@ -450,8 +452,8 @@ export async function createView(container: HTMLElement) {
     camera.getWorldDirection(cameraDirection);
     return { view_token: viewToken, rendered, bullets: shells.receipts(frame.manifest),
       performance: performanceReceipt(),
-      scenery: { map_id: frame.manifest.scene.id, map_builder: frame.manifest.scene.builder, scene_revision: 'firefighter-house-v2',
-        model: 'procedural-articulated-firefighters-and-burning-house', ground: 'cot-grass004', grass: mapScene?.grass?.getState(),
+      scenery: { map_id: frame.manifest.scene.id, map_builder: frame.manifest.scene.builder, scene_revision: 'firefighter-centre-house-removed',
+        model: 'procedural-articulated-firefighters-and-fire', ground: 'cot-grass004', grass: mapScene?.grass?.getState(),
         sky: 'cot-baked-cumulus-verdant', lighting: 'diffuse-soil-sun-entity-shadows',
         shell: 'parabolic-blue-water-with-curved-trails', shell_textures: 'cot-original-particle-atlases',
         battle_plane_height_m: battlePlaneHeight, collider: 'jackal-axis-aligned-cuboid',

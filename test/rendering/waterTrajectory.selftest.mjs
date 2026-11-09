@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createWaterArc, sampleWaterArc, WATER_GRAVITY } from '../../render/render3D/src/waterTrajectory.ts';
+import { FIREFIGHTER_NOZZLE_REACH_M } from '../../render/render3D/src/firefighterDimensions.ts';
 
 const close = (a, b) => assert.ok(Math.abs(a - b) < 1e-8, `${a} != ${b}`);
 const frame = {
@@ -118,6 +119,6 @@ const humanJet = createWaterArc({ source_id: 2, team: 'PLAYER',
     proxyBirth[1] + diagonal[1] * 135 * .03] }, humanFrame, 1.58);
 const humanStart = sampleWaterArc(humanJet, 0);
 const humanCenter = toWorld(...source.position, ...worldSize(humanFrame.manifest), .25);
-close(humanStart.x, humanCenter.x + diagonal[0] * .98);
-close(humanStart.z, humanCenter.z + diagonal[1] * .98);
+close(humanStart.x, humanCenter.x + diagonal[0] * FIREFIGHTER_NOZZLE_REACH_M);
+close(humanStart.z, humanCenter.z + diagonal[1] * FIREFIGHTER_NOZZLE_REACH_M);
 console.log('PASS: tank proxy emission is visually relocated to the firefighter hand nozzle');

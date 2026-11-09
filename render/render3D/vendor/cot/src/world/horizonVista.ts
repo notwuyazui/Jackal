@@ -984,7 +984,10 @@ export function buildHorizonForest(options: HorizonForestOptions): THREE.Group |
   // three quarters of the budget; the default keeps the richer rim band.
   const thin = (list: ForestPlacement[], budget: number): ForestPlacement[] =>
     (list.length <= budget ? list : list.slice().sort((a, b) => a.key - b.key).slice(0, budget));
-  const bandKept = thin(candidates.filter((c) => c.band), Math.floor(options.maxInstances * (options.coverSummits ? .25 : .75)));
+  // Summit-covering forests spend the extra budget on the actual mountains,
+  // not on an ever thicker high-detail foothill band beside the battlefield.
+  const bandKept = thin(candidates.filter((c) => c.band), options.coverSummits
+    ? Math.min(8000, Math.floor(options.maxInstances * .25)) : Math.floor(options.maxInstances * .75));
   const rangeKept = thin(candidates.filter((c) => !c.band), Math.max(0, options.maxInstances - bandKept.length));
   const byDepth = bandKept.slice().sort((a, b) => a.beyond - b.beyond);
   for (let i = 0; i < byDepth.length; i++) byDepth[i].detail = i < maxNear && byDepth[i].beyond < nearDepth ? 2 : 1;

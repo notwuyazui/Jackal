@@ -15,12 +15,33 @@ import webbrowser
 class SafariWindow:
     identifier: int
 
+    def close(self):
+        """Close only the viewer window owned by this session."""
+        script = '''on run argv
+if application "Safari" is not running then return
+tell application "Safari"
+    set viewerID to item 1 of argv as integer
+    if exists (first window whose id is viewerID) then
+        close (first window whose id is viewerID)
+    end if
+end tell
+end run'''
+        try:
+            subprocess.run(["osascript", "-e", script, str(self.identifier)],
+                           check=True, timeout=3, capture_output=True, text=True)
+        except (subprocess.SubprocessError, OSError):
+            pass
+
     def is_open(self):
         """Inspect only this window; script errors leave its state unknown."""
         script = '''on run argv
 if application "Safari" is not running then return false
 tell application "Safari"
-    return exists (first window whose id is (item 1 of argv as integer))
+    set viewerID to item 1 of argv as integer
+    if not (exists (first window whose id is viewerID)) then return false
+    -- Safari may retain a hidden, tabless window object after closing it.
+    -- A minimized viewer still has tabs and remains a live session.
+    return (count of tabs of (first window whose id is viewerID)) > 0
 end tell
 end run'''
         try:
@@ -99,6 +120,10 @@ def _open_chromium_window(browser, url):
         process = subprocess.Popen(
             [browser, "--new-window", "--start-fullscreen", "--no-first-run",
              "--no-default-browser-check", "--disable-background-mode",
+             # The viewer must not inherit or activate browser add-ons. Some
+             # externally installed extensions open a welcome/resource tab even
+             # inside a fresh profile, which steals focus from the 3D scene.
+             "--disable-extensions", "--disable-default-apps", "--disable-sync",
              "--disable-background-timer-throttling", "--disable-backgrounding-occluded-windows",
              "--disable-renderer-backgrounding",
              f"--user-data-dir={profile.name}", url],
@@ -112,7 +137,7 @@ def _open_chromium_window(browser, url):
 
 
 def open_cot_window(url, *, prefer_chromium=False):
-    """Open a new fullscreen game window on macOS Safari or Windows Chromium."""
+    """Open a dedicated fullscreen game window without touching the user's profile."""
     try:
         if sys.platform == "darwin":
             browser = _mac_chromium() if prefer_chromium else None

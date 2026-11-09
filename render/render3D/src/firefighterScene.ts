@@ -3,9 +3,12 @@ import type { Manifest } from './protocol.ts';
 
 export const ORIGINAL_SIZE: [number, number] = [960, 640];
 export const RELOCATED_BATHHOUSE = { x: 340, z: -50, yaw: -1.2 };
-// The existing red-roof schoolhouse beside the rocks, ahead and left of the
-// original movement area. Switching the fire must not move either building.
-export const BURNING_HOUSE = { x: 177, z: -125, yaw: .8 };
+export const ORIGINAL_BURNING_HOUSE = { x: 177, z: -125, yaw: .8 };
+// Crew #2 stages at (98, -44.5): 30 m to the fire centre.
+export const BURNING_HOUSE = { x: 128, z: -44.5, yaw: .8 };
+// Keep the burning ground clear of the nearby crew.
+export const FIRE_GROUND_SIZE: [number, number] = [36, 40];
+export const MOUNTAIN_GAP_SCALE = .25;
 export const HOUSE_FIRE_SCALE = 10.4;
 let houseGround = 0;
 export function setHouseGround(height: number) { houseGround = height; }
@@ -20,14 +23,17 @@ export function sceneryManifest(manifest: Manifest): Manifest {
       'x'.repeat(columns) : `x${'o'.repeat(columns - 2)}x`) } };
 }
 
-/** Halve only the horizontal gap beyond the old battlefield's edges. */
-export function mountainCoordinate(value: number, halfExtent: number, inverse = false) {
+/** Pull the forested slopes closer while leaving the old battlefield flat. */
+export function mountainCoordinate(value: number, halfExtent: number, inverse = false, gapScale = MOUNTAIN_GAP_SCALE) {
   const excess = Math.max(0, Math.abs(value) - halfExtent);
-  return Math.sign(value) * (Math.min(Math.abs(value), halfExtent) + excess * (inverse ? 2 : .5));
+  return Math.sign(value) * (Math.min(Math.abs(value), halfExtent) + excess * (inverse ? 1 / gapScale : gapScale));
 }
 
-export function moveBurningHouse<T extends { boundaryHouses: Array<{ x: number; z: number; yaw: number; kind: string }> }>(layout: T): T {
+export function moveBurningHouse<T extends { houses: Array<{ x: number; z: number; yaw: number; kind: string }>; boundaryHouses: Array<{ x: number; z: number; yaw: number; kind: string }> }>(layout: T): T {
   // The bathhouse behind the right-hand brush pile, not another village house.
-  return { ...layout, boundaryHouses: layout.boundaryHouses.map(house =>
+  return { ...layout, houses: layout.houses.filter(house => !(house.kind === 'school' &&
+    ((house.x === ORIGINAL_BURNING_HOUSE.x && house.z === ORIGINAL_BURNING_HOUSE.z) ||
+     (house.x === BURNING_HOUSE.x && house.z === BURNING_HOUSE.z)))),
+    boundaryHouses: layout.boundaryHouses.map(house =>
     house.kind === 'bathhouse' && house.x > 0 ? { ...house, ...RELOCATED_BATHHOUSE } : house) };
 }

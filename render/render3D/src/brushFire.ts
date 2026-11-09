@@ -152,7 +152,7 @@ export async function createBrushFires(scene: THREE.Scene) {
       smoke.origins.needsUpdate = smoke.variations.needsUpdate = true;
     },
     state() { return { ...volume.state(), fire_volumes: 1, smoke_particles: smoke.geometry.instanceCount,
-      smoke_scale: HOUSE_FIRE_SCALE, burning_houses: 1,
+      smoke_scale: HOUSE_FIRE_SCALE, burning_houses: 0,
       fire_source: BURNING_HOUSE, smoke_style: 'dense-rolling-charcoal-plume',
       smoke_lifetime_s: [32, 44], smoke_wind_mps: [7.2, 2.4], smoke_fade_after_fraction: .8,
       smoke_plume_travel_m: 330 }; },

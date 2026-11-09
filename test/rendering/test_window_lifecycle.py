@@ -154,6 +154,9 @@ class WindowLifecycleTests(unittest.TestCase):
         self.assertIn('--disable-backgrounding-occluded-windows', popen.call_args.args[0])
         self.assertIn('--disable-background-timer-throttling', popen.call_args.args[0])
         self.assertIn('--disable-renderer-backgrounding', popen.call_args.args[0])
+        self.assertIn('--disable-extensions', popen.call_args.args[0])
+        self.assertIn('--disable-default-apps', popen.call_args.args[0])
+        self.assertIn('--disable-sync', popen.call_args.args[0])
         window.close()
 
     @patch('render.render3D.launch.sys.platform', 'darwin')
@@ -190,6 +193,7 @@ class WindowLifecycleTests(unittest.TestCase):
         self.assertEqual(arguments[-1], url)
         self.assertIn('--new-window', arguments)
         self.assertIn('--start-fullscreen', arguments)
+        self.assertIn('--disable-extensions', arguments)
         profile = Path(window.profile.name)
         self.assertTrue(profile.is_dir())
         self.assertIn(f'--user-data-dir={profile}', arguments)

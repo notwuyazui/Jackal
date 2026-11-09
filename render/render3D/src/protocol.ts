@@ -29,4 +29,6 @@ export interface RenderReceipt {
   step_rate_hz?: number; stride_length_m?: number;
   left_foot_contact?: boolean; right_foot_contact?: boolean;
   nozzle_yaw_error_deg?: number;
+  left_foot_world?: number[]; right_foot_world?: number[];
+  foot_ik_error_m?: number; pelvis_yaw_deg?: number; torso_twist_deg?: number;
 }

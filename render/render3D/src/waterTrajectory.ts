@@ -1,10 +1,12 @@
 /** Vertical water ballistics above Jackal's authoritative horizontal plane. */
 import { worldSize, toWorld } from './mapping.ts';
 import { houseGroundHeight } from './firefighterScene.ts';
+import { FIREFIGHTER_NOZZLE_REACH_M } from './firefighterDimensions.ts';
 import type { BulletFrame, Frame } from './protocol.ts';
 
 // Scale with the faster water so the established high arc keeps its shape.
 export const WATER_GRAVITY = 8.1;
+export const WATER_ARC_RISE_M = 15;
 export interface WaterArc {
   x: number; z: number; vx: number; vz: number;
   height: number; launchVy: number; flightTime: number; lifetime: number;
@@ -28,7 +30,7 @@ export function createWaterArc(bullet: BulletFrame, frame: Frame, height: number
   const dirZ = vz / speed;
   const proxyOffsetX = spec?.size ? (spec.size[0] / 2 + 5) * scale : 0;
   const proxyOffsetZ = spec?.size ? (spec.size[1] / 2 + 5) * scale : 0;
-  const nozzleReachM = spec?.size ? .98 : 0;
+  const nozzleReachM = spec?.size ? FIREFIGHTER_NOZZLE_REACH_M : 0;
   const x = head.x - vx * age - dirX * proxyOffsetX + dirX * nozzleReachM;
   const z = head.z - vz * age - dirZ * proxyOffsetZ + dirZ * nozzleReachM;
   const sites = frame.units.filter(target => target.alive && target.team !== bullet.team);
@@ -48,8 +50,8 @@ export function createWaterArc(bullet: BulletFrame, frame: Frame, height: number
   const house = Boolean(frame.manifest.scene?.scenery_size);
   const targetHeight = house ? houseGroundHeight() + 5.5 : 1.6;
   // The farther house needs a longer flight, not a hundreds-of-metres-high
-  // fountain. Keep the established high parabola at a visible 18 m arch.
-  const gravity = house ? Math.min(WATER_GRAVITY, 8 * 18 / flightTime ** 2) : WATER_GRAVITY;
+  // fountain. Keep the arch slightly lower while preserving the landing point.
+  const gravity = house ? Math.min(WATER_GRAVITY, 8 * WATER_ARC_RISE_M / flightTime ** 2) : WATER_GRAVITY;
   const launchVy = (targetHeight - height) / flightTime + gravity * flightTime / 2;
   return { x, z, vx, vz, height, launchVy, flightTime, lifetime, gravity };
 }

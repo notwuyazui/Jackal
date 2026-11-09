@@ -9,7 +9,7 @@ import { createExteriorFactory } from '../../src/exterior.ts';
 import { createGroundDressingFactory } from '../../src/groundDressing.ts';
 import { createRoadsideProps } from '../../src/roadsideProps.ts';
 import { onRoad } from '../../src/roads.ts';
-import { toWorld } from '../../src/mapping.ts';
+import { toWorld, worldSize } from '../../src/mapping.ts';
 import { sceneryManifest } from '../../src/firefighterScene.ts';
 import type { MapContext, PreparedMap } from '../registry.ts';
 import type { Frame } from '../../src/protocol.ts';
@@ -74,6 +74,36 @@ export async function prepare({ renderer, loadingStage }: MapContext): Promise<P
         [780, 190], [780, 320], [780, 450]] : frame.units.map(unit => unit.position);
       const unitStarts = starts.map(p => toWorld(p[0], p[1], ...manifest.map.size, scale));
       groundDressing = groundDressingFactory.build(manifest, exterior.groundAt, noVegetation, unitStarts);
+      const followedCrew = frame.units.find(unit => unit.id === 2 && unit.team === 'PLAYER');
+      if (manifest.scene.scenery_size && followedCrew) {
+        const start = toWorld(...followedCrew.position, ...worldSize(frame.manifest), scale);
+        // The crew approaches 52 engine pixels (13 m) east before spraying.
+        // Include the actual leaf bounds and a 0.7 m body/arm clearance. Cull
+        // after seeded placement so no other bush or decoration is resampled.
+        const approach = new THREE.Box3(
+          new THREE.Vector3(start.x - .7, -.1, start.z - .7),
+          new THREE.Vector3(start.x + 13 + .7, 2.2, start.z + .7));
+        const instance = new THREE.Matrix4(), worldMatrix = new THREE.Matrix4();
+        const bounds = new THREE.Box3();
+        groundDressing.group.updateMatrixWorld(true);
+        for (const bush of groundDressing.group.children) {
+          if (!(bush instanceof THREE.InstancedMesh) || bush.userData.vegetationKind !== 'bush') continue;
+          bush.geometry.computeBoundingBox();
+          let kept = 0;
+          for (let i = 0; i < bush.count; i++) {
+            bush.getMatrixAt(i, instance);
+            worldMatrix.multiplyMatrices(bush.matrixWorld, instance);
+            bounds.copy(bush.geometry.boundingBox!).applyMatrix4(worldMatrix);
+            if (bounds.intersectsBox(approach)) continue;
+            bush.setMatrixAt(kept++, instance);
+          }
+          const removed = bush.count - kept;
+          groundDressing.counts.bushes -= removed;
+          groundDressing.counts.cleared_approach_bushes += removed;
+          bush.count = kept; bush.instanceMatrix.needsUpdate = true;
+          bush.computeBoundingBox(); bush.computeBoundingSphere();
+        }
+      }
       group.add(groundDressing.group);
       roadside = createRoadsideProps(manifest, exterior.groundAt, unitStarts);
       group.add(roadside.group);

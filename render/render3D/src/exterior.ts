@@ -14,7 +14,7 @@ import plasterUrl from '../public/textures/buildings/Plaster007_1K-JPG_Color.jpg
 import strawUrl from '../public/textures/terrain/withered_grass_diff_1k.jpg?url';
 import { prepareVerdantMountains, createMountainApron } from './mountains.ts';
 import { planExterior } from './exteriorLayout.ts';
-import { BURNING_HOUSE, RELOCATED_BATHHOUSE, moveBurningHouse, setHouseGround } from './firefighterScene.ts';
+import { BURNING_HOUSE, RELOCATED_BATHHOUSE, FIRE_GROUND_SIZE, moveBurningHouse, setHouseGround, mountainCoordinate } from './firefighterScene.ts';
 import { houseSurfaceWorld } from './houseFireLayout.ts';
 import { createBurningGround } from './burningGround.ts';
 import type { Manifest } from './protocol.ts';
@@ -92,6 +92,10 @@ export async function createExteriorFactory(loader: THREE.TextureLoader) {
       // Extra slope dressing uses its own sequence, leaving every old record
       // and the RNG order of the original exterior unchanged.
       const addedTrees = new Set<object>(), addedRocks = new Set<object>();
+      // These additions were authored after the previous 0.5 gap transform.
+      // Rebase them onto the same nearer slopes as the native mountain forest.
+      const slopeCoordinate = (value: number, extent: number) =>
+        mountainCoordinate(mountainCoordinate(value, extent, true, .5), extent);
       for (let i = 0; i < 360; i++) {
         const angle = i * 2.39996323;
         const radius = 345 + (i * 71 % 260);
@@ -100,12 +104,14 @@ export async function createExteriorFactory(loader: THREE.TextureLoader) {
           size: 1.1 + (i % 7) * .12, yaw: angle };
         if (tree.x > 120 && tree.x < RELOCATED_BATHHOUSE.x + 16 &&
             Math.abs(tree.z - RELOCATED_BATHHOUSE.z * tree.x / RELOCATED_BATHHOUSE.x) < 14) continue;
+        tree.x = slopeCoordinate(tree.x, 120); tree.z = slopeCoordinate(tree.z, 80);
         layout.trees.push(tree); addedTrees.add(tree);
       }
       for (let i = 0; i < 42; i++) {
         const angle = i * 2.39996323 + .7, radius = 330 + (i * 37 % 160);
         const rock = { x: Math.cos(angle) * radius, z: Math.sin(angle) * radius,
           size: 1.6 + (i % 5) * .65, variant: i % 3, yaw: angle };
+        rock.x = slopeCoordinate(rock.x, 120); rock.z = slopeCoordinate(rock.z, 80);
         layout.rocks.push(rock); addedRocks.add(rock);
       }
       const group = new THREE.Group();
@@ -121,7 +127,7 @@ export async function createExteriorFactory(loader: THREE.TextureLoader) {
 
       if (!backdrop) throw new Error('CoT Verdant mountains were not prepared');
       const mountains = createMountainApron(manifest.seed, width, height, groundMaterial, groundSize, backdrop);
-      const houseGround = mountains.originalGroundAt(BURNING_HOUSE.x, BURNING_HOUSE.z);
+      const houseGround = mountains.groundAt(BURNING_HOUSE.x, BURNING_HOUSE.z);
       setHouseGround(houseGround);
       const burnedGround = createBurningGround(mountains.groundAt);
       group.add(burnedGround.mesh);
@@ -304,7 +310,6 @@ export async function createExteriorFactory(loader: THREE.TextureLoader) {
       }
       const houseTemplates = new Map<string, THREE.Group>();
       const fireLights: Array<{ light: THREE.PointLight; intensity: number }> = [];
-      const burningWindows: THREE.MeshStandardMaterial[] = [];
       for (const house of [...layout.houses, ...layout.boundaryHouses]) {
         let template = houseTemplates.get(house.kind);
         if (!template) {
@@ -347,7 +352,6 @@ export async function createExteriorFactory(loader: THREE.TextureLoader) {
           houseTemplates.set(house.kind, template);
         }
         const instance = template.clone(true);
-        const burning = house.x === BURNING_HOUSE.x && house.z === BURNING_HOUSE.z;
         const relocated = house.x === RELOCATED_BATHHOUSE.x && house.z === RELOCATED_BATHHOUSE.z;
         instance.position.set(house.x, (relocated ? mountains.groundAt : mountains.originalGroundAt)(house.x, house.z), house.z);
         instance.rotation.y = house.yaw;
@@ -355,54 +359,26 @@ export async function createExteriorFactory(loader: THREE.TextureLoader) {
           if (object instanceof THREE.Mesh) {
             object.castShadow = true;
             object.receiveShadow = true;
-            if (burning && object.material instanceof THREE.MeshStandardMaterial) {
-              const material = object.material.clone();
-              ownedMaterial.add(material); object.material = material;
-              const surface = object.userData.houseSurface;
-              if (['glass', 'dark', 'curtain'].includes(surface)) {
-                material.color.set('#6b2307');
-                material.emissive.set('#ff4a05'); material.emissiveIntensity = 1.7;
-                burningWindows.push(material);
-              } else {
-                material.color.multiplyScalar(surface === 'roof' || surface === 'wood' ? .32 : .68);
-                material.roughness = 1;
-                material.onBeforeCompile = shader => {
-                  shader.vertexShader = 'varying vec3 vBurnLocal;\n' + shader.vertexShader;
-                  shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>',
-                    '#include <begin_vertex>\n vBurnLocal = position;');
-                  shader.fragmentShader = 'varying vec3 vBurnLocal;\n' + shader.fragmentShader;
-                  shader.fragmentShader = shader.fragmentShader.replace('#include <map_fragment>', `
-                    #include <map_fragment>
-                    float streak = 0.5 + 0.5 * sin(vBurnLocal.x * 3.7 + sin(vBurnLocal.z * 4.1) * 2.0);
-                    float soot = smoothstep(0.7, 4.4, vBurnLocal.y) * (0.35 + streak * 0.35);
-                    diffuseColor.rgb *= mix(vec3(0.88, 0.8, 0.72), vec3(0.25, 0.22, 0.19), soot);`);
-                };
-                material.customProgramCacheKey = () => 'firefighter-charred-house-v1';
-              }
-            }
           }
         });
         group.add(instance);
-        if (burning) {
-          instance.name = 'Burning red-roof house beside the left-front rock pile';
-          for (const [x, y, z, intensity, range] of [
-            [-5.0, 2.8, -1.5, 2000, 40], [0, 6.9, 0, 3200, 52], [0, 2.1, 8.5, 850, 32],
-          ]) {
-            const p = houseSurfaceWorld(x, z);
-            const light = new THREE.PointLight(0xff6414, intensity, range, 2);
-            light.position.set(p.x, houseGround + y, p.z); group.add(light);
-            fireLights.push({ light, intensity });
-          }
-        }
+      }
+      for (const [x, y, z, intensity, range] of [
+        [-5, 2.8, -1.5, 2000, 40], [0, 6.9, 0, 3200, 52], [0, 2.1, 8.5, 850, 32],
+      ]) {
+        const p = houseSurfaceWorld(x, z);
+        const light = new THREE.PointLight(0xff6414, intensity, range, 2);
+        light.position.set(p.x, houseGround + y, p.z); group.add(light);
+        fireLights.push({ light, intensity });
       }
 
       return {
         group,
         counts: { trees: layout.trees.length, hillside_trees: 1600 + addedTrees.size, ...backdrop.counts,
           added_mountain_trees: addedTrees.size, added_mountain_rocks: addedRocks.size,
-          burning_house: { ...BURNING_HOUSE, ground_height: houseGround }, scenery_reference_size: manifest.map.size,
-          burning_building_style: 'charred-surfaces-glowing-windows-and-attached-flames',
-          burning_ground_extent_m: [64, 72],
+          fire_source: { ...BURNING_HOUSE, ground_height: houseGround }, scenery_reference_size: manifest.map.size,
+          burning_building_style: 'centre-building-removed-fire-preserved', burning_houses: 0,
+          burning_ground_extent_m: FIRE_GROUND_SIZE,
           extended_map_size: extendedSize,
           rocks: layout.rocks.length,
           houses: layout.houses.length, poles: layout.poles.length, hay: layout.hay.length,
@@ -416,7 +392,6 @@ export async function createExteriorFactory(loader: THREE.TextureLoader) {
           burnedGround.setTime(time);
           const flicker = .9 + .08 * Math.sin(time * 9) + .06 * Math.sin(time * 15.7);
           for (const { light, intensity } of fireLights) light.intensity = intensity * flicker;
-          for (const material of burningWindows) material.emissiveIntensity = 1.7 * flicker;
         },
         dispose() {
           backdrop?.mesh.removeFromParent();

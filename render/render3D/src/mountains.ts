@@ -5,17 +5,21 @@ import { buildHorizonRingSteps, HORIZON_SEGMENTS } from '@cot/world/maps/horizon
 import { disposeObject3DResources } from '@cot/engine/resourceLifetime.ts';
 import { createHorizonReliefField, resolveHorizonRelief } from '@cot/world/horizonRelief.ts';
 import { onRoad } from './roads.ts';
-import { mountainCoordinate } from './firefighterScene.ts';
+import { mountainCoordinate, MOUNTAIN_GAP_SCALE } from './firefighterScene.ts';
+import { partitionForest } from './forestBatches.ts';
 
 export async function prepareVerdantMountains(seed: number) {
-  const steps = buildHorizonRingSteps(null, {
+  const config = {
     ...verdant, horizon: { ...verdant.horizon, farRange: true,
       treeline: 1.4, snowline: 2, baseHex: 0x4b7139, forestHex: 0x2e5027,
       bareRock: 0, outcrops: 0,
-      forestInstances: 32000, forestRadius: 2600, forestDensity: 2.8, forestSummits: true },
+      forestInstances: 160000, forestRadius: 2600, forestDensity: 5.6, forestSummits: true },
+    vegetation: { ...verdant.vegetation,
+      rimMix: [['oak', .76], ['pine', .24]] },
     sky: { ...verdant.sky, sunElevationDeg: 32, sunAzimuthDeg: 115,
       cloudAltM: 1400, sunIntensity: 2, hemiIntensity: 1.1 },
-  }, seed, { getHeightAt: () => 0,
+  };
+  const steps = buildHorizonRingSteps(null, config, seed, { getHeightAt: () => 0,
     getOutlandSeatWeightAt: (x, z) => onRoad(x, z, 6) ? 1 : 0 });
   let step = steps.next();
   while (!step.done) {
@@ -33,7 +37,30 @@ export async function prepareVerdantMountains(seed: number) {
     for (const name of ['uVRockAmp', 'uVPeakRock', 'uVScreeAmp', 'uVBareRock', 'uVOutcrop']) {
       if (vista?.uniforms?.[name]) vista.uniforms[name].value = 0;
     }
+    if (vista) {
+      const compile = material.onBeforeCompile;
+      const cacheKey = material.customProgramCacheKey.bind(material);
+      material.onBeforeCompile = (shader, renderer) => {
+        compile.call(material, shader, renderer);
+        // Closed forest continues beneath the individual crowns. Do not let
+        // the legacy meadow/treeline masks expose large flat green hillsides.
+        shader.fragmentShader = shader.fragmentShader.replace(
+          'forestW *= 1.0 - knobW * 0.85;', 'forestW = 1.0;');
+      };
+      material.customProgramCacheKey = () => cacheKey() + '-closed-mountain-canopy-v1';
+    }
   }
+  // Mature, overlapping crowns cover the ground between trunks. Only the
+  // mountain forest changes; the battlefield's authored trees stay untouched.
+  const forest = mesh.getObjectByName('horizon-forest');
+  const canopyGeometries = new Set<THREE.BufferGeometry>();
+  forest?.traverse(object => {
+    if (!(object instanceof THREE.InstancedMesh) || canopyGeometries.has(object.geometry)) return;
+    canopyGeometries.add(object.geometry);
+    object.geometry.scale(1.7, 1.25, 1.7);
+    object.geometry.computeBoundingSphere();
+    if (object.userData.horizonForestPool) object.userData.horizonForestPool.treeHeight *= 1.25;
+  });
   // Keep the original relief sampler for unchanged scenery placements.
   const position = mesh.geometry.getAttribute('position').clone();
   const stride = HORIZON_SEGMENTS + 1; // CoT duplicates the closing vertex of every row.
@@ -104,13 +131,20 @@ export async function prepareVerdantMountains(seed: number) {
       object.geometry.computeVertexNormals(); object.geometry.computeBoundingSphere();
     }
   });
+  // Native pools span the entire 360-degree vista and disable culling. Split
+  // their unchanged instances into spatial batches so off-camera woods do not
+  // consume vertex work when the mountains carry a closed, dense canopy.
+  const forestChunks = forest ? partitionForest(forest) : 0;
   return { mesh, originalGroundAt, groundAt(x: number, z: number) {
     return originalGroundAt(mountainCoordinate(x, 120, true), mountainCoordinate(z, 80, true));
   },
     counts: { mountains: 5, terrain_layers: 5, mountain_rows: rows,
       mountain_forest: forestInstances, mountain_style: 'cot-verdant-native-vista',
-      summit_vegetation: true, mountain_ground_cover: 'continuous-grass-and-forest',
-      mountain_relief_bake: Boolean(mesh.userData.horizonRing?.reliefBake), mountain_gap_scale: .5,
+      mountain_forest_candidates: forest?.userData.horizonForest?.candidates ?? 0,
+      summit_vegetation: true, mountain_ground_cover: 'closed-canopy-forest',
+      mountain_canopy_width_scale: 1.7,
+      mountain_forest_chunks: forestChunks, mountain_forest_frustum_culling: true,
+      mountain_relief_bake: Boolean(mesh.userData.horizonRing?.reliefBake), mountain_gap_scale: MOUNTAIN_GAP_SCALE,
       far_range: Boolean(mesh.getObjectByName('horizon-far-range')) },
     dispose() { disposeObject3DResources(mesh); } };
 }

@@ -1,9 +1,10 @@
 /** Draped charred earth, glowing seams and ash around the burning building. */
 import * as THREE from 'three';
 import { houseSurfaceWorld } from './houseFireLayout.ts';
+import { FIRE_GROUND_SIZE } from './firefighterScene.ts';
 
 export function createBurningGround(groundAt: (x: number, z: number) => number) {
-  const geometry = new THREE.PlaneGeometry(64, 72, 72, 80);
+  const geometry = new THREE.PlaneGeometry(...FIRE_GROUND_SIZE, 72, 80);
   const position = geometry.getAttribute('position');
   for (let i = 0; i < position.count; i++) {
     const point = houseSurfaceWorld(position.getX(i), -position.getY(i));

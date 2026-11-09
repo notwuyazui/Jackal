@@ -43,19 +43,23 @@ assert.equal(outsideMap(0, 0, bounds), false);
 assert.equal(outsideMap(120, 0, bounds), true);
 console.log('PASS: reproducible scenery stays beyond Jackal combat bounds');
 
-const { moveBurningHouse, BURNING_HOUSE, RELOCATED_BATHHOUSE, mountainCoordinate, sceneryManifest } =
+const { moveBurningHouse, BURNING_HOUSE, ORIGINAL_BURNING_HOUSE, RELOCATED_BATHHOUSE,
+  mountainCoordinate, sceneryManifest } =
   await import('../../render/render3D/src/firefighterScene.ts');
 const { worldSize, toWorld } = await import('../../render/render3D/src/mapping.ts');
 const { readFileSync } = await import('node:fs');
 const moved = moveBurningHouse(scenery);
-for (const key of Object.keys(scenery).filter(key => key !== 'boundaryHouses'))
+for (const key of Object.keys(scenery).filter(key => key !== 'boundaryHouses' && key !== 'houses'))
   assert.deepEqual(moved[key], scenery[key], `${key} must keep its authored positions`);
+assert.deepEqual(moved.houses, scenery.houses.filter(house => !(house.kind === 'school' &&
+  house.x === ORIGINAL_BURNING_HOUSE.x && house.z === ORIGINAL_BURNING_HOUSE.z)),
+  'remove the fire-centre schoolhouse and preserve the other buildings');
 assert.deepEqual(moved.boundaryHouses[0], scenery.boundaryHouses[0]);
 assert.deepEqual(moved.boundaryHouses[1], { ...scenery.boundaryHouses[1], ...RELOCATED_BATHHOUSE });
 for (const extent of [120, 80]) {
   for (const old of [-1200, -600, -extent, 0, extent, 600, 1200]) {
     const pulled = mountainCoordinate(old, extent);
-    assert.equal(Math.max(0, Math.abs(pulled) - extent), Math.max(0, Math.abs(old) - extent) / 2);
+    assert.equal(Math.max(0, Math.abs(pulled) - extent), Math.max(0, Math.abs(old) - extent) / 4);
     assert.equal(mountainCoordinate(pulled, extent, true), old);
   }
 }
@@ -76,9 +80,15 @@ for (const unit of state.units) {
     assert.ok(Math.abs(point.z - BURNING_HOUSE.z) <= 5, 'all targets belong to one house');
   }
 }
-assert.ok(scenery.houses.some(house => house.kind === 'school' && house.x === BURNING_HOUSE.x && house.z === BURNING_HOUSE.z),
-  'new fire uses the existing left-front schoolhouse');
+assert.ok(!moved.houses.some(house => house.x === BURNING_HOUSE.x && house.z === BURNING_HOUSE.z),
+  'only the fire-centre building is removed');
+const crewDistances = state.units.filter(unit => unit.team === 'PLAYER').map(unit => {
+  const staged = toWorld(unit.position[0] + 52, unit.position[1], ...worldSize(manifest), .25);
+  return Math.hypot(staged.x - BURNING_HOUSE.x, staged.z - BURNING_HOUSE.z);
+});
+assert.ok(Math.abs(crewDistances[1] - 30) < 1e-8, 'crew #2 starts spraying 30 m from the house centre');
+assert.ok(crewDistances.every(distance => distance >= 30 && distance <= 33), 'the other crew members are also about 30 m away');
 assert.notDeepEqual(BURNING_HOUSE, RELOCATED_BATHHOUSE, 'previous mountain-foot house is no longer the fire source');
 const top = (0 - worldSize(manifest)[1] / 2 + 64) * .25;
 assert.ok(BURNING_HOUSE.z - 15 > top, 'new left-front fire fits within extended northern map');
-console.log('PASS: existing left-front house becomes the fire; all buildings, scenery and old movement area stay in place');
+console.log('PASS: centre house removed, restored mountain layout, unchanged fire anchor and 30 m crew standoff');

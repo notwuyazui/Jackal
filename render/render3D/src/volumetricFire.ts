@@ -2,9 +2,9 @@
 import * as THREE from 'three';
 import { LATE_FX_LAYER } from '@cot/fx/layers.ts';
 import { mulberry32 } from '@cot/fx/particles.ts';
-import { BURNING_HOUSE, houseGroundHeight } from './firefighterScene.ts';
+import { BURNING_HOUSE, FIRE_GROUND_SIZE, houseGroundHeight } from './firefighterScene.ts';
 
-export const FIRE_HALF_EXTENT = { x: 32, z: 36 };
+export const FIRE_HALF_EXTENT = { x: FIRE_GROUND_SIZE[0] / 2, z: FIRE_GROUND_SIZE[1] / 2 };
 export const FIRE_HEIGHT = 34;
 
 export function createVolumetricFire(scene: THREE.Scene) {
@@ -20,6 +20,7 @@ export function createVolumetricFire(scene: THREE.Scene) {
     uTime: clock, uNoise: { value: noise }, uDepth: { value: null as THREE.DepthTexture | null },
     uResolution: { value: new THREE.Vector2(1, 1) },
     uNear: { value: .25 }, uFar: { value: 16000 }, uInverseWorld: { value: new THREE.Matrix4() },
+    uHalfExtent: { value: new THREE.Vector2(FIRE_HALF_EXTENT.x, FIRE_HALF_EXTENT.z) },
   };
   const material = new THREE.ShaderMaterial({
     glslVersion: THREE.GLSL3, uniforms,
@@ -39,6 +40,7 @@ export function createVolumetricFire(scene: THREE.Scene) {
       uniform sampler2D uDepth;
       uniform float uTime, uNear, uFar;
       uniform vec2 uResolution;
+      uniform vec2 uHalfExtent;
       uniform mat4 uInverseWorld;
       in vec3 vLocal;
       in vec3 vWorld;
@@ -59,7 +61,7 @@ export function createVolumetricFire(scene: THREE.Scene) {
         vec2 warped = p.xz - vec2(0.07, 0.14) * p.y - curl * (1.0 + p.y * 0.12);
         float n = turbulence(moving + vec3(curl.x, 0.0, curl.y) * 0.11);
         float edgeNoise = noise3(vec3(p.xz * 0.015, 0.31));
-        float radius = length(warped / vec2(31.0, 35.0));
+        float radius = length(warped / (uHalfExtent - 1.0));
         float fuel = 1.0 - smoothstep(0.78, 1.0, radius + (edgeNoise - 0.5) * 0.12);
         float distance = max(0.0, houseDistance(warped));
         float height = mix(11.5, 32.0, exp(-distance * distance / 20.0));
@@ -85,8 +87,8 @@ export function createVolumetricFire(scene: THREE.Scene) {
         vec3 origin = (uInverseWorld * vec4(cameraPosition, 1.0)).xyz;
         vec3 ray = normalize(vLocal - origin);
         vec3 inverseRay = 1.0 / ray;
-        vec3 t0 = (vec3(-32.0, 0.0, -36.0) - origin) * inverseRay;
-        vec3 t1 = (vec3(32.0, 34.0, 36.0) - origin) * inverseRay;
+        vec3 t0 = (vec3(-uHalfExtent.x, 0.0, -uHalfExtent.y) - origin) * inverseRay;
+        vec3 t1 = (vec3(uHalfExtent.x, 34.0, uHalfExtent.y) - origin) * inverseRay;
         vec3 entry = min(t0, t1), exit = max(t0, t1);
         float first = max(0.0, max(max(entry.x, entry.y), entry.z));
         float last = min(min(exit.x, exit.y), exit.z);
@@ -121,7 +123,7 @@ export function createVolumetricFire(scene: THREE.Scene) {
     transparent: true, depthWrite: false, depthTest: false,
     blending: THREE.NormalBlending, toneMapped: false, side: THREE.FrontSide,
   });
-  const geometry = new THREE.BoxGeometry(64, FIRE_HEIGHT, 72);
+  const geometry = new THREE.BoxGeometry(FIRE_GROUND_SIZE[0], FIRE_HEIGHT, FIRE_GROUND_SIZE[1]);
   geometry.translate(0, FIRE_HEIGHT / 2, 0);
   const volume = new THREE.Mesh(geometry, material);
   volume.name = 'Turbulent, depth-clipped house and ground fire volume';
@@ -186,7 +188,7 @@ export function createVolumetricFire(scene: THREE.Scene) {
       volume.visible = embers.visible = active;
     },
     state() { return { fire_style: 'raymarched-turbulent-volume', fire_height_m: FIRE_HEIGHT,
-      fire_footprint_m: [64, 72], fire_size_multiplier: 2.3, fire_ray_steps: 96,
+      fire_footprint_m: FIRE_GROUND_SIZE, fire_size_multiplier: 2.3, fire_ray_steps: 96,
       fire_emission: 'whole-house-and-surrounding-ground', fire_embers: emberCount }; },
     dispose() {
       volume.removeFromParent(); embers.removeFromParent(); geometry.dispose(); material.dispose(); noise.dispose();

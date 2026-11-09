@@ -11,6 +11,15 @@ from training.run_game_ai import parse_args, resolve_settings
 
 
 class FirefighterTests(unittest.TestCase):
+    def test_crew_uses_human_speed_acceleration_and_collision_footprint(self):
+        world = build_ai_world(ai_intelligence_level=5, normal_shell_only=False)
+        for unit in world.iter_units():
+            if unit.team == Team.PLAYER:
+                self.assertAlmostEqual(unit.max_speed * .25, 3)
+                self.assertAlmostEqual(unit.max_acceleration * .25, 2.5)
+                self.assertAlmostEqual(unit.min_acceleration * .25, -3.5)
+                self.assertLessEqual(max(unit.collision_size) * .25, 1)
+
     def test_three_second_spray_move_cycles_and_five_second_aim_choices(self):
         world = build_ai_world(ai_intelligence_level=5, normal_shell_only=False)
         ais = sorted((ai for ai in world.unit_manager.enemy_ais if ai.unit.team == Team.PLAYER),
@@ -53,7 +62,7 @@ class FirefighterTests(unittest.TestCase):
                 phase_shots[(uid, phase)] = phase_shots.get((uid, phase), 0) + 1
         self.assertEqual(len(set(t for t, _ in first_shots.values())), 1)
         for uid, (time, position) in first_shots.items():
-            self.assertTrue(1.5 < time < 3)
+            self.assertTrue(4.5 < time < 6.5, 'a geared firefighter jogs the 13 m approach instead of accelerating like a tank')
             self.assertGreater(math.dist(position, starts[uid]), 50)
             for phase in range(0, 10, 2):
                 self.assertEqual(phase_shots[(uid, phase)], 30)

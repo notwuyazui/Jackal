@@ -240,6 +240,7 @@ export async function createGroundDressingFactory(loader: THREE.TextureLoader, g
         const target = 210;
         const mesh = new THREE.InstancedMesh(geometry, material, target);
         mesh.name = `CoT native bush spray ${variant} / visual only`;
+        mesh.userData.vegetationKind = 'bush';
         let placed = 0;
         for (let attempt = 0; placed < target && attempt < 4000; attempt++) {
           const inner = placed < 165;
@@ -265,7 +266,7 @@ export async function createGroundDressingFactory(loader: THREE.TextureLoader, g
       }
       return {
         group, counts: { paths: routes.length, patches: patchCount, tufts: tuftCount,
-          bushes: bushCount, road_style: 'cot-verdant-ground071-cut-ruts-v5',
+          bushes: bushCount, cleared_approach_bushes: 0, road_style: 'cot-verdant-ground071-cut-ruts-v5',
           road_grass_clearance_m: 0.55 },
         dispose() {
           group.removeFromParent();
